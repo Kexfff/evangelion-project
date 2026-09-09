@@ -1,0 +1,89 @@
+{
+  "name": "evangelion_project",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A local-first desktop companion with voice, memory, and a VRM avatar.",
+  "type": "module",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:ui": "vite --host 127.0.0.1",
+    "build": "npm run typecheck && vite build && node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "start": "electron .",
+    "test": "vitest run",
+    "test:ui": "playwright test",
+    "test:desktop": "npm run build && node scripts/smoke-desktop.mjs",
+    "format": "prettier --write src electron scripts tests *.ts *.json *.html *.md PLAN.MD",
+    "package": "npm run build && electron-builder --dir"
+  },
+  "dependencies": {
+    "@pixiv/three-vrm": "^3.4.0",
+    "@pixiv/three-vrm-animation": "^3.4.0",
+    "lucide-react": "^0.577.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "three": "^0.183.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@types/three": "^0.183.0",
+    "@vitejs/plugin-react": "^5.1.0",
+    "electron": "^44.2.0",
+    "electron-builder": "^26.8.1",
+    "esbuild": "^0.28.1",
+    "prettier": "^3.6.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.0",
+    "vitest": "^4.0.0"
+  },
+  "build": {
+    "appId": "dev.evangelion.companion",
+    "productName": "Evangelion Project",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "Eva.vrm",
+        "to": "assets/Eva.vrm"
+      },
+      {
+        "from": "animations",
+        "to": "assets/animations"
+      }
+    ],
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Utility"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Talk to your companion using your configured transcription provider."
+      }
+    }
+  },
+  "allowScripts": {
+    "electron-winstaller@5.4.0": true,
+    "esbuild@0.28.2": true
+  }
+}
