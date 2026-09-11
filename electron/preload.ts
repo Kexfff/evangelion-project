@@ -4,7 +4,7 @@ const api: Bridge = {
   snapshot: () => ipcRenderer.invoke("eva:snapshot"),
   saveSettings: (settings, keys) =>
     ipcRenderer.invoke("eva:settings", settings, keys),
-  send: (text) => ipcRenderer.invoke("eva:send", text),
+  send: (text, images) => ipcRenderer.invoke("eva:send", text, images),
   cancel: () => ipcRenderer.invoke("eva:cancel"),
   transcribe: (bytes, mime) =>
     ipcRenderer.invoke("eva:transcribe", bytes, mime),

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { attachmentsSchema, type ImageAttachment } from "./images";
 
 export const providerSchema = z.object({
   baseUrl: z
@@ -123,6 +124,7 @@ export const messageSchema = z.object({
   sessionId: z.string().max(100),
   role: z.enum(["user", "assistant"]),
   content: z.string().max(50000),
+  images: attachmentsSchema.optional(),
   createdAt: z.string().datetime(),
 });
 export const memoryExportSchema = z.object({
@@ -157,7 +159,7 @@ export interface Bridge {
     settings: Settings,
     keys: Partial<Record<ProviderKind, string>>,
   ): Promise<void>;
-  send(text: string): Promise<void>;
+  send(text: string, images?: ImageAttachment[]): Promise<void>;
   cancel(): Promise<void>;
   transcribe(bytes: ArrayBuffer, mime: string): Promise<string>;
   speak(text: string): Promise<ArrayBuffer>;

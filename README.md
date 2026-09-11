@@ -53,6 +53,14 @@ Provider adapters and discovery use these OpenAI-compatible HTTP endpoints:
 
 Provider errors show an actionable status without reflecting potentially sensitive upstream response bodies. Requests time out after 90 seconds. No automatic retry spends additional credits after a failure.
 
+## Image messages
+
+Click the paperclip in the companion composer to choose images, or paste an image from the clipboard. Preview and remove attachments before sending; a text caption is optional. PNG, JPEG, WebP and GIF are accepted, up to four images per message and 2 MB per file. Larger files must be resized before attaching. Choose a vision-capable LLM in Providers: the model catalog is not filtered by vision support, and text-only models or providers with stricter image limits may reject the request.
+
+Images use text-first `content` arrays with `image_url` data URLs through the existing chat-completions endpoint, following the [OpenRouter image-input format](https://openrouter.ai/docs/guides/overview/multimodal/image-understanding). No public upload or separate image provider is needed. Selecting/pasting only reads the image locally; sending uploads it to your configured LLM service. The four newest images within the bounded recent conversation are included on subsequent turns, so follow-up questions can reference them; older omitted images are explicitly marked. Starting a new conversation stops including images from the previous session.
+
+Attachments are stored inline with messages in `companion.json`, survive restarts and appear in chat history and memory exports. These images, including original metadata, are not encrypted or stripped; the normal database backup can retain deleted attachments until the next write. Treat archives as private. Base64 makes image-heavy histories larger, and the existing 50 MB archive import limit still applies. Deleting history also removes its attachments from the current database. Semantic indexing and automatic fact extraction use message text only, not image bytes; image-only turns skip both. Visual long-term retrieval, automatic resizing and a separate scalable attachment store remain future work.
+
 ## Characters, avatars, and memory
 
 **Character cards** supports multiple names, taglines, personalities, system prompts, and VRM references. Choose a card and save to activate it. Conversations and facts are scoped to the active character. Custom avatars are copied into app storage, so moving the original file will not break them.
@@ -99,7 +107,7 @@ npm run test:ui
 npm run test:desktop
 ```
 
-If Chromium is already installed elsewhere, set `EVA_TEST_BROWSER` to its executable for UI tests. UI tests generate screenshots in `test-results/`. They use the browser preview, fixture MP3 audio and synthetic microphone input, and do not make paid provider requests. The 24 core tests include vault restart/migration, schema upgrades, semantic cache invalidation, model discovery, sentence boundaries, VAD, WAV encoding and stream cancellation.
+If Chromium is already installed elsewhere, set `EVA_TEST_BROWSER` to its executable for UI tests. The 8 UI tests generate screenshots in `test-results/` and cover image attachment controls, the browser preview, fixture MP3 audio and synthetic microphone input without paid provider requests. The 29 core tests include image validation/multimodal payloads/persistence, vault restart/migration, schema upgrades, semantic cache invalidation, model discovery, sentence boundaries, VAD, WAV encoding and stream cancellation.
 
 The desktop smoke test opens temporary Electron windows on your normal display and uses an isolated profile under the system temporary directory. It verifies real local HTTP calls through IPC, VRM/VRMA loading, model lists, semantic recall, sentence ordering, synthetic-microphone interruption, archive round-trips, and persistence across restarts without a keyring. It then closes its windows and removes its own test data. File/confirmation dialogs are stubbed. The test does not use your credentials or app profile. A real display (or an X virtual framebuffer) is recommended: Electron's Ozone headless backend crashed during validation here.
 

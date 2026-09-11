@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { bridge } from "./bridge";
 import type { Phase, Snapshot } from "./shared/schema";
+import type { ImageAttachment } from "./shared/images";
 import { SentenceBuffer } from "./audio/sentences";
 import { playSpeech } from "./audio/playback";
 import { MicrophoneCapture } from "./audio/microphone";
@@ -160,8 +161,8 @@ export function useCompanion() {
       void bridge.cancel();
     };
   }, []);
-  async function send(text: string) {
-    if (!text.trim() || !latest.current) return;
+  async function send(text: string, images: ImageAttachment[] = []) {
+    if ((!text.trim() && !images.length) || !latest.current) return;
     const interrupted = interrupt();
     const token = generation.current;
     await interrupted;
@@ -172,7 +173,7 @@ export function useCompanion() {
     accepting.current = true;
     restingPhase();
     try {
-      await bridge.send(text.trim());
+      await bridge.send(text.trim(), images);
       if (token !== generation.current) return;
       accepting.current = false;
       generating.current = false;

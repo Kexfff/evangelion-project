@@ -52,7 +52,7 @@ export class SemanticMemory {
         text: f.text,
       })),
       ...this.store.data.messages
-        .filter((m) => m.role === "user")
+        .filter((m) => m.role === "user" && m.content.trim())
         .map((m) => ({
           id: `message:${m.id}`,
           characterId: m.characterId,

@@ -123,6 +123,21 @@ Current operating details and remaining manual checks:
 - Semantic memory requires its own enabled embedding provider and key. The vector cache is scoped by provider/model/content; each turn indexes up to 32 missing documents. Run the explicit index build for a large existing archive. Embedding or indexing failures fall back to keyword recall with a notice.
 - Embedding quality, multilingual recall, real server latency, device availability, acoustic echo and physical permission prompts still need verification on the user's actual setup. Base TTS playback was reported working by the user; the new streaming path was validated with fixtures.
 
+## Image attachments — post-sprint 1.5
+
+- [x] Paperclip file picker, clipboard image paste, draft thumbnails and individual removal; support captions or image-only messages.
+- [x] PNG/JPEG/WebP/GIF validation in renderer, IPC, persistence and archive schemas; four images maximum, 2 MB each. Browser decoding rejects corrupt local files before sending.
+- [x] OpenAI-compatible multimodal `image_url` content parts through the existing LLM provider; retain plain-string content for text-only messages.
+- [x] Persist attachments with chat history and include them in memory archives; preserve old text-only databases. Archive deduplication includes attachments.
+- [x] Limit visual request context to the newest four images within recent text context, mark omitted older attachments, and isolate characters/sessions.
+- [x] Keep image data out of text embeddings and automatic fact extraction; skip empty image-only text indexing.
+- [x] Add protocol, validation, persistence, context-budget and browser interaction regressions. Extend the desktop smoke to cover real attachment UI → IPC → HTTP and archive/persistence.
+- [x] Document vision-model requirements, privacy, limits and usage.
+
+Verification: production build, 29 core tests, 8 browser tests and the extended Electron desktop smoke pass. New checks cover attachment selection/paste/removal, image-only sends, file limits, invalid formats, HTTP payload shape, follow-up image context, text-only embedding input, archive round-trip and persisted image data. Tests use a tiny local PNG and a mock provider, not user credentials or a paid vision model.
+
+Remaining: live vision-provider quality testing with the user's chosen model; automatic resizing/compression, visual long-term retrieval and a scalable separate attachment store. Images are inline/base64 in the existing JSON store and exports; image-heavy archives can exceed the existing 50 MB import limit. This update does not refresh the unpacked release binary; use `npm run build` / `npm start`, `npm run dev`, or rebuild with `npm run package`.
+
 ## Sprint 2 — consciousness / autonomy
 
 Goal: she can initiate appropriate conversation and follow through on scheduled intentions.

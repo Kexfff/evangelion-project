@@ -4,6 +4,10 @@ import { Store } from "./store";
 import { buildContext } from "./memory";
 import { OpenAICompatibleProvider } from "./providers";
 import { SemanticMemory } from "./semantic-memory";
+import {
+  outgoingMessageSchema,
+  type ImageAttachment,
+} from "../src/shared/images";
 import type {
   ProviderKind,
   RuntimeEvent,
@@ -56,7 +60,8 @@ export class CompanionRuntime {
     );
     await this.turnDone;
   }
-  async send(text: string) {
+  async send(text: string, images: ImageAttachment[] = []) {
+    ({ text, images } = outgoingMessageSchema.parse({ text, images }));
     if (this.turn)
       throw new Error(
         "A reply is already in progress. Stop it before sending another message.",
@@ -79,13 +84,14 @@ export class CompanionRuntime {
           sessionId,
           role: "user",
           content: text,
+          ...(images.length ? { images } : {}),
           createdAt: new Date().toISOString(),
         });
       });
       this.broadcast();
       this.emit({ type: "phase", phase: "thinking" });
       let scores: Map<string, number> | undefined;
-      if (this.store.data.settings.memory.semanticEnabled) {
+      if (text && this.store.data.settings.memory.semanticEnabled) {
         try {
           scores = await this.semantic.recall(text, controller.signal);
         } catch {
@@ -115,7 +121,7 @@ export class CompanionRuntime {
           createdAt: new Date().toISOString(),
         });
       });
-      if (this.store.data.settings.memory.autoRemember) {
+      if (text && this.store.data.settings.memory.autoRemember) {
         this.extraction?.abort();
         const extraction = new AbortController();
         this.extraction = extraction;

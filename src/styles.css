@@ -1220,6 +1220,50 @@ nav button.active:before {
 .composer .selected {
   color: #dfb9fc;
 }
+
+.attachment-tray {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(18, 23, 33, 0.94);
+}
+.attachment-tray small {
+  flex-basis: 100%;
+  color: #a9b5c8;
+}
+.attachment-preview {
+  position: relative;
+}
+.attachment-preview img {
+  display: block;
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+.attachment-preview button {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: #161c29;
+  border-radius: 6px;
+}
+.message-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.message-images img {
+  max-width: 100%;
+  width: 100px;
+  height: 90px;
+  object-fit: contain;
+  border-radius: 6px;
+}
 .send-button {
   background: #ccb0e7;
   color: #34233e;

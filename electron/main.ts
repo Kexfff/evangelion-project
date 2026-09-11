@@ -17,6 +17,7 @@ import { z } from "zod";
 import { Store, atomicWrite } from "./store";
 import { CompanionRuntime } from "./runtime";
 import { CredentialVault } from "./credentials";
+import { outgoingMessageSchema } from "../src/shared/images";
 import {
   settingsSchema,
   providerKinds,
@@ -232,9 +233,10 @@ else {
         companion?.setAlwaysOnTop(settings.window.alwaysOnTop);
         runtime.broadcast();
       });
-      handle("send", (text) =>
-        runtime.send(z.string().trim().min(1).max(8000).parse(text)),
-      );
+      handle("send", (text, images) => {
+        const message = outgoingMessageSchema.parse({ text, images });
+        return runtime.send(message.text, message.images);
+      });
       handle("cancel", () => runtime.cancel());
       handle("transcribe", (bytes, mime) => {
         if (
@@ -447,6 +449,8 @@ else {
                 (x) =>
                   x.characterId === characterId &&
                   x.content === m.content &&
+                  JSON.stringify(x.images ?? []) ===
+                    JSON.stringify(m.images ?? []) &&
                   x.createdAt === m.createdAt &&
                   x.role === m.role,
               )

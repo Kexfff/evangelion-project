@@ -1,4 +1,4 @@
-import { _electron as electron } from "@playwright/test";
+import { _electron as electron, expect } from "@playwright/test";
 import { createServer } from "node:http";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,6 +8,11 @@ import assert from "node:assert/strict";
 // An isolated, disposable profile and a local provider exercise real Electron IPC/HTTP.
 const profile = await mkdtemp(path.join(tmpdir(), "eva-desktop-smoke-"));
 const requests = [];
+const imageAttachment = {
+  name: "pixel.png",
+  dataUrl:
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
+};
 const speechFixture = await readFile(path.resolve("tests/fixtures/speech.mp3"));
 const server = createServer(async (req, res) => {
   const chunks = [];
@@ -86,7 +91,18 @@ const launch = () =>
 try {
   desktop = await launch();
   desktop.process().stderr.on("data", (data) => process.stderr.write(data));
-  const win = await desktop.firstWindow();
+  await desktop.firstWindow();
+  // First startup also opens settings; window creation order is not guaranteed.
+  await expect
+    .poll(() =>
+      desktop
+        .windows()
+        .some((window) => window.url().includes("window=companion")),
+    )
+    .toBe(true);
+  const win = desktop
+    .windows()
+    .find((window) => window.url().includes("window=companion"));
   await win.waitForFunction(() => !!window.eva);
   await win
     .locator('.avatar-renderer[data-animation="idle_loop"]')
@@ -103,10 +119,25 @@ try {
       }
       await window.eva.saveSettings(settings, { llm: "local-test-key" });
       await window.eva.saveFact({ text: "The user likes Minecraft." });
-      await window.eva.send("Hello Eva");
     },
     { baseUrl, settings: initial.settings },
   );
+  await win.getByLabel("Choose images").setInputFiles({
+    name: imageAttachment.name,
+    mimeType: "image/png",
+    buffer: Buffer.from(imageAttachment.dataUrl.split(",")[1], "base64"),
+  });
+  await win.getByAltText("Attached: pixel.png").waitFor();
+  await win.getByRole("textbox", { name: "Message Eva" }).fill("Hello Eva");
+  await win.getByRole("button", { name: "Send message" }).click();
+  await win.waitForFunction(
+    async () =>
+      (await window.eva.snapshot()).messages.at(-1)?.role === "assistant",
+  );
+  assert.deepEqual(JSON.parse(requests[0].body).messages.at(-1).content, [
+    { type: "text", text: "Hello Eva" },
+    { type: "image_url", image_url: { url: imageAttachment.dataUrl } },
+  ]);
   const after = await win.evaluate(() => window.eva.snapshot());
   assert.equal(after.messages.at(-1).content, "Hello from the test provider.");
   assert.equal(after.facts[0].text, "The user likes Minecraft.");
@@ -154,6 +185,9 @@ try {
   const archiveText = await readFile(archivePath, "utf8");
   assert.equal(archiveText.includes("local-test-key"), false);
   assert.equal(JSON.parse(archiveText).messages.length, 2);
+  assert.deepEqual(JSON.parse(archiveText).messages[0].images, [
+    imageAttachment,
+  ]);
   await desktop.evaluate(({ dialog }, filePath) => {
     dialog.showOpenDialog = async () => ({
       canceled: false,
@@ -187,6 +221,7 @@ try {
     await readFile(path.join(profile, "companion.json"), "utf8"),
   );
   assert.equal(persisted.messages.length, 2);
+  assert.deepEqual(persisted.messages[0].images, [imageAttachment]);
   desktop = await launch();
   const reopened = await desktop.firstWindow();
   await reopened.waitForFunction(() => !!window.eva);
@@ -303,7 +338,7 @@ try {
   assert.equal(cleared.messages.length, 0);
   assert.equal(cleared.facts.length, 1);
   console.log(
-    "Desktop smoke passed: key persistence without a keyring, models, semantic recall, sentence ordering, synthetic-microphone barge-in, streamed audio, VRM, archive round-trip, deletion and restart persistence.",
+    "Desktop smoke passed: image attachment UI/IPC/HTTP/persistence, key persistence without a keyring, models, semantic recall, sentence ordering, synthetic-microphone barge-in, streamed audio, VRM, archive round-trip, deletion and restart persistence.",
   );
 } finally {
   if (desktop) await desktop.close();
