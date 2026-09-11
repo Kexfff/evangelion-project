@@ -9,17 +9,18 @@ import {
   session,
   systemPreferences,
 } from "electron";
-import { readFileSync, existsSync, mkdirSync, copyFileSync } from "node:fs";
+import { readFileSync, mkdirSync, copyFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { Store, atomicWrite } from "./store";
 import { CompanionRuntime } from "./runtime";
+import { CredentialVault } from "./credentials";
 import {
   settingsSchema,
+  providerKinds,
   memoryExportSchema,
-  type ProviderKind,
   type RuntimeEvent,
 } from "../src/shared/schema";
 
@@ -45,8 +46,8 @@ let companion: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
 let runtime: CompanionRuntime;
 let store: Store;
-const keys: Partial<Record<ProviderKind, string>> = {};
-const providerKind = z.enum(["llm", "asr", "tts"]);
+let vault: CredentialVault;
+const providerKind = z.enum(providerKinds);
 const animations = new Set([
   "idle_loop",
   "modelPose",
@@ -128,36 +129,19 @@ else {
     .then(() => {
       const dataDirectory = app.getPath("userData");
       store = new Store(dataDirectory);
-      const vault = path.join(dataDirectory, "credentials.json");
       const secure =
         safeStorage.isEncryptionAvailable() &&
         (process.platform !== "linux" ||
           safeStorage.getSelectedStorageBackend() !== "basic_text");
-      if (secure && existsSync(vault)) {
-        try {
-          const saved = z
-            .partialRecord(providerKind, z.string())
-            .parse(JSON.parse(readFileSync(vault, "utf8")));
-          for (const kind of ["llm", "asr", "tts"] as const)
-            if (saved[kind])
-              keys[kind] = safeStorage.decryptString(
-                Buffer.from(saved[kind], "base64"),
-              );
-        } catch {
-          dialog.showErrorBox(
-            "Credentials unavailable",
-            "Saved API keys could not be unlocked. Re-enter them in Providers. Your conversations are unaffected.",
-          );
-        }
-      }
+      vault = new CredentialVault(dataDirectory, secure ? safeStorage : null);
       store.update((d) => {
-        for (const kind of ["llm", "asr", "tts"] as const)
-          d.settings.providers[kind].hasKey = !!keys[kind];
+        for (const kind of providerKinds)
+          d.settings.providers[kind].hasKey = vault.has(kind);
       });
       runtime = new CompanionRuntime(
         store,
-        (kind) => keys[kind] ?? "",
-        secure ? "encrypted" : "session-only",
+        (kind) => vault.get(kind),
+        vault.mode,
         send,
       );
       const assets = app.isPackaged
@@ -193,13 +177,15 @@ else {
             pathToFileURL(path.join(here, "../dist/index.html")).href;
       session.defaultSession.setPermissionCheckHandler(
         (webContents, permission, origin) =>
-          permission === "media" &&
+          (permission === "media" || permission === "speaker-selection") &&
           !!webContents &&
           trustedOrigin(webContents.getURL()) &&
           (origin === "file://" || origin === devUrl),
       );
       session.defaultSession.setPermissionRequestHandler(
         (webContents, permission, callback, details) => {
+          if (permission === "speaker-selection")
+            return callback(trustedOrigin(webContents.getURL()));
           if (
             permission !== "media" ||
             !trustedOrigin(webContents.getURL()) ||
@@ -235,28 +221,14 @@ else {
             llm: z.string().max(2000).optional(),
             asr: z.string().max(2000).optional(),
             tts: z.string().max(2000).optional(),
+            embedding: z.string().max(2000).optional(),
           })
           .strict()
           .parse(rawKeys);
-        const nextKeys = { ...keys, ...incoming };
-        for (const kind of ["llm", "asr", "tts"] as const)
-          settings.providers[kind].hasKey = !!nextKeys[kind];
-        if (secure)
-          atomicWrite(
-            vault,
-            JSON.stringify(
-              Object.fromEntries(
-                Object.entries(nextKeys)
-                  .filter(([, v]) => v)
-                  .map(([k, v]) => [
-                    k,
-                    safeStorage.encryptString(v).toString("base64"),
-                  ]),
-              ),
-            ),
-          );
+        vault.save(incoming);
+        for (const kind of providerKinds)
+          settings.providers[kind].hasKey = vault.has(kind);
         store.settings(settings);
-        Object.assign(keys, nextKeys);
         companion?.setAlwaysOnTop(settings.window.alwaysOnTop);
         runtime.broadcast();
       });
@@ -287,13 +259,37 @@ else {
       handle("speak", (text) =>
         runtime.speak(z.string().trim().min(1).max(12000).parse(text)),
       );
+      handle("speech:open", (text) =>
+        runtime.openSpeech(z.string().trim().min(1).max(12000).parse(text)),
+      );
+      handle("speech:read", (id) =>
+        runtime.readSpeech(z.string().uuid().parse(id)),
+      );
+      handle("speech:close", (id) =>
+        runtime.closeSpeech(z.string().uuid().parse(id)),
+      );
+      handle("models", (raw) => {
+        const kind = providerKind.parse(raw);
+        return runtime.provider.models(
+          store.data.settings.providers[kind],
+          vault.get(kind),
+          kind === "embedding",
+        );
+      });
+      handle("memory:reindex", () => runtime.reindexMemory());
       handle("test", async (raw) => {
         const kind = providerKind.parse(raw);
         const p = store.data.settings.providers[kind];
+        if (kind === "embedding") {
+          await runtime.provider.embed(p, vault.get(kind), [
+            "A memory connection.",
+          ]);
+          return "Embedding generation succeeded.";
+        }
         if (kind === "llm") {
           await runtime.provider.chat(
             p,
-            keys[kind] ?? "",
+            vault.get(kind),
             [{ role: "user", content: "Reply with OK." }],
             () => {},
             undefined,

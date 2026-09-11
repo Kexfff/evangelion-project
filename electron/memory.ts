@@ -13,7 +13,11 @@ function relevance(query: Set<string>, text: string) {
     Math.sqrt(Math.max(words.size, 1))
   );
 }
-export function buildContext(db: Database, query: string): ChatMessage[] {
+export function buildContext(
+  db: Database,
+  query: string,
+  semantic?: Map<string, number>,
+): ChatMessage[] {
   const s = db.settings;
   const character = s.characters.find((c) => c.id === s.activeCharacterId)!;
   const sessionId = db.sessions[character.id];
@@ -27,15 +31,25 @@ export function buildContext(db: Database, query: string): ChatMessage[] {
     .filter((f) => f.characterId === character.id)
     .map((f) => ({
       text: f.text,
-      score: relevance(terms, f.text),
+      score: semantic
+        ? (semantic.get(`fact:${f.id}`) ?? -1)
+        : relevance(terms, f.text),
       date: f.updatedAt,
     }))
+    .filter((f) => !semantic || f.score >= s.memory.semanticThreshold)
     .sort((a, b) => b.score - a.score || b.date.localeCompare(a.date))
     .slice(0, s.memory.recallCount);
   const episodes = messages
     .filter((m) => !recentIds.has(m.id) && m.role === "user")
-    .map((m) => ({ m, score: relevance(terms, m.content) }))
-    .filter((x) => x.score > 0)
+    .map((m) => ({
+      m,
+      score: semantic
+        ? (semantic.get(`message:${m.id}`) ?? -1)
+        : relevance(terms, m.content),
+    }))
+    .filter((x) =>
+      semantic ? x.score >= s.memory.semanticThreshold : x.score > 0,
+    )
     .sort((a, b) => b.score - a.score)
     .slice(0, s.memory.recallCount);
   const recalled = JSON.stringify({

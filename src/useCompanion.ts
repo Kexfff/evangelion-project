@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { bridge } from "./bridge";
 import type { Phase, Snapshot } from "./shared/schema";
+import { SentenceBuffer } from "./audio/sentences";
+import { playSpeech } from "./audio/playback";
+import { MicrophoneCapture } from "./audio/microphone";
 
 export function useCompanion() {
   const [state, setState] = useState<Snapshot>();
@@ -8,18 +11,21 @@ export function useCompanion() {
   const [partial, setPartial] = useState("");
   const [error, setError] = useState("");
   const [amplitude, setAmplitude] = useState(0);
-  const audio = useRef<HTMLAudioElement | null>(null);
-  const audioContext = useRef<AudioContext | null>(null);
-  const audioUrl = useRef("");
-  const frame = useRef(0);
-  const recorder = useRef<MediaRecorder | null>(null);
-  const recordingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
+  const [micLevel, setMicLevel] = useState(0);
+  const [micOn, setMicOn] = useState(false);
+  const latest = useRef<Snapshot | undefined>(undefined);
   const generation = useRef(0);
   const active = useRef(true);
-  const localBusy = useRef(false);
-  const sessionKey = useRef("");
+  const microphone = useRef<MicrophoneCapture | null>(null);
+  const capturing = useRef(false);
+  const transcribing = useRef(false);
+  const generating = useRef(false);
+  const speaking = useRef(false);
+  const audio = useRef<AbortController | null>(null);
+  const queue = useRef<Promise<void>>(Promise.resolve());
+  const buffer = useRef(new SentenceBuffer());
+  const accepting = useRef(false);
+  const interrupting = useRef<Promise<void>>(Promise.resolve());
   const report = (err: unknown) => {
     if (active.current)
       setError(
@@ -31,22 +37,79 @@ export function useCompanion() {
           : String(err),
       );
   };
-  function stopAudio() {
-    if (audio.current) {
-      audio.current.pause();
-      audio.current.src = "";
-      audio.current = null;
-    }
-    if (audioUrl.current) {
-      URL.revokeObjectURL(audioUrl.current);
-      audioUrl.current = "";
-    }
-    if (audioContext.current) {
-      void audioContext.current.close().catch(() => {});
-      audioContext.current = null;
-    }
-    cancelAnimationFrame(frame.current);
+  function restingPhase() {
+    if (!active.current) return;
+    setPhase(
+      capturing.current
+        ? "listening"
+        : transcribing.current
+          ? "transcribing"
+          : speaking.current
+            ? "speaking"
+            : generating.current
+              ? "thinking"
+              : microphone.current
+                ? "listening"
+                : "idle",
+    );
+  }
+  function closeMicrophone() {
+    microphone.current?.close();
+    microphone.current = null;
+    capturing.current = false;
+    setMicOn(false);
+    setMicLevel(0);
+  }
+  function interrupt(closeMic = false) {
+    ++generation.current;
+    accepting.current = false;
+    audio.current?.abort();
+    audio.current = null;
+    speaking.current = false;
+    generating.current = false;
+    transcribing.current = false;
+    queue.current = Promise.resolve();
+    buffer.current = new SentenceBuffer();
+    if (closeMic) closeMicrophone();
+    setPartial("");
     setAmplitude(0);
+    restingPhase();
+    interrupting.current = bridge.cancel().catch(report);
+    return interrupting.current;
+  }
+  function enqueue(text: string, token: number) {
+    if (!text.trim() || token !== generation.current) return;
+    const voice = latest.current!.settings.voice;
+    queue.current = queue.current.then(async () => {
+      if (token !== generation.current || !active.current) return;
+      const controller = new AbortController();
+      audio.current = controller;
+      speaking.current = true;
+      restingPhase();
+      try {
+        await playSpeech(
+          text,
+          voice,
+          controller.signal,
+          (value) => {
+            if (token === generation.current && active.current)
+              setAmplitude(value);
+          },
+          () => {
+            if (token === generation.current) restingPhase();
+          },
+        );
+      } catch (err) {
+        if (token === generation.current && !controller.signal.aborted)
+          report(err);
+      } finally {
+        if (token === generation.current) {
+          audio.current = null;
+          speaking.current = false;
+          restingPhase();
+        }
+      }
+    });
   }
   useEffect(() => {
     active.current = true;
@@ -54,216 +117,180 @@ export function useCompanion() {
       .snapshot()
       .then((s) => {
         if (active.current) {
-          sessionKey.current = `${s.settings.activeCharacterId}:${s.sessionId}`;
+          latest.current = s;
           setState(s);
         }
       })
       .catch(report);
     const off = bridge.onEvent((event) => {
       if (event.type === "state") {
-        const key = `${event.state.settings.activeCharacterId}:${event.state.sessionId}`;
-        if (sessionKey.current && sessionKey.current !== key) void stop();
-        sessionKey.current = key;
+        const old = latest.current;
+        const changedSession =
+          old &&
+          (old.sessionId !== event.state.sessionId ||
+            old.settings.activeCharacterId !==
+              event.state.settings.activeCharacterId);
+        const changedVoice =
+          old &&
+          JSON.stringify(old.settings.voice) !==
+            JSON.stringify(event.state.settings.voice);
+        latest.current = event.state;
         setState(event.state);
+        if (changedSession || changedVoice) void interrupt(true);
         if (!event.state.busy) setPartial("");
-      } else if (event.type === "delta") setPartial((p) => p + event.text);
-      else if (event.type === "warning") setError(event.message);
-      else if (event.type === "phase") setPhase(event.phase);
+      } else if (event.type === "delta" && accepting.current) {
+        setPartial((p) => p + event.text);
+        const s = latest.current?.settings;
+        if (
+          s?.voice.autoSpeak &&
+          s.voice.sentenceBuffering &&
+          s.providers.tts.enabled
+        )
+          for (const sentence of buffer.current.push(event.text))
+            enqueue(sentence, generation.current);
+      } else if (event.type === "warning") report(event.message);
     });
     return () => {
       active.current = false;
       off();
       generation.current++;
-      clearTimeout(recordingTimer.current);
-      if (recorder.current) {
-        recorder.current.onstop = null;
-        recorder.current.stream.getTracks().forEach((t) => t.stop());
-        if (recorder.current.state !== "inactive") recorder.current.stop();
-      }
-      stopAudio();
+      accepting.current = false;
+      audio.current?.abort();
+      microphone.current?.close();
+      void bridge.cancel();
     };
   }, []);
-  async function speak(text: string, token = ++generation.current) {
-    stopAudio();
-    setError("");
-    setPhase("speaking");
-    // Open the context within the originating user gesture when available.
-    const context = new AudioContext();
-    audioContext.current = context;
-    void context.resume().catch(() => {});
-    try {
-      const bytes = await bridge.speak(text);
-      if (token !== generation.current || !active.current) return;
-      const url = URL.createObjectURL(
-        new Blob([bytes], { type: "audio/mpeg" }),
-      );
-      audioUrl.current = url;
-      const player = new Audio(url);
-      audio.current = player;
-      player.volume = state?.settings.voice.volume ?? 0.8;
-      const source = context.createMediaElementSource(player);
-      const analyser = context.createAnalyser();
-      analyser.fftSize = 256;
-      source.connect(analyser);
-      analyser.connect(context.destination);
-      const values = new Uint8Array(analyser.fftSize);
-      const sample = () => {
-        analyser.getByteTimeDomainData(values);
-        setAmplitude(
-          Math.sqrt(
-            values.reduce((sum, v) => sum + ((v - 128) / 128) ** 2, 0) /
-              values.length,
-          ),
-        );
-        frame.current = requestAnimationFrame(sample);
-      };
-      player.onended = () => {
-        if (token === generation.current) {
-          stopAudio();
-          setPhase("idle");
-        }
-      };
-      player.onerror = () => {
-        if (token === generation.current) {
-          stopAudio();
-          setPhase("idle");
-          report(
-            new Error(
-              "Could not decode speech audio. Use a provider that returns MP3.",
-            ),
-          );
-        }
-      };
-      await context.resume();
-      await player.play();
-      sample();
-    } catch (err) {
-      if (token === generation.current) {
-        report(err);
-        stopAudio();
-        setPhase("idle");
-      }
-    }
-  }
   async function send(text: string) {
-    if (!text.trim() || localBusy.current || state?.busy) return;
-    localBusy.current = true;
-    const token = ++generation.current;
-    stopAudio();
+    if (!text.trim() || !latest.current) return;
+    const interrupted = interrupt();
+    const token = generation.current;
+    await interrupted;
+    if (token !== generation.current || !active.current) return;
     setError("");
-    setPartial("");
-    setPhase("thinking");
+    buffer.current = new SentenceBuffer();
+    generating.current = true;
+    accepting.current = true;
+    restingPhase();
     try {
       await bridge.send(text.trim());
       if (token !== generation.current) return;
+      accepting.current = false;
+      generating.current = false;
       const next = await bridge.snapshot();
+      if (token !== generation.current) return;
+      latest.current = next;
       setState(next);
-      const last = next.messages.at(-1);
-      if (
-        next.settings.voice.autoSpeak &&
-        next.settings.providers.tts.enabled &&
-        last?.role === "assistant"
-      )
-        await speak(last.content, token);
-      else setPhase("idle");
+      const s = next.settings;
+      if (s.voice.autoSpeak && s.providers.tts.enabled) {
+        if (s.voice.sentenceBuffering)
+          for (const sentence of buffer.current.push("", true))
+            enqueue(sentence, token);
+        else if (next.messages.at(-1)?.role === "assistant")
+          enqueue(next.messages.at(-1)!.content, token);
+      }
+      restingPhase();
     } catch (err) {
       if (token === generation.current) {
         report(err);
-        setPhase("idle");
+        await interrupt();
       }
     } finally {
-      localBusy.current = false;
+      if (token === generation.current) {
+        accepting.current = false;
+        generating.current = false;
+        restingPhase();
+      }
     }
   }
-  async function stop() {
-    generation.current++;
-    stopAudio();
-    clearTimeout(recordingTimer.current);
-    if (recorder.current) {
-      recorder.current.onstop = null;
-      if (recorder.current.state !== "inactive") recorder.current.stop();
-      recorder.current.stream.getTracks().forEach((t) => t.stop());
-      recorder.current = null;
-    }
-    await bridge.cancel().catch(report);
-    setPhase("idle");
-    setPartial("");
+  async function speak(text: string) {
+    const interrupted = interrupt();
+    const token = generation.current;
+    await interrupted;
+    if (token !== generation.current) return;
+    setError("");
+    enqueue(text, token);
+    await queue.current;
   }
   async function toggleRecording() {
-    if (recorder.current?.state === "recording") {
-      recorder.current.stop();
+    if (microphone.current) {
+      if (latest.current?.settings.voice.vadEnabled) {
+        await interrupt(true);
+        return;
+      }
+      const mic = microphone.current;
+      mic.finish();
+      mic.close();
+      microphone.current = null;
+      capturing.current = false;
+      setMicOn(false);
+      restingPhase();
       return;
     }
-    if (localBusy.current || state?.busy) return;
-    if (!state?.settings.providers.asr.enabled) {
+    const settings = latest.current?.settings;
+    if (!settings?.providers.asr.enabled) {
       report(
         new Error("Enable speech recognition in Settings → Providers first."),
       );
       return;
     }
-    await stop();
+    await interrupt();
     setError("");
-    const token = generation.current;
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
-      if (token !== generation.current || !active.current) {
-        stream.getTracks().forEach((t) => t.stop());
-        return;
-      }
-      const mime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find(
-        (t) => MediaRecorder.isTypeSupported(t),
-      );
-      const recording = new MediaRecorder(
-        stream,
-        mime ? { mimeType: mime } : undefined,
-      );
-      recorder.current = recording;
-      const chunks: Blob[] = [];
-      recording.ondataavailable = (event) => {
-        if (event.data.size) chunks.push(event.data);
-      };
-      recording.onstop = async () => {
-        clearTimeout(recordingTimer.current);
-        stream.getTracks().forEach((t) => t.stop());
-        recorder.current = null;
-        if (token !== generation.current) return;
-        setPhase("transcribing");
-        localBusy.current = true;
-        try {
-          const blob = new Blob(chunks, { type: recording.mimeType });
-          const text = await bridge.transcribe(
-            await blob.arrayBuffer(),
-            recording.mimeType,
-          );
-          localBusy.current = false;
-          if (token === generation.current) await send(text);
-        } catch (err) {
-          if (token === generation.current) {
-            report(err);
-            setPhase("idle");
-          }
-        } finally {
-          localBusy.current = false;
+    const mic = new MicrophoneCapture(settings.voice, {
+      level: (n) => {
+        if (active.current) setMicLevel(n);
+      },
+      acceptsSpeech: () =>
+        !transcribing.current &&
+        ((!generating.current && !speaking.current) || settings.voice.bargeIn),
+      start: () => {
+        capturing.current = true;
+        void interrupt();
+        restingPhase();
+      },
+      utterance: (wav) => {
+        capturing.current = false;
+        transcribing.current = true;
+        restingPhase();
+        if (!settings.voice.vadEnabled) {
+          microphone.current = null;
+          setMicOn(false);
         }
-      };
-      recording.onerror = () => {
-        report(new Error("Microphone recording failed."));
-        void stop();
-      };
-      recording.start();
-      setPhase("listening");
-      recordingTimer.current = setTimeout(() => {
-        if (recording.state === "recording") recording.stop();
-      }, 60000);
+        const token = generation.current;
+        void (async () => {
+          try {
+            await interrupting.current;
+            if (token !== generation.current) return;
+            const text = await bridge.transcribe(wav, "audio/wav");
+            if (token !== generation.current) return;
+            transcribing.current = false;
+            await send(text);
+          } catch (err) {
+            if (token === generation.current) {
+              report(err);
+              transcribing.current = false;
+              restingPhase();
+            }
+          }
+        })();
+      },
+      error: (err) => {
+        report(err);
+        closeMicrophone();
+        restingPhase();
+      },
+    });
+    microphone.current = mic;
+    setMicOn(true);
+    try {
+      await mic.open();
+      if (microphone.current === mic) restingPhase();
     } catch (err) {
-      report(err);
-      setPhase("idle");
+      if (microphone.current === mic) {
+        microphone.current = null;
+        setMicOn(false);
+        report(err);
+        restingPhase();
+      }
     }
   }
   return {
@@ -273,8 +300,10 @@ export function useCompanion() {
     error,
     setError,
     amplitude,
+    micLevel,
+    micOn,
     send,
-    stop,
+    stop: () => interrupt(true),
     speak,
     toggleRecording,
     report,

@@ -1,6 +1,6 @@
 {
   "name": "evangelion_project",
-  "version": "0.1.0",
+  "version": "0.1.5",
   "private": true,
   "description": "A local-first desktop companion with voice, memory, and a VRM avatar.",
   "type": "module",
@@ -9,7 +9,7 @@
     "dev": "node scripts/dev.mjs",
     "dev:ui": "vite --host 127.0.0.1",
     "build": "npm run typecheck && vite build && node scripts/build.mjs",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && node --check src/audio/capture-worklet.js",
     "start": "electron .",
     "test": "vitest run",
     "test:ui": "playwright test",

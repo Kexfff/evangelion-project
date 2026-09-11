@@ -14,6 +14,17 @@
   -webkit-font-smoothing: antialiased;
   color-scheme: dark;
 }
+.mic-meter {
+  display: block;
+  width: 100%;
+  height: 12px;
+  accent-color: #bda0de;
+  margin: 8px 0;
+}
+.companion-meter {
+  height: 6px;
+  margin: 6px 0 0;
+}
 * {
   box-sizing: border-box;
 }

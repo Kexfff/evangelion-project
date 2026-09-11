@@ -33,19 +33,23 @@ The browser preview renders the real avatar and settings, but cannot call provid
 
 ## First conversation
 
-1. Open **Providers**. Enable the language model provider, enter your OpenRouter API key, and choose a model ID. The default API base is `https://openrouter.ai/api/v1`, with `openrouter/auto` as the initial routing model. Save, then test the connection.
+1. Open **Providers**. Enable the language model provider, enter your OpenRouter API key, and choose a model ID. The default API base is `https://openrouter.ai/api/v1`, with `openrouter/auto` as the initial routing model. Save, then use **Fetch models** and test the connection. Each service has its own model catalog; manual IDs remain available for servers without a compatible `/models` endpoint.
 2. Configure ASR and TTS independently. Enter the base URL (including `/v1`, if required), model ID, optional API key, and TTS voice supported by your service. The initial localhost URLs are examples; no audio server is bundled or started. OpenRouter is the default for text generation, not an assumed audio backend.
-3. Save settings and test each enabled service. Connection tests issue small real requests and may incur charges. The ASR test sends a one-second silent WAV; the voice chat itself sends Chromium's recorded WebM/Opus or MP4. Your ASR backend must accept that recording format.
-4. Open the companion and type a message. To speak, click the microphone, talk, and click it again to send. Microphone access must be granted by the OS. Recordings end automatically at 60 seconds. The stop button cancels capture, pending provider requests, or audio playback.
-5. Replies stream into the conversation. With automatic speech enabled, the finished reply is synthesized and played aloud; its audio amplitude drives the avatar's mouth. This version synthesizes complete replies, so speech starts after text generation finishes.
+3. Save settings and test each enabled service. Connection tests issue small real requests and may incur charges. Both voice chat and the ASR test send 16 kHz mono PCM WAV audio.
+4. In **Voice & audio**, select microphone and speakers/headphones. **Refresh devices** requests permission to display device names; **Test microphone** shows a local-only level meter, and **Test output** plays a short quiet tone. Adjust microphone gain and the voice detection threshold for your setup.
+5. Open the companion and type a message, or click the microphone to record and click again to send. With **Hands-free voice detection** enabled, clicking the microphone starts continuous local listening: speech is sent after the configured pause, and each utterance is capped at 60 seconds. Click the microphone again or press Stop to disable listening. Listening never starts automatically at launch.
+6. With **Interrupt when I speak** enabled, detected speech cancels the current generation and queued audio before transcribing your new utterance. This operates while hands-free listening is enabled. Echo cancellation is on by default; headphones are recommended if speakers trigger unwanted interruptions.
+7. **Speak sentence by sentence** starts TTS as sentences arrive from the LLM. **Stream speech audio** feeds incoming MP3 chunks to Media Source Extensions so playback can begin before the download finishes. The provider must actually stream its HTTP body for that latency benefit. Unsupported containers (such as WAV) use buffered playback; both settings can be disabled independently.
 
-The three adapters use these OpenAI-compatible HTTP endpoints:
+Provider adapters and discovery use these OpenAI-compatible HTTP endpoints:
 
-| Service | Request                                                                           | Expected response                                                  |
-| ------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| LLM     | `POST {base}/chat/completions`, JSON with model, messages, stream                 | SSE `choices[].delta.content`, or JSON `choices[].message.content` |
-| ASR     | `POST {base}/audio/transcriptions`, multipart file/model/response_format/language | JSON `{ "text": "…" }`                                             |
-| TTS     | `POST {base}/audio/speech`, JSON model/input/voice/speed/response_format          | MP3 audio bytes                                                    |
+| Service         | Request                                                                           | Expected response                                                  |
+| --------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| LLM             | `POST {base}/chat/completions`, JSON with model, messages, stream                 | SSE `choices[].delta.content`, or JSON `choices[].message.content` |
+| ASR             | `POST {base}/audio/transcriptions`, multipart file/model/response_format/language | JSON `{ "text": "…" }`                                             |
+| TTS             | `POST {base}/audio/speech`, JSON model/input/voice/speed/response_format          | MP3 audio bytes                                                    |
+| Embeddings      | `POST {base}/embeddings`, JSON model/input/encoding_format                        | Float vectors in `data[].embedding`, ordered using `index`         |
+| Model discovery | `GET {base}/models` (`/embeddings/models` for OpenRouter embeddings)              | `data[].id`                                                        |
 
 Provider errors show an actionable status without reflecting potentially sensitive upstream response bodies. Requests time out after 90 seconds. No automatic retry spends additional credits after a failure.
 
@@ -58,8 +62,12 @@ Provider errors show an actionable status without reflecting potentially sensiti
 **Memory** has three layers:
 
 - A persistent current conversation, with a configurable recent-message window and a 24,000-character recent-context budget.
-- Editable long-term facts, ranked by keyword overlap with the current message; recent facts are used when overlap is tied.
-- Persistent older user messages, retrieved by keyword relevance across previous sessions. This is lexical retrieval, not embeddings or a semantic vector database.
+- Editable long-term facts, ranked by keyword relevance or semantic similarity.
+- Persistent older user messages, recalled across sessions using the same retrieval mode. Recent conversation context is included regardless of retrieval mode.
+
+For **semantic memory**, configure and enable the **Remember · Embeddings** provider. It has its own URL, model and API key (even if you use OpenRouter for both chat and embeddings). Then enable **Semantic memory** in Memory, save, and run **Build / update semantic index**. OpenRouter's initial embedding model is `openai/text-embedding-3-small`; compatible local embedding servers also work.
+
+Embeddings are cached locally in `memory-vectors.json`, keyed by provider URL/model and memory content. Retrieval uses cosine similarity with a configurable minimum score and remains character-scoped. Editing/deleting facts, deleting history, or changing the embedding model invalidates affected vectors. Imports bring in source memories, not vectors: rebuild after a large import. Each turn incrementally indexes at most 32 missing documents and embeds its query; an explicit rebuild processes the whole active character archive in batches of 32. Old user messages are embedded up to their first 4,000 characters. This sends those memories and queries to your configured embedding service and may incur charges. If the service fails, the reply uses lexical recall and displays a notice.
 
 Automatic remembering is off by default. Enabling it adds one LLM call after a completed turn to extract up to three explicitly stated user facts. These appear in Memory, where they can be corrected or deleted. A new conversation preserves facts and old messages. Deleting history removes that character's chat history after confirmation, while preserving facts.
 
@@ -75,7 +83,9 @@ Application data lives in Electron's `userData` directory, normally:
 
 `companion.json` stores settings, messages, facts, and session IDs. Writes replace the file atomically, retaining the preceding version in `companion.json.bak`. A corrupt database stops startup rather than silently resetting your data. Close the app before manually restoring its backup. Both files contain plaintext conversation data; the backup may retain recently deleted entries until the next write. Imported avatars live in `avatars/`.
 
-API keys live separately in `credentials.json`, encrypted through Electron `safeStorage` using OS facilities. If secure storage is unavailable (including Linux's `basic_text` backend), keys stay in process memory and must be entered again next launch. The renderer receives key-presence flags only. Keys are sent only to the configured provider. Audio is held in memory; microphone recordings are not written to disk by this app.
+API keys persist separately in `credentials.json`. When an OS keyring is available, Electron `safeStorage` encrypts them. Without a usable keyring (including Linux's `basic_text` backend), the app uses AES-256-GCM with a random local key in `credentials.key`. Both files use owner-only permissions on Unix. The local key lives beside the ciphertext, so this fallback protects against casual exposure and other OS users, not software running as your user or someone who can read both files. Providers shows the selected storage method. The renderer receives key-presence flags only; memory exports never contain keys.
+
+Sprint-1 databases receive new defaults on load without resetting existing settings or memories. Legacy OS-encrypted credentials are preserved even when their keyring is locked; affected requests ask you to unlock the keyring or re-enter that key. Keys that were previously session-only must be entered once again, then saved. Audio and microphone pre-roll stay in memory and are not written to disk by this app.
 
 All provider requests execute in the main process. Renderer windows use a sandboxed preload, context isolation, disabled Node integration, a narrow validated IPC bridge, and restricted navigation. The avatar asset protocol serves only bundled animation names and imported avatar IDs. No plugins, MCP servers, desktop access, or autonomous timers execute in sprint 1.
 
@@ -89,9 +99,9 @@ npm run test:ui
 npm run test:desktop
 ```
 
-If Chromium is already installed elsewhere, set `EVA_TEST_BROWSER` to its executable for UI tests. UI tests generate screenshots in `test-results/`. They use the browser preview and do not make paid provider requests. The 13 core tests exercise the store, memory boundaries, automatic fact extraction, streaming, HTTP payload contracts, and runtime cancellation using mocked provider responses.
+If Chromium is already installed elsewhere, set `EVA_TEST_BROWSER` to its executable for UI tests. UI tests generate screenshots in `test-results/`. They use the browser preview, fixture MP3 audio and synthetic microphone input, and do not make paid provider requests. The 24 core tests include vault restart/migration, schema upgrades, semantic cache invalidation, model discovery, sentence boundaries, VAD, WAV encoding and stream cancellation.
 
-The desktop smoke test opens temporary Electron windows on your normal display and uses an isolated profile under the system temporary directory. It verifies real local HTTP calls through IPC, VRM/VRMA loading, archive round-trips, confirmation logic, and persistence across restarts, then closes its windows and removes its own test data. File/confirmation dialogs are stubbed for the test. It does not use your credentials or app profile. A real display (or an X virtual framebuffer) is recommended: Electron's Ozone headless backend crashed during validation here.
+The desktop smoke test opens temporary Electron windows on your normal display and uses an isolated profile under the system temporary directory. It verifies real local HTTP calls through IPC, VRM/VRMA loading, model lists, semantic recall, sentence ordering, synthetic-microphone interruption, archive round-trips, and persistence across restarts without a keyring. It then closes its windows and removes its own test data. File/confirmation dialogs are stubbed. The test does not use your credentials or app profile. A real display (or an X virtual framebuffer) is recommended: Electron's Ozone headless backend crashed during validation here.
 
 See [PLAN.MD](PLAN.MD) for architecture, sprint checklists, limitations, and the validation record.
 
@@ -99,6 +109,9 @@ See [PLAN.MD](PLAN.MD) for architecture, sprint checklists, limitations, and the
 
 - [AIRI](https://github.com/moeru-ai/airi): inspiration for the companion experience and extensible capabilities.
 - [OpenRouter API reference](https://openrouter.ai/docs/api_reference/overview): compatible chat request and streaming formats.
+- [OpenRouter embeddings](https://openrouter.ai/docs/api/api-reference/embeddings/submit-an-embedding-request) and [embedding model discovery](https://openrouter.ai/docs/api/api-reference/embeddings/list-embeddings-models).
+- [Electron safeStorage](https://www.electronjs.org/docs/latest/api/safe-storage): platform keyring behavior and Linux fallback detection.
+- [MediaSource](https://developer.mozilla.org/en-US/docs/Web/API/Media_Source_Extensions_API) and [audio output routing](https://developer.mozilla.org/en-US/docs/Web/API/AudioContext/setSinkId).
 - [three-vrm animation documentation](https://pixiv.github.io/three-vrm/docs/modules/three-vrm-animation.html): loading and retargeting VRMA clips.
 - [Electron security](https://www.electronjs.org/docs/latest/tutorial/security) and [window styles](https://www.electronjs.org/docs/latest/tutorial/custom-window-styles): renderer isolation and desktop transparency.
 

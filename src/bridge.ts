@@ -40,6 +40,11 @@ const preview: Bridge = {
   cancel: async () => {},
   transcribe: desktopOnly,
   speak: desktopOnly,
+  openSpeech: desktopOnly,
+  readSpeech: desktopOnly,
+  closeSpeech: desktopOnly,
+  listModels: desktopOnly,
+  reindexMemory: desktopOnly,
   testProvider: desktopOnly,
   saveFact: async (fact) => {
     const now = new Date().toISOString();

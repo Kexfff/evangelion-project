@@ -23,6 +23,14 @@ export const providerSchema = z.object({
   enabled: z.boolean(),
   hasKey: z.boolean().default(false),
 });
+export const providerKinds = ["llm", "asr", "tts", "embedding"] as const;
+const embeddingDefaults = {
+  baseUrl: "https://openrouter.ai/api/v1",
+  model: "openai/text-embedding-3-small",
+  voice: "",
+  enabled: false,
+  hasKey: false,
+};
 export const characterSchema = z.object({
   id: z.string().min(1).max(100),
   name: z.string().trim().min(1).max(60),
@@ -42,12 +50,26 @@ export const settingsSchema = z
       llm: providerSchema,
       asr: providerSchema,
       tts: providerSchema,
+      embedding: providerSchema.default(embeddingDefaults),
     }),
     voice: z.object({
       autoSpeak: z.boolean(),
       speed: z.number().min(0.5).max(2),
       volume: z.number().min(0).max(1),
       language: z.string().max(20),
+      inputDeviceId: z.string().max(500).default(""),
+      outputDeviceId: z.string().max(500).default(""),
+      inputGain: z.number().min(0.1).max(5).default(1),
+      vadEnabled: z.boolean().default(false),
+      vadThreshold: z.number().min(0.005).max(0.3).default(0.035),
+      vadSilenceMs: z.number().int().min(300).max(3000).default(900),
+      vadMinSpeechMs: z.number().int().min(100).max(1000).default(200),
+      bargeIn: z.boolean().default(true),
+      sentenceBuffering: z.boolean().default(true),
+      streaming: z.boolean().default(true),
+      echoCancellation: z.boolean().default(true),
+      noiseSuppression: z.boolean().default(true),
+      autoGainControl: z.boolean().default(false),
     }),
     vrm: z.object({
       zoom: z.number().min(0.5).max(2),
@@ -73,6 +95,8 @@ export const settingsSchema = z
       contextMessages: z.number().int().min(4).max(80),
       recallCount: z.number().int().min(0).max(20),
       autoRemember: z.boolean(),
+      semanticEnabled: z.boolean().default(false),
+      semanticThreshold: z.number().min(0).max(1).default(0.3),
     }),
     window: z.object({ alwaysOnTop: z.boolean() }),
   })
@@ -109,7 +133,7 @@ export const memoryExportSchema = z.object({
 export type Settings = z.infer<typeof settingsSchema>;
 export type Character = z.infer<typeof characterSchema>;
 export type Provider = z.infer<typeof providerSchema>;
-export type ProviderKind = "llm" | "asr" | "tts";
+export type ProviderKind = (typeof providerKinds)[number];
 export type Fact = z.infer<typeof factSchema>;
 export type Message = z.infer<typeof messageSchema>;
 export type Phase =
@@ -120,7 +144,7 @@ export interface Snapshot {
   messages: Message[];
   sessionId: string;
   busy: boolean;
-  secretStorage: "encrypted" | "session-only";
+  secretStorage: "encrypted" | "local-file" | "session-only";
 }
 export type RuntimeEvent =
   | { type: "state"; state: Snapshot }
@@ -137,6 +161,11 @@ export interface Bridge {
   cancel(): Promise<void>;
   transcribe(bytes: ArrayBuffer, mime: string): Promise<string>;
   speak(text: string): Promise<ArrayBuffer>;
+  openSpeech(text: string): Promise<{ id: string; mime: string }>;
+  readSpeech(id: string): Promise<{ done: boolean; bytes: ArrayBuffer }>;
+  closeSpeech(id: string): Promise<void>;
+  listModels(kind: ProviderKind): Promise<string[]>;
+  reindexMemory(): Promise<{ indexed: number; total: number }>;
   testProvider(kind: ProviderKind): Promise<string>;
   saveFact(fact: { id?: string; text: string }): Promise<void>;
   deleteFact(id: string): Promise<void>;
@@ -187,8 +216,27 @@ export const defaultSettings: Settings = {
       enabled: false,
       hasKey: false,
     },
+    embedding: embeddingDefaults,
   },
-  voice: { autoSpeak: true, speed: 1, volume: 0.8, language: "" },
+  voice: {
+    autoSpeak: true,
+    speed: 1,
+    volume: 0.8,
+    language: "",
+    inputDeviceId: "",
+    outputDeviceId: "",
+    inputGain: 1,
+    vadEnabled: false,
+    vadThreshold: 0.035,
+    vadSilenceMs: 900,
+    vadMinSpeechMs: 200,
+    bargeIn: true,
+    sentenceBuffering: true,
+    streaming: true,
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: false,
+  },
   vrm: {
     zoom: 1,
     x: 0,
@@ -199,6 +247,12 @@ export const defaultSettings: Settings = {
     animation: "idle_loop",
     autoBlink: true,
   },
-  memory: { contextMessages: 20, recallCount: 6, autoRemember: false },
+  memory: {
+    contextMessages: 20,
+    recallCount: 6,
+    autoRemember: false,
+    semanticEnabled: false,
+    semanticThreshold: 0.3,
+  },
   window: { alwaysOnTop: false },
 };

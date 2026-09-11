@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 // An isolated, disposable profile and a local provider exercise real Electron IPC/HTTP.
 const profile = await mkdtemp(path.join(tmpdir(), "eva-desktop-smoke-"));
 const requests = [];
+const speechFixture = await readFile(path.resolve("tests/fixtures/speech.mp3"));
 const server = createServer(async (req, res) => {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
@@ -17,13 +18,37 @@ const server = createServer(async (req, res) => {
     body,
     authorization: req.headers.authorization,
   });
-  if (req.url === "/v1/chat/completions") {
+  if (req.url === "/v1/models") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(
+      '{"data":[{"id":"test-chat"},{"id":"test-asr"},{"id":"test-tts"}]}',
+    );
+  } else if (req.url === "/v1/embeddings") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify({
+        data: JSON.parse(body).input.map((_, index) => ({
+          index,
+          embedding: [1, 0, 0],
+        })),
+      }),
+    );
+  } else if (req.url === "/v1/chat/completions") {
     const data = JSON.parse(body);
     if (data.stream) {
       res.writeHead(200, { "Content-Type": "text/event-stream" });
-      res.end(
-        'data: {"choices":[{"delta":{"content":"Hello from the test provider."}}]}\n\ndata: [DONE]\n\n',
+      const sentenceTest =
+        data.messages.at(-1).content === "Test sentence queue";
+      res.write(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: sentenceTest ? "First sentence. " : "Hello from the test provider." } }] })}\n\n`,
       );
+      if (sentenceTest)
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      if (sentenceTest)
+        res.write(
+          'data: {"choices":[{"delta":{"content":"Second sentence."}}]}\n\n',
+        );
+      res.end("data: [DONE]\n\n");
     } else {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end('{"choices":[{"message":{"content":"OK"}}]}');
@@ -33,7 +58,9 @@ const server = createServer(async (req, res) => {
     res.end('{"text":"I like Minecraft."}');
   } else if (req.url === "/v1/audio/speech") {
     res.writeHead(200, { "Content-Type": "audio/mpeg" });
-    res.end(Buffer.from([73, 68, 51, 4, 0, 0]));
+    res.write(speechFixture.subarray(0, 3000));
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    res.end(speechFixture.subarray(3000));
   } else {
     res.writeHead(404);
     res.end();
@@ -51,6 +78,7 @@ const launch = () =>
       ".",
       ...(process.env.EVA_TEST_HEADLESS ? ["--ozone-platform=headless"] : []),
       "--enable-unsafe-swiftshader",
+      "--password-store=basic",
     ],
     env: { ...process.env, EVA_DEV_URL: "", EVA_TEST_DATA_DIR: profile },
     timeout: 30000,
@@ -69,7 +97,7 @@ try {
   await win.evaluate(
     async ({ baseUrl, settings }) => {
       settings.voice.autoSpeak = false;
-      for (const kind of ["llm", "asr", "tts"]) {
+      for (const kind of ["llm", "asr", "tts", "embedding"]) {
         settings.providers[kind].baseUrl = baseUrl;
         settings.providers[kind].enabled = true;
       }
@@ -97,7 +125,16 @@ try {
     await win.evaluate(
       async () => (await window.eva.speak("Hello")).byteLength,
     ),
-    6,
+    speechFixture.byteLength,
+  );
+  for (const kind of ["llm", "asr", "tts"])
+    assert.equal(
+      (await win.evaluate((kind) => window.eva.listModels(kind), kind)).length,
+      3,
+    );
+  assert.equal(
+    (await win.evaluate(() => window.eva.reindexMemory())).indexed,
+    2,
   );
   const assetBytes = await win.evaluate(
     async () =>
@@ -156,6 +193,103 @@ try {
   const state = await reopened.evaluate(() => window.eva.snapshot());
   assert.equal(state.facts[0].text, "The user likes Minecraft.");
   assert.equal(state.messages.length, 0);
+  assert.equal(state.settings.providers.llm.hasKey, true);
+  await reopened.evaluate(async () => {
+    const s = (await window.eva.snapshot()).settings;
+    s.voice.autoSpeak = true;
+    s.memory.semanticEnabled = true;
+    await window.eva.saveSettings(s, {});
+  });
+  const previousSpeechCount = requests.filter(
+    (r) => r.url === "/v1/audio/speech",
+  ).length;
+  await reopened
+    .getByRole("textbox", { name: "Message Eva" })
+    .fill("Test sentence queue");
+  await reopened.getByRole("button", { name: "Send message" }).click();
+  await reopened.waitForFunction(
+    () =>
+      document.querySelector(".phase-label")?.textContent === "here with you" &&
+      document
+        .querySelector(".speech-bubble p")
+        ?.textContent?.includes("Second sentence"),
+    null,
+    { timeout: 15000 },
+  );
+  const spoken = requests
+    .filter((r) => r.url === "/v1/audio/speech")
+    .slice(previousSpeechCount)
+    .map((r) => JSON.parse(r.body).input);
+  assert.deepEqual(spoken, ["First sentence.", "Second sentence."]);
+  assert.equal(await reopened.getByRole("alert").count(), 0);
+  const chatRequest = requests
+    .filter((r) => r.url === "/v1/chat/completions")
+    .at(-1);
+  assert.equal(chatRequest.authorization, "Bearer local-test-key");
+  assert.ok(
+    JSON.parse(chatRequest.body).messages[0].content.includes("Minecraft"),
+  );
+  // Feed a synthetic microphone into the real renderer to exercise hands-free barge-in.
+  await reopened.evaluate(async () => {
+    const s = (await window.eva.snapshot()).settings;
+    s.voice.vadEnabled = true;
+    s.voice.vadSilenceMs = 300;
+    s.voice.vadMinSpeechMs = 150;
+    await window.eva.saveSettings(s, {});
+    const context = new AudioContext();
+    await context.resume();
+    const oscillator = context.createOscillator(),
+      gain = context.createGain(),
+      destination = context.createMediaStreamDestination();
+    gain.gain.value = 0;
+    oscillator.connect(gain);
+    gain.connect(destination);
+    oscillator.start();
+    navigator.mediaDevices.getUserMedia = async () => destination.stream;
+    window.testMicrophone = { context, oscillator, gain };
+  });
+  await reopened
+    .getByRole("button", { name: "Start recording", exact: true })
+    .click();
+  await reopened
+    .getByRole("button", { name: "Stop hands-free listening" })
+    .waitFor();
+  const beforeInterrupt = requests.filter(
+    (r) => r.url === "/v1/audio/speech",
+  ).length;
+  await reopened
+    .getByRole("textbox", { name: "Message Eva" })
+    .fill("Test sentence queue");
+  await reopened.getByRole("button", { name: "Send message" }).click();
+  await reopened.waitForFunction(
+    () => document.querySelector(".phase-label")?.textContent === "speaking…",
+  );
+  await reopened.evaluate(() => {
+    const m = window.testMicrophone;
+    m.gain.gain.setValueAtTime(0.15, m.context.currentTime);
+    m.gain.gain.setValueAtTime(0, m.context.currentTime + 0.5);
+  });
+  await reopened.waitForFunction(
+    () =>
+      document.querySelector(".speech-bubble p")?.textContent ===
+        "Hello from the test provider." &&
+      document.querySelector(".phase-label")?.textContent === "listening…",
+    null,
+    { timeout: 15000 },
+  );
+  const afterInterrupt = requests
+    .filter((r) => r.url === "/v1/audio/speech")
+    .slice(beforeInterrupt)
+    .map((r) => JSON.parse(r.body).input);
+  assert.ok(!afterInterrupt.includes("Second sentence."));
+  assert.ok(afterInterrupt.includes("Hello from the test provider."));
+  await reopened
+    .getByRole("button", { name: "Stop hands-free listening" })
+    .click();
+  await reopened.evaluate(async () => {
+    window.testMicrophone.oscillator.stop();
+    await window.testMicrophone.context.close();
+  });
   await desktop.evaluate(({ dialog }) => {
     dialog.showMessageBox = async () => ({
       response: 1,
@@ -169,7 +303,7 @@ try {
   assert.equal(cleared.messages.length, 0);
   assert.equal(cleared.facts.length, 1);
   console.log(
-    "Desktop smoke passed: isolated windows, VRM/VRMA, preload, real local chat/ASR/TTS HTTP, asset allowlist, archive round-trip, deletion confirmation, memory and restart persistence.",
+    "Desktop smoke passed: key persistence without a keyring, models, semantic recall, sentence ordering, synthetic-microphone barge-in, streamed audio, VRM, archive round-trip, deletion and restart persistence.",
   );
 } finally {
   if (desktop) await desktop.close();

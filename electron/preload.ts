@@ -9,6 +9,11 @@ const api: Bridge = {
   transcribe: (bytes, mime) =>
     ipcRenderer.invoke("eva:transcribe", bytes, mime),
   speak: (text) => ipcRenderer.invoke("eva:speak", text),
+  openSpeech: (text) => ipcRenderer.invoke("eva:speech:open", text),
+  readSpeech: (id) => ipcRenderer.invoke("eva:speech:read", id),
+  closeSpeech: (id) => ipcRenderer.invoke("eva:speech:close", id),
+  listModels: (kind) => ipcRenderer.invoke("eva:models", kind),
+  reindexMemory: () => ipcRenderer.invoke("eva:memory:reindex"),
   testProvider: (kind) => ipcRenderer.invoke("eva:test", kind),
   saveFact: (fact) => ipcRenderer.invoke("eva:fact:save", fact),
   deleteFact: (id) => ipcRenderer.invoke("eva:fact:delete", id),

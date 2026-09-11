@@ -79,6 +79,77 @@ export async function consumeSSE(
   return result;
 }
 export class OpenAICompatibleProvider {
+  async models(provider: Provider, key: string, embedding = false) {
+    // OpenRouter exposes embedding models separately; other compatible servers use /models.
+    const route =
+      embedding && new URL(provider.baseUrl).hostname === "openrouter.ai"
+        ? "embeddings/models"
+        : "models";
+    const response = await checked(
+      await fetch(endpoint(provider.baseUrl, route), {
+        headers: headers(key),
+        signal: providerSignal(),
+      }),
+    );
+    const data = await response.json();
+    if (!Array.isArray(data.data))
+      throw new Error(
+        "This provider does not return an OpenAI-compatible model list. Enter a model ID manually.",
+      );
+    return [
+      ...new Set<string>(
+        data.data
+          .filter(
+            (m: { id?: unknown }) =>
+              typeof m.id === "string" && m.id.length <= 200,
+          )
+          .map((m: { id: string }) => m.id),
+      ),
+    ].sort();
+  }
+  async embed(
+    provider: Provider,
+    key: string,
+    input: string[],
+    signal?: AbortSignal,
+  ): Promise<number[][]> {
+    if (!provider.enabled || !provider.model.trim())
+      throw new Error(
+        "Enable an embedding provider and choose its model in Settings.",
+      );
+    const response = await checked(
+      await fetch(endpoint(provider.baseUrl, "embeddings"), {
+        method: "POST",
+        headers: { ...headers(key), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: provider.model,
+          input,
+          encoding_format: "float",
+        }),
+        signal: providerSignal(signal),
+      }),
+    );
+    const data = await response.json();
+    if (!Array.isArray(data.data) || data.data.length !== input.length)
+      throw new Error("Embedding provider returned an incomplete batch.");
+    const sorted = [...data.data].sort((a, b) => a.index - b.index);
+    const dimensions = sorted[0]?.embedding?.length;
+    if (
+      !dimensions ||
+      dimensions > 16384 ||
+      sorted.some(
+        (x, i) =>
+          x.index !== i ||
+          !Array.isArray(x.embedding) ||
+          x.embedding.length !== dimensions ||
+          x.embedding.some(
+            (n: unknown) => typeof n !== "number" || !Number.isFinite(n),
+          ),
+      )
+    )
+      throw new Error("Embedding provider returned invalid vectors.");
+    return sorted.map((x) => x.embedding);
+  }
   async chat(
     provider: Provider,
     key: string,
@@ -166,6 +237,25 @@ export class OpenAICompatibleProvider {
     speed: number,
     signal?: AbortSignal,
   ) {
+    const response = await this.speechResponse(
+      provider,
+      key,
+      input,
+      speed,
+      signal,
+    );
+    const bytes = await response.arrayBuffer();
+    if (!bytes.byteLength)
+      throw new Error("The speech provider returned empty audio.");
+    return bytes;
+  }
+  async speechResponse(
+    provider: Provider,
+    key: string,
+    input: string,
+    speed: number,
+    signal?: AbortSignal,
+  ) {
     if (!provider.enabled || !provider.model.trim())
       throw new Error("Enable the TTS provider and set its model in Settings.");
     const response = await checked(
@@ -186,9 +276,8 @@ export class OpenAICompatibleProvider {
       throw new Error(
         "The speech provider returned JSON instead of audio. Check its endpoint.",
       );
-    const bytes = await response.arrayBuffer();
-    if (!bytes.byteLength)
-      throw new Error("The speech provider returned empty audio.");
-    return bytes;
+    if (!response.body)
+      throw new Error("The speech provider returned no audio stream.");
+    return response;
   }
 }

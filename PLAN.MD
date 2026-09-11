@@ -16,8 +16,8 @@ Build a personal desktop companion that listens, responds naturally, remembers, 
 | Conversation runtime | Main-process TypeScript service                                       | One conversation pipeline that future Telegram and game adapters can call                                             |
 | Providers            | OpenAI-compatible chat / ASR / TTS adapters                           | Independent URLs, models and credentials; local and hosted backends                                                   |
 | Memory               | Versioned local JSON with atomic replacement and previous-file backup | Simple inspectable persistence with no native DB compilation; replace the store behind its boundary as scale requires |
-| Retrieval            | Recent-message budget + ranked facts + lexical past-message recall    | Useful without requiring a fourth embedding service; semantic retrieval is a later upgrade                            |
-| Secrets              | OS-backed Electron safeStorage; session-only fallback                 | Never place raw persisted keys in renderer settings or exports                                                        |
+| Retrieval            | Recent-message budget + optional cached embeddings + lexical fallback | Character-scoped cosine retrieval; configurable compatible embedding provider added in sprint 1.5                     |
+| Secrets              | OS-backed Electron safeStorage; persistent local AES-GCM fallback     | Keys remain in main process; local fallback key has owner-only file permissions and is identified in Settings         |
 | Extensions           | Typed plugin, capability, event, and scheduled-task contracts         | Establish boundaries now; implement the host and tool execution in later sprints                                      |
 
 ```text
@@ -81,7 +81,7 @@ Validation and remaining acceptance checks:
 
 Validation recorded on 2026-09-08. Automated desktop tests exercise request/response plumbing with fixture audio bytes; they do not establish speech quality, actual audio decoding/playback, or physical microphone behavior. Electron's headless Ozone backend crashed in this environment; the desktop smoke test passed using the normal display instead. Browser tests ran in headless Chromium with software WebGL.
 
-Deliberate first-sprint limitations:
+First-sprint limitations (historical; voice and retrieval upgrades are implemented below):
 
 - Complete reply text is generated before TTS starts. Sentence-level synthesis queues, streaming audio, automatic voice activity detection and full-duplex interruption are future voice refinements.
 - Mouth movement follows audio amplitude, not phoneme visemes. Animation selection currently loops each clip; a gesture controller and blends keyed to emotions are future refinements.
@@ -91,6 +91,37 @@ Deliberate first-sprint limitations:
 - Browser mode is an explicitly labeled visual preview. Desktop features require Electron.
 - Provider connectivity and enabled/configured status are different; the UI does not claim a connection is healthy until a test succeeds.
 - No background actions, plugin execution, MCP calls, Telegram integration or game control are implemented yet.
+
+## Sprint 1.5 — natural voice and semantic memory
+
+Implemented and validated (2026-09-09):
+
+- [x] Diagnose false post-TTS error: a still-attached error callback runs when cleanup clears the audio source.
+- [x] Replace session-only credentials with persistent OS encryption or an explicitly labeled local AES-GCM vault; preserve locked legacy keys.
+- [x] Add model discovery for LLM, ASR, TTS and embeddings with manual model IDs retained.
+- [x] Add microphone gain, local input meter/test, input/output selection and device refresh.
+- [x] Add local energy VAD, onset buffering, pause/minimum speech duration controls and hands-free listening.
+- [x] Add generation-aware interruption for speech, queued sentences and in-flight LLM requests.
+- [x] Add sentence-buffered speech and pull-based HTTP audio streaming with MSE playback and buffered container fallback.
+- [x] Add semantic vector cache, cosine recall, provider/model invalidation, edit/delete invalidation and explicit rebuild.
+- [x] Validate schema migration, key persistence, post-playback cleanup and cancellation regressions.
+- [x] Validate model discovery, streamed playback, microphone controls and semantic retrieval end to end.
+- [x] Update run instructions and limitations; production build passes.
+- [x] Refresh the unpacked Linux build with sprint 1.5 in `release/linux-unpacked/`.
+
+Verification: 24 core tests, 5 browser tests, and the desktop smoke pass. The browser test plays a real MP3 before EOF, tests completed/interrupted cleanup and drives VAD through the actual AudioWorklet using synthetic speech. The desktop test uses a disposable profile with its keyring disabled, verifies saved credentials after restart, exercises model discovery and embedding HTTP calls, checks sentence order, and interrupts a reply with synthetic microphone input. It confirms the queued second sentence is discarded and the new transcription receives a reply. No paid providers or user credentials were used.
+
+Current operating details and remaining manual checks:
+
+- Existing sprint-1 settings/memories migrate automatically. Re-enter a formerly session-only key once and save it; it will then persist. Legacy ciphertext stays intact when its keyring is locked.
+- Without a keyring, the credential decryption key lives beside the encrypted vault. This protects against casual disclosure/other OS users, not processes running as your user; Settings identifies this mode. OS encryption remains preferred.
+- Model discovery uses each provider's catalog; compatible APIs do not consistently declare model capabilities, so the returned list is not artificially filtered into inferred model types. Manual IDs remain supported.
+- Hands-free VAD is explicitly started/stopped from the microphone button and never enabled at launch. VAD is local energy detection with hysteresis, configurable minimum voice/pause timing, and pre-roll sufficient for the configured onset duration. It is not speaker recognition or a neural speech/noise classifier.
+- Set sensitivity and test the chosen microphone/speakers on the target device. Headphones or appropriate echo settings may be needed to prevent the avatar's speaker audio from triggering barge-in.
+- Audio is downsampled to 16 kHz mono WAV. Individual utterances cap at 60 seconds. A stopped or disconnected microphone releases its stream; voice/session changes also stop capture/playback.
+- TTS streams through MSE when its container is supported (tested with MP3). Unsupported containers buffer before playback. The provider must send bytes incrementally for true streaming latency; synthesis requests are queued per sentence.
+- Semantic memory requires its own enabled embedding provider and key. The vector cache is scoped by provider/model/content; each turn indexes up to 32 missing documents. Run the explicit index build for a large existing archive. Embedding or indexing failures fall back to keyword recall with a notice.
+- Embedding quality, multilingual recall, real server latency, device availability, acoustic echo and physical permission prompts still need verification on the user's actual setup. Base TTS playback was reported working by the user; the new streaming path was validated with fixtures.
 
 ## Sprint 2 — consciousness / autonomy
 
@@ -142,8 +173,8 @@ Acceptance: join an authorized test world, describe nearby state, follow the use
 
 ## Later refinements
 
-- Semantic memory retrieval and consolidation with configurable embedding provider.
-- Sentence-buffered TTS, VAD, barge-in, streaming transcription and device selection.
+- Memory consolidation/summarization, richer retrieval evaluation and scalable vector storage.
+- Streaming transcription and neural VAD; sentence-buffered TTS, energy VAD, barge-in and device selection landed in sprint 1.5.
 - Richer gaze, facial expression mixing and one-shot gestures.
 - Portable character-card import/export and richer avatar metadata support.
 - Encrypted memory archives, retention controls and better backup management.

@@ -32,7 +32,7 @@ export function Companion() {
     app.phase === "thinking" || app.phase === "transcribing" || app.state.busy;
   const last = messages.at(-1);
   const submit = () => {
-    if (!text.trim() || busy) return;
+    if (!text.trim()) return;
     const message = text;
     setText("");
     void app.send(message);
@@ -174,28 +174,37 @@ export function Companion() {
           <input
             aria-label="Message Eva"
             placeholder={
-              app.phase === "listening"
-                ? "Listening… tap mic to finish"
+              app.micOn
+                ? settings.voice.vadEnabled
+                  ? "Hands-free listening…"
+                  : "Listening… tap mic to finish"
                 : `Talk to ${character.name}…`
             }
             value={text}
             maxLength={8000}
             onChange={(e) => setText(e.target.value)}
-            disabled={busy || app.phase === "listening"}
+            disabled={app.micOn && !settings.voice.vadEnabled}
           />
           <button
             type="button"
             aria-label={
-              app.phase === "listening" ? "Finish recording" : "Start recording"
+              app.micOn
+                ? settings.voice.vadEnabled
+                  ? "Stop hands-free listening"
+                  : "Finish recording"
+                : "Start recording"
             }
-            title="Click to record; click again to send"
-            className={`icon-button ${app.phase === "listening" ? "recording" : ""}`}
-            disabled={busy}
+            title={
+              settings.voice.vadEnabled
+                ? "Toggle hands-free listening"
+                : "Click to record; click again to send"
+            }
+            className={`icon-button ${app.micOn ? "recording" : ""}`}
             onClick={() => void app.toggleRecording()}
           >
             <Mic size={19} />
           </button>
-          {app.phase !== "idle" ? (
+          {app.phase !== "idle" && !text.trim() ? (
             <button
               type="button"
               className="send-button"
@@ -215,9 +224,20 @@ export function Companion() {
             </button>
           )}
         </form>
+        {app.micOn && (
+          <meter
+            className="mic-meter companion-meter"
+            aria-label="Microphone level"
+            min={0}
+            max={0.3}
+            value={app.micLevel}
+          />
+        )}
         <div className="companion-footnote">
-          {app.phase === "listening"
-            ? "Microphone on · up to 60 seconds"
+          {app.micOn
+            ? settings.voice.vadEnabled
+              ? "Hands-free mic on · pause to send · click mic to stop"
+              : "Microphone on · up to 60 seconds"
             : "A little more present, every conversation."}
         </div>
       </div>

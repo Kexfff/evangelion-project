@@ -31,6 +31,7 @@ import { bridge } from "../bridge";
 import {
   defaultSettings,
   settingsSchema,
+  providerKinds,
   type Character,
   type Fact,
   type ProviderKind,
@@ -38,6 +39,7 @@ import {
   type Snapshot,
 } from "../shared/schema";
 import { Avatar } from "./Avatar";
+import { VoiceSettings } from "./VoiceSettings";
 
 const navigation = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
@@ -157,6 +159,9 @@ function Section({
 }
 
 export function Settings() {
+  const [models, setModels] = useState<Partial<Record<ProviderKind, string[]>>>(
+    {},
+  );
   const [tab, setTab] = useState<Tab>("overview");
   const [snapshot, setSnapshot] = useState<Snapshot>();
   const [draft, setDraft] = useState<AppSettings>();
@@ -237,9 +242,9 @@ export function Settings() {
   const persistedCharacter = snapshot.settings.characters.find(
     (c) => c.id === snapshot.settings.activeCharacterId,
   )!;
-  const counts = Object.values(snapshot.settings.providers).filter(
-    (p) => p.enabled,
-  ).length;
+  const counts = ["llm", "asr", "tts"]
+    .map((k) => snapshot.settings.providers[k as ProviderKind])
+    .filter((p) => p.enabled).length;
   const facts = snapshot.facts.filter((f) =>
     f.text.toLowerCase().includes(search.toLowerCase()),
   );
@@ -290,7 +295,7 @@ export function Settings() {
             <ExternalLink size={14} />
           </button>
           <div className="version">
-            evangelion_project <span>v0.1.0</span>
+            evangelion_project <span>v0.1.5</span>
           </div>
         </div>
       </aside>
@@ -653,13 +658,13 @@ export function Settings() {
                   <small>
                     {snapshot.secretStorage === "encrypted"
                       ? "API keys are encrypted using your operating system’s secure storage."
-                      : "Secure OS storage is unavailable. API keys will be kept only until the app exits."}{" "}
+                      : "Keys persist in a local encrypted file. Its key is stored beside it with owner-only permissions; this is not OS-keyring protection."}{" "}
                     Audio and conversation context are sent to the providers you
                     configure.
                   </small>
                 </div>
               </div>
-              {(["llm", "asr", "tts"] as const).map((kind) => {
+              {providerKinds.map((kind) => {
                 const provider = draft.providers[kind];
                 return (
                   <Section
@@ -669,12 +674,16 @@ export function Settings() {
                         ? "Think · Language model"
                         : kind === "asr"
                           ? "Listen · Speech recognition"
-                          : "Speak · Voice synthesis"
+                          : kind === "tts"
+                            ? "Speak · Voice synthesis"
+                            : "Remember · Embeddings"
                     }
                     subtitle={
                       kind === "llm"
                         ? "OpenRouter by default. Any Chat Completions compatible endpoint is supported."
-                        : "Use a separate OpenAI-compatible audio service, local or hosted."
+                        : kind === "embedding"
+                          ? "OpenAI-compatible embeddings for meaning-based memory. Configure its own API key, even if using OpenRouter for both."
+                          : "Use a separate OpenAI-compatible audio service, local or hosted."
                     }
                   >
                     <Toggle
@@ -694,7 +703,9 @@ export function Settings() {
                             ? "Appends /chat/completions"
                             : kind === "asr"
                               ? "Appends /audio/transcriptions"
-                              : "Appends /audio/speech"
+                              : kind === "tts"
+                                ? "Appends /audio/speech"
+                                : "Appends /embeddings"
                         }
                       >
                         <input
@@ -709,6 +720,7 @@ export function Settings() {
                       </Field>
                       <Field label="Model ID">
                         <input
+                          list={`models-${kind}`}
                           value={provider.model}
                           onChange={(e) =>
                             update((d) => {
@@ -716,6 +728,11 @@ export function Settings() {
                             })
                           }
                         />
+                        <datalist id={`models-${kind}`}>
+                          {models[kind]?.map((id) => (
+                            <option key={id} value={id} />
+                          ))}
+                        </datalist>
                       </Field>
                       <Field
                         label="API key"
@@ -770,6 +787,26 @@ export function Settings() {
                       )}
                     </div>
                     <div className="provider-actions">
+                      <button
+                        className="button secondary"
+                        disabled={working || dirty}
+                        title={
+                          dirty
+                            ? "Save your provider configuration first"
+                            : "Fetch model IDs from this provider"
+                        }
+                        onClick={() =>
+                          void perform(async () => {
+                            const ids = await bridge.listModels(kind);
+                            setModels((old) => ({ ...old, [kind]: ids }));
+                            setNotice(
+                              `${ids.length} model IDs fetched. Choose from Model ID suggestions or enter one manually.`,
+                            );
+                          })
+                        }
+                      >
+                        Fetch models
+                      </button>
                       <span>
                         Test sends a small request and may incur provider
                         charges.
@@ -799,77 +836,14 @@ export function Settings() {
           )}
 
           {tab === "voice" && (
-            <div className="two-column">
-              <Section title="Conversation audio">
-                <Toggle
-                  label="Speak replies automatically"
-                  hint="Requires an enabled TTS provider."
-                  checked={draft.voice.autoSpeak}
-                  onChange={(v) =>
-                    update((d) => {
-                      d.voice.autoSpeak = v;
-                    })
-                  }
-                />
-                <Range
-                  label="Voice speed"
-                  value={draft.voice.speed}
-                  min={0.5}
-                  max={2}
-                  onChange={(v) =>
-                    update((d) => {
-                      d.voice.speed = v;
-                    })
-                  }
-                />
-                <Range
-                  label="Playback volume"
-                  value={draft.voice.volume}
-                  min={0}
-                  max={1}
-                  onChange={(v) =>
-                    update((d) => {
-                      d.voice.volume = v;
-                    })
-                  }
-                />
-                <Field
-                  label="Recognition language"
-                  hint="Optional ISO language code, such as en, ru, or ja. Leave empty for auto detection."
-                >
-                  <input
-                    value={draft.voice.language}
-                    maxLength={20}
-                    placeholder="Auto detect"
-                    onChange={(e) =>
-                      update((d) => {
-                        d.voice.language = e.target.value;
-                      })
-                    }
-                  />
-                </Field>
-              </Section>
-              <Section title="A voice, on your terms">
-                <div className="feature-illustration">
-                  <AudioLines size={52} />
-                </div>
-                <h3>Click. Speak. Connect.</h3>
-                <p className="muted">
-                  Click the microphone in the companion window to begin
-                  recording. Click again to finish and send. Recordings stop
-                  automatically after 60 seconds.
-                </p>
-                <p className="muted">
-                  The stop button interrupts a reply or speech playback.
-                  Microphone capture ends after each recording. The app uses
-                  your system’s default input and output devices.
-                </p>
-                <div className="card-footnote">
-                  Always-on listening and voice activity detection are future
-                  improvements.
-                </div>
-              </Section>
-            </div>
+            <VoiceSettings
+              voice={draft.voice}
+              change={(patch) =>
+                update((d) => {
+                  Object.assign(d.voice, patch);
+                })
+              }
+            />
           )}
 
           {tab === "vrm" && (
@@ -1183,6 +1157,55 @@ export function Settings() {
                 </div>
                 <div>
                   <Section title="How remembering works">
+                    <Toggle
+                      label="Semantic memory"
+                      hint="Recall related ideas even when the words differ. Enable an embedding provider first; memories and queries are sent to it."
+                      checked={draft.memory.semanticEnabled}
+                      onChange={(v) =>
+                        update((d) => {
+                          d.memory.semanticEnabled = v;
+                        })
+                      }
+                    />
+                    <Range
+                      label="Minimum semantic similarity"
+                      value={draft.memory.semanticThreshold}
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      onChange={(v) =>
+                        update((d) => {
+                          d.memory.semanticThreshold = v;
+                        })
+                      }
+                    />
+                    <button
+                      className="button secondary full"
+                      disabled={
+                        working ||
+                        dirty ||
+                        snapshot.busy ||
+                        !draft.providers.embedding.enabled
+                      }
+                      onClick={() =>
+                        void perform(async () => {
+                          const result = await bridge.reindexMemory();
+                          setNotice(
+                            `Semantic index ready: ${result.indexed} of ${result.total} memories and past messages.`,
+                          );
+                        })
+                      }
+                    >
+                      Build / update semantic index
+                    </button>
+                    {working && (
+                      <button
+                        className="text-button"
+                        onClick={() => void bridge.cancel()}
+                      >
+                        Cancel current operation
+                      </button>
+                    )}
                     <Range
                       label="Recent messages in context"
                       value={draft.memory.contextMessages}
@@ -1220,8 +1243,9 @@ export function Settings() {
                     <p className="muted">
                       Recent messages form short-term context. Older
                       conversations remain on disk and can be recalled by
-                      keyword relevance. Facts persist across sessions and app
-                      restarts.
+                      meaning when semantic memory is enabled, with keyword
+                      fallback if the embedding service fails. Facts persist
+                      across sessions and app restarts.
                     </p>
                   </Section>
                   <Section title="Conversation history">
