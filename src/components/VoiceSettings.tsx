@@ -297,11 +297,32 @@ export function VoiceSettings({
               <h2>Speech playback</h2>
             </div>
             {toggle("autoSpeak", "Speak replies automatically")}
-            {toggle(
-              "sentenceBuffering",
-              "Speak sentence by sentence",
-              "Start synthesis while the language model is still replying.",
-            )}
+            <label className="field">
+              <span>Speech delivery</span>
+              <select
+                aria-label="Speech delivery"
+                value={
+                  voice.sentenceBuffering ? voice.speechChunking : "response"
+                }
+                onChange={(event) => {
+                  const mode = event.target.value;
+                  change({
+                    sentenceBuffering: mode !== "response",
+                    speechChunking: mode === "line" ? "line" : "sentence",
+                  });
+                }}
+              >
+                <option value="sentence">Sentence by sentence</option>
+                <option value="line">Line by line</option>
+                <option value="response">Full response</option>
+              </select>
+              <small>
+                Line by line keeps short sentences together until a newline,
+                which can help local TTS. Without a newline it waits for the
+                reply to finish. Full response waits for the entire reply. Audio
+                streaming works independently of this setting.
+              </small>
+            </label>
             {toggle(
               "streaming",
               "Stream speech audio",

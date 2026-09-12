@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { bridge } from "./bridge";
 import type { Phase, Snapshot } from "./shared/schema";
 import type { ImageAttachment } from "./shared/images";
-import { SentenceBuffer } from "./audio/sentences";
+import { createSpeechBuffer } from "./audio/sentences";
 import { playSpeech } from "./audio/playback";
 import { MicrophoneCapture } from "./audio/microphone";
 
@@ -24,7 +24,7 @@ export function useCompanion() {
   const speaking = useRef(false);
   const audio = useRef<AbortController | null>(null);
   const queue = useRef<Promise<void>>(Promise.resolve());
-  const buffer = useRef(new SentenceBuffer());
+  const buffer = useRef(createSpeechBuffer());
   const accepting = useRef(false);
   const interrupting = useRef<Promise<void>>(Promise.resolve());
   const report = (err: unknown) => {
@@ -70,7 +70,9 @@ export function useCompanion() {
     generating.current = false;
     transcribing.current = false;
     queue.current = Promise.resolve();
-    buffer.current = new SentenceBuffer();
+    buffer.current = createSpeechBuffer(
+      latest.current?.settings.voice.speechChunking,
+    );
     if (closeMic) closeMicrophone();
     setPartial("");
     setAmplitude(0);
@@ -147,8 +149,8 @@ export function useCompanion() {
           s.voice.sentenceBuffering &&
           s.providers.tts.enabled
         )
-          for (const sentence of buffer.current.push(event.text))
-            enqueue(sentence, generation.current);
+          for (const chunk of buffer.current.push(event.text))
+            enqueue(chunk, generation.current);
       } else if (event.type === "warning") report(event.message);
     });
     return () => {
@@ -168,7 +170,9 @@ export function useCompanion() {
     await interrupted;
     if (token !== generation.current || !active.current) return;
     setError("");
-    buffer.current = new SentenceBuffer();
+    buffer.current = createSpeechBuffer(
+      latest.current.settings.voice.speechChunking,
+    );
     generating.current = true;
     accepting.current = true;
     restingPhase();
@@ -184,8 +188,8 @@ export function useCompanion() {
       const s = next.settings;
       if (s.voice.autoSpeak && s.providers.tts.enabled) {
         if (s.voice.sentenceBuffering)
-          for (const sentence of buffer.current.push("", true))
-            enqueue(sentence, token);
+          for (const chunk of buffer.current.push("", true))
+            enqueue(chunk, token);
         else if (next.messages.at(-1)?.role === "assistant")
           enqueue(next.messages.at(-1)!.content, token);
       }

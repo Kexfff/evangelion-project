@@ -29,3 +29,40 @@ export class SentenceBuffer {
     return sentences;
   }
 }
+
+/** Only explicit newlines end a chunk; visual wrapping and punctuation do not. */
+export class LineBuffer {
+  private pending = "";
+  push(text: string, flush = false): string[] {
+    this.pending += text;
+    const lines = this.pending.split(/\r\n|[\r\n]/);
+    this.pending = lines.pop()!;
+    if (flush) {
+      lines.push(this.pending);
+      this.pending = "";
+    }
+    const chunks: string[] = [];
+    const splitLongLine = (line: string) => {
+      // Match the speech IPC limit without applying the sentence buffer's
+      // short 240-character fallback (which would defeat line mode).
+      while (line.length > 12000) {
+        let at = line.lastIndexOf(" ", 12000);
+        if (at < 6000) at = 12000;
+        const chunk = line.slice(0, at).trim();
+        if (chunk) chunks.push(chunk);
+        line = line.slice(at).trimStart();
+      }
+      return line;
+    };
+    for (const line of lines) {
+      const tail = splitLongLine(line).trim();
+      if (tail) chunks.push(tail);
+    }
+    this.pending = splitLongLine(this.pending);
+    return chunks;
+  }
+}
+
+export function createSpeechBuffer(mode: "sentence" | "line" = "sentence") {
+  return mode === "line" ? new LineBuffer() : new SentenceBuffer();
+}

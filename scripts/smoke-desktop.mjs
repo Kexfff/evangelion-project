@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 // An isolated, disposable profile and a local provider exercise real Electron IPC/HTTP.
 const profile = await mkdtemp(path.join(tmpdir(), "eva-desktop-smoke-"));
 const requests = [];
+let lineReplyFinished = true;
 const imageAttachment = {
   name: "pixel.png",
   dataUrl:
@@ -22,6 +23,7 @@ const server = createServer(async (req, res) => {
     url: req.url,
     body,
     authorization: req.headers.authorization,
+    lineReplyFinished,
   });
   if (req.url === "/v1/models") {
     res.writeHead(200, { "Content-Type": "application/json" });
@@ -42,6 +44,20 @@ const server = createServer(async (req, res) => {
     const data = JSON.parse(body);
     if (data.stream) {
       res.writeHead(200, { "Content-Type": "text/event-stream" });
+      if (data.messages.at(-1).content === "Test line queue") {
+        lineReplyFinished = false;
+        const delta = (content) =>
+          res.write(
+            `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`,
+          );
+        delta("Yes. Sure! ");
+        delta("Together on one line.\r");
+        delta("\n\nFinal line. Short sentences!");
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        lineReplyFinished = true;
+        res.end("data: [DONE]\n\n");
+        return;
+      }
       const sentenceTest =
         data.messages.at(-1).content === "Test sentence queue";
       res.write(
@@ -264,9 +280,56 @@ try {
   assert.ok(
     JSON.parse(chatRequest.body).messages[0].content.includes("Minecraft"),
   );
+  for (const mode of ["line", "response"]) {
+    await reopened.evaluate(async (mode) => {
+      const s = (await window.eva.snapshot()).settings;
+      s.voice.sentenceBuffering = mode !== "response";
+      s.voice.speechChunking = "line";
+      await window.eva.saveSettings(s, {});
+    }, mode);
+    const before = requests.filter((r) => r.url === "/v1/audio/speech").length;
+    await reopened
+      .getByRole("textbox", { name: "Message Eva" })
+      .fill("Test line queue");
+    await reopened.getByRole("button", { name: "Send message" }).click();
+    // Both iterations have identical reply text: wait for this turn's requests,
+    // not an idle UI still displaying the previous turn during cancellation.
+    await expect
+      .poll(
+        () =>
+          requests.filter((r) => r.url === "/v1/audio/speech").length - before,
+        { timeout: 15000 },
+      )
+      .toBe(mode === "line" ? 2 : 1);
+    await reopened.waitForFunction(
+      () =>
+        document.querySelector(".phase-label")?.textContent ===
+          "here with you" &&
+        document
+          .querySelector(".speech-bubble p")
+          ?.textContent?.includes("Final line"),
+      null,
+      { timeout: 15000 },
+    );
+    const speech = requests
+      .filter((r) => r.url === "/v1/audio/speech")
+      .slice(before);
+    assert.deepEqual(
+      speech.map((r) => JSON.parse(r.body).input),
+      mode === "line"
+        ? ["Yes. Sure! Together on one line.", "Final line. Short sentences!"]
+        : [
+            "Yes. Sure! Together on one line.\r\n\nFinal line. Short sentences!",
+          ],
+    );
+    assert.equal(speech[0].lineReplyFinished, mode === "response");
+    assert.equal(await reopened.getByRole("alert").count(), 0);
+  }
   // Feed a synthetic microphone into the real renderer to exercise hands-free barge-in.
   await reopened.evaluate(async () => {
     const s = (await window.eva.snapshot()).settings;
+    s.voice.sentenceBuffering = true;
+    s.voice.speechChunking = "sentence";
     s.voice.vadEnabled = true;
     s.voice.vadSilenceMs = 300;
     s.voice.vadMinSpeechMs = 150;
@@ -338,7 +401,7 @@ try {
   assert.equal(cleared.messages.length, 0);
   assert.equal(cleared.facts.length, 1);
   console.log(
-    "Desktop smoke passed: image attachment UI/IPC/HTTP/persistence, key persistence without a keyring, models, semantic recall, sentence ordering, synthetic-microphone barge-in, streamed audio, VRM, archive round-trip, deletion and restart persistence.",
+    "Desktop smoke passed: image attachment UI/IPC/HTTP/persistence, key persistence without a keyring, models, semantic recall, sentence/line/full-response speech ordering, synthetic-microphone barge-in, streamed audio, VRM, archive round-trip, deletion and restart persistence.",
   );
 } finally {
   if (desktop) await desktop.close();

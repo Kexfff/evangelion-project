@@ -138,6 +138,19 @@ Verification: production build, 29 core tests, 8 browser tests and the extended 
 
 Remaining: live vision-provider quality testing with the user's chosen model; automatic resizing/compression, visual long-term retrieval and a scalable separate attachment store. Images are inline/base64 in the existing JSON store and exports; image-heavy archives can exceed the existing 50 MB import limit. This update does not refresh the unpacked release binary; use `npm run build` / `npm start`, `npm run dev`, or rebuild with `npm run package`.
 
+## Line-by-line TTS — post-sprint 1.5
+
+- [x] Add Speech delivery selector under Voice & audio: Sentence by sentence, Line by line, Full response.
+- [x] Buffer complete lines across LLM deltas; preserve short sentences on the same line, handle CRLF/blank lines, and flush the final unfinished line once.
+- [x] Keep audio streaming and interruption independent of delivery mode; reset pending text on interruption/settings changes.
+- [x] Persist the line setting and preserve existing sentence/full-response preferences on migration.
+- [x] Keep line chunks within the 12,000-character speech API limit without the sentence mode's short fallback.
+- [x] Add regression tests for segmentation, settings persistence/migration, UI selection and real desktop synthesis ordering.
+
+Verification: production build, 33 core tests, 8 browser tests and desktop smoke pass. Desktop checks confirm line mode sends multiple short sentences in one TTS request before LLM completion, flushes the final line once, and full-response mode sends one request only after completion. Existing sentence-mode/barge-in checks also pass. All providers were mocked; no paid calls were made.
+
+Line means an explicit model-generated newline, not visual wrapping. A reply without newlines is spoken after completion. No system prompt changes are imposed. Local-model voice quality and latency still require listening with the user's own TTS provider. Manual replay continues to speak the whole saved reply. The unpacked release is not refreshed by this update; restart `npm run dev` or use the rebuilt `npm start` application.
+
 ## Sprint 2 — consciousness / autonomy
 
 Goal: she can initiate appropriate conversation and follow through on scheduled intentions.

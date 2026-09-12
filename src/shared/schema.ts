@@ -66,7 +66,9 @@ export const settingsSchema = z
       vadSilenceMs: z.number().int().min(300).max(3000).default(900),
       vadMinSpeechMs: z.number().int().min(100).max(1000).default(200),
       bargeIn: z.boolean().default(true),
+      // Legacy persisted name: false means full response; true uses speechChunking.
       sentenceBuffering: z.boolean().default(true),
+      speechChunking: z.enum(["sentence", "line"]).default("sentence"),
       streaming: z.boolean().default(true),
       echoCancellation: z.boolean().default(true),
       noiseSuppression: z.boolean().default(true),
@@ -234,6 +236,7 @@ export const defaultSettings: Settings = {
     vadMinSpeechMs: 200,
     bargeIn: true,
     sentenceBuffering: true,
+    speechChunking: "sentence",
     streaming: true,
     echoCancellation: true,
     noiseSuppression: true,

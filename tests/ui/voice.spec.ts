@@ -107,8 +107,24 @@ test("exposes sensitivity, VAD, device and semantic-memory controls", async ({
     .getByRole("checkbox", { name: "Hands-free voice detection", exact: false })
     .check();
   await page.getByRole("slider", { name: "Microphone gain" }).fill("1.8");
+  const delivery = page.getByRole("combobox", { name: "Speech delivery" });
+  await expect(delivery).toHaveValue("sentence");
+  await delivery.selectOption("line");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.locator(".success-notice")).toContainText("Settings saved");
+  await page.getByRole("button", { name: "Memory", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Voice & audio", exact: true })
+    .click();
+  await expect(delivery).toHaveValue("line");
+  await delivery.selectOption("response");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await page.evaluate(async () => {
+    const bridgePath = "/src/bridge.ts";
+    const { bridge } = await import(bridgePath);
+    if ((await bridge.snapshot()).settings.voice.sentenceBuffering)
+      throw new Error("Full response must disable incremental speech");
+  });
   await page.getByRole("button", { name: "Memory", exact: true }).click();
   await expect(
     page.getByRole("checkbox", { name: "Semantic memory", exact: false }),

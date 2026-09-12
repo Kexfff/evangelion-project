@@ -15,7 +15,11 @@ import { OpenAICompatibleProvider } from "../electron/providers";
 import { SemanticMemory, cosine } from "../electron/semantic-memory";
 import { buildContext } from "../electron/memory";
 import { VoiceActivityDetector, encodeWav } from "../src/audio/vad";
-import { SentenceBuffer } from "../src/audio/sentences";
+import {
+  SentenceBuffer,
+  LineBuffer,
+  createSpeechBuffer,
+} from "../src/audio/sentences";
 import { CompanionRuntime } from "../electron/runtime";
 
 const dirs: string[] = [];
@@ -92,12 +96,60 @@ describe("credential persistence and migration", () => {
       language: "ru",
       inputGain: 1,
       streaming: true,
+      speechChunking: "sentence",
     });
     expect(upgraded.providers.embedding.enabled).toBe(false);
     expect(upgraded.memory.semanticEnabled).toBe(false);
   });
 });
 describe("speech segmentation and input", () => {
+  it("keeps short sentences together until a newline and flushes the final line once", () => {
+    const buffer = createSpeechBuffer("line");
+    expect(buffer.push("Yes. Sure! ")).toEqual([]);
+    expect(buffer.push("Really?\nNext")).toEqual(["Yes. Sure! Really?"]);
+    expect(buffer.push(" line. Still together.")).toEqual([]);
+    expect(buffer.push("", true)).toEqual(["Next line. Still together."]);
+    expect(buffer.push("", true)).toEqual([]);
+    expect(createSpeechBuffer()).toBeInstanceOf(SentenceBuffer);
+  });
+  it("handles split CRLF, blank lines, Unicode and arbitrary token boundaries", () => {
+    const buffer = new LineBuffer();
+    expect(buffer.push("\n  \r\nПривет. Да!\r")).toEqual(["Привет. Да!"]);
+    expect(buffer.push("\n\n你好。 好的！\nTail\r\n")).toEqual([
+      "你好。 好的！",
+      "Tail",
+    ]);
+    expect(buffer.push("  ", true)).toEqual([]);
+    expect(buffer.push("New turn", true)).toEqual(["New turn"]);
+  });
+  it("does not apply sentence-mode's short fallback but respects the speech API limit", () => {
+    const buffer = new LineBuffer();
+    const line = "Short. ".repeat(100);
+    expect(buffer.push(line)).toEqual([]);
+    expect(buffer.push("\n")).toEqual([line.trim()]);
+    expect(buffer.push("x".repeat(12001))).toEqual(["x".repeat(12000)]);
+    expect(buffer.push("", true)).toEqual(["x"]);
+    const large = "word ".repeat(6000);
+    const chunks = new LineBuffer().push(large + "\n");
+    expect(chunks.every((chunk) => chunk.length <= 12000)).toBe(true);
+    expect(chunks.join(" ")).toBe(large.trim());
+  });
+  it("persists line mode and preserves disabled buffering in older settings", () => {
+    const dir = temporary();
+    const store = new Store(dir);
+    store.update((d) => {
+      d.settings.voice.speechChunking = "line";
+    });
+    expect(new Store(dir).data.settings.voice.speechChunking).toBe("line");
+    const old = JSON.parse(readFileSync(store.file, "utf8"));
+    delete old.settings.voice.speechChunking;
+    old.settings.voice.sentenceBuffering = false;
+    writeFileSync(store.file, JSON.stringify(old));
+    expect(new Store(dir).data.settings.voice).toMatchObject({
+      sentenceBuffering: false,
+      speechChunking: "sentence",
+    });
+  });
   it("buffers arbitrary tokens, abbreviations, decimals and trailing text without duplication", () => {
     const buffer = new SentenceBuffer();
     expect(buffer.push("Dr. Smith likes 3.14")).toEqual([]);
