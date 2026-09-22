@@ -72,7 +72,7 @@ test("renders the supplied VRM, edits settings and manages facts", async ({
   await page.getByRole("button", { name: "Save changes" }).click();
   await page.getByRole("button", { name: "Consciousness" }).click();
   await expect(
-    page.getByText("Planned for sprint 02.", { exact: false }),
+    page.getByRole("checkbox", { name: "Enable autonomy" }),
   ).toBeVisible();
   expect(errors).toEqual([]);
 });

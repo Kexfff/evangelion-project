@@ -8,21 +8,26 @@ import {
 } from "@pixiv/three-vrm-animation";
 import { bridge } from "../bridge";
 import type { Settings } from "../shared/schema";
+import type { Levels } from "../shared/autonomy";
 
 export function Avatar({
   avatar,
   settings,
   speaking = false,
   amplitude = 0,
+  behavior,
+  gesture,
 }: {
   avatar: string;
   settings: Settings["vrm"];
   speaking?: boolean;
   amplitude?: number;
+  behavior?: Levels;
+  gesture?: string;
 }) {
   const host = useRef<HTMLDivElement>(null);
-  const live = useRef({ settings, speaking, amplitude });
-  live.current = { settings, speaking, amplitude };
+  const live = useRef({ settings, speaking, amplitude, behavior, gesture });
+  live.current = { settings, speaking, amplitude, behavior, gesture };
   const [status, setStatus] = useState("Loading Eva…");
   const [error, setError] = useState("");
   useEffect(() => {
@@ -71,7 +76,7 @@ export function Avatar({
     animationLoader.register((parser) => new VRMAnimationLoaderPlugin(parser));
     let height = 1.7,
       centerY = 0.85;
-    async function play(name: string) {
+    async function play(name: string, once = false) {
       const version = ++animationVersion;
       element.dataset.animation = "";
       try {
@@ -90,7 +95,11 @@ export function Avatar({
         if (disposed || version !== animationVersion || !mixer) return;
         const action = mixer.clipAction(clip);
         action.reset();
-        action.setLoop(THREE.LoopRepeat, Infinity);
+        action.setLoop(
+          once ? THREE.LoopOnce : THREE.LoopRepeat,
+          once ? 1 : Infinity,
+        );
+        action.clampWhenFinished = once;
         currentAction?.fadeOut(0.3);
         action.fadeIn(0.3).play();
         currentAction = action;
@@ -157,6 +166,10 @@ export function Avatar({
     let elapsed = 0,
       nextBlink = 2.4,
       blinkStart = -1;
+    let lastGesture = "",
+      gestureUntil = 0,
+      gestureName = "greeting";
+    const emotion = { happy: 0, sad: 0, relaxed: 0 };
     const animate = () => {
       if (disposed) return;
       frame = requestAnimationFrame(animate);
@@ -176,10 +189,19 @@ export function Avatar({
         vrm.scene.rotation.y =
           THREE.MathUtils.degToRad(s.rotation) +
           (vrm.meta.metaVersion === "0" ? Math.PI : 0);
-        if (animationName !== s.animation) {
-          animationName = s.animation;
+        const mood = live.current.behavior;
+        if (!live.current.gesture || !mood || s.animation !== "idle_loop")
+          gestureUntil = 0;
+        else if (live.current.gesture !== lastGesture) {
+          lastGesture = live.current.gesture;
+          gestureName = mood.mood > 75 ? "peaceSign" : "greeting";
+          gestureUntil = elapsed + (mood.energy >= 30 ? 3 : 0);
+        }
+        const desired = elapsed < gestureUntil ? gestureName : s.animation;
+        if (animationName !== desired) {
+          animationName = desired;
           setError("");
-          void play(animationName);
+          void play(animationName, elapsed < gestureUntil);
         }
         mixer?.update(dt);
         if (elapsed >= nextBlink) {
@@ -196,6 +218,17 @@ export function Avatar({
           "aa",
           talking ? Math.min(1, level * 4) : 0,
         );
+        const targets = {
+          happy: mood ? Math.max(0, (mood.mood - 50) / 140) : 0,
+          sad: mood ? Math.max(0, (40 - mood.mood) / 160) : 0,
+          relaxed: mood ? Math.max(0, (60 - mood.energy) / 180) : 0,
+        };
+        for (const name of ["happy", "sad", "relaxed"] as const) {
+          emotion[name] +=
+            (targets[name] - emotion[name]) * Math.min(1, dt * 4);
+          vrm.expressionManager?.setValue(name, emotion[name]);
+        }
+        element.dataset.mood = mood ? `${Math.round(mood.mood)}` : "off";
         vrm.update(dt);
       }
       renderer.render(scene, camera);

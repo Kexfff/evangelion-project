@@ -1,6 +1,6 @@
 # evangelion_project
 
-A desktop AI companion with a transparent animated VRM window, a separate settings app, voice conversation, and local persistent memory. Inspired by [AIRI](https://github.com/moeru-ai/airi); this is an independent implementation using your supplied `Eva.vrm` and `animations/*.vrma` assets.
+A desktop AI companion with a transparent animated VRM window, separate settings, voice conversation, persistent memory, and opt-in proactive conversation/reminders. Inspired by [AIRI](https://github.com/moeru-ai/airi); this is an independent implementation using your supplied `Eva.vrm` and `animations/*.vrma` assets. Current build: Sprint 2 / v0.2.0.
 
 ## Run
 
@@ -66,7 +66,7 @@ Attachments are stored inline with messages in `companion.json`, survive restart
 
 **Character cards** supports multiple names, taglines, personalities, system prompts, and VRM references. Choose a card and save to activate it. Conversations and facts are scoped to the active character. Custom avatars are copied into app storage, so moving the original file will not break them.
 
-**Avatar studio** controls position, zoom, rotation, key light color/intensity, blinking, always-on-top, and all nine supplied animations. Animations loop in this sprint. VRM 0.x and 1.x are loaded with `@pixiv/three-vrm`, and VRMA clips are retargeted to the loaded humanoid. Lip movement is audio amplitude based, not phoneme-level visemes.
+**Avatar studio** controls position, zoom, rotation, key light color/intensity, blinking, always-on-top, and all nine supplied animations. Manually selected animations loop. With expressive behavior enabled, the companion blends subtle happy/sad/relaxed expressions and short greeting/peace-sign gestures into idle animation on replies, returning to idle when interrupted. VRM 0.x and 1.x are loaded with `@pixiv/three-vrm`, and VRMA clips are retargeted to the loaded humanoid. Lip movement is audio amplitude based, not phoneme-level visemes.
 
 **Memory** has three layers:
 
@@ -82,6 +82,20 @@ Automatic remembering is off by default. Enabling it adds one LLM call after a c
 
 Exports contain the saved active character's facts and all conversation sessions, without provider settings or API keys. Imports validate the archive and merge into the current character; exact duplicate facts and messages are skipped. Imported conversations are recalled as past sessions. Import/export uses native file dialogs.
 
+## Consciousness, initiative and reminders (Sprint 2)
+
+This is an inspectable **behavior simulation**, not actual sentience. Mood, boredom, energy, trust and affinity persist per character and influence tone and avatar expressions. The state editor explains each update rule and lets you adjust values and bounds. Absence does not lower relationship values. Idle drift is capped at six hours per update; no background LLM call is needed to update state.
+
+1. In **Consciousness**, set your **IANA time zone** (default UTC; for example `Europe/Moscow`), quiet hours, cooldown and daily budget. Save changes.
+2. Enable **autonomy** to permit scheduled reminders. Separately enable **conversation openers** if you want unsolicited chat. Both start off. Openers require the idle threshold, sufficient boredom and energy, and positive initiative. A default initiative of 40 means boredom must reach 60; it does not promise a message exactly at the idle threshold.
+3. Create a reminder with an exact ISO timestamp containing `Z` or an offset, such as `2026-09-13T18:30:00+03:00`. Creating it in settings authorizes it. Times must be in the future and within one year. The task manager shows the persistent ID, UTC instant, supplied time-zone label, status and outcome. Cancel tasks there.
+4. Optionally enable **LLM scheduling tools** and choose a tool-capable model. The model can propose, list and cancel reminders via the [OpenRouter-compatible function-calling protocol](https://openrouter.ai/docs/guides/features/tool-calling). **Every LLM-created task needs your approval in Consciousness before it is armed.** For compatibility, tools-enabled user replies use a bounded, non-streaming loop (at most four LLM requests); intermediate planning/tool JSON is never spoken. Disabling scheduling tools restores normal streamed chat. Autonomous turns cannot schedule more actions.
+5. Keep the companion visible and idle for delivery. Typing or an image draft, recording/hands-free listening, generation, queued/playing audio, missing renderer heartbeats, minimization, system lock/suspend, quiet hours and manual pause all defer autonomous actions. No desktop observation detects other apps: use **Pause autonomy** in the avatar title bar when busy elsewhere. User input preempts an autonomous reply. Settings changes cancel an in-flight generation before applying.
+
+The internal clock checks every five seconds while the app runs. It does not run when the app is closed or wake a sleeping/powered-off PC. Only the active character delivers actions. Cooldown and the local-calendar daily budget apply to both reminders and openers; failed attempts count too. Quiet hours may cross midnight; equal start/end means quiet all day. After resume/restart, pending reminders inside the catch-up window wait for a safe opportunity; older ones become `missed`. A task claimed before a crash becomes `failed`, never automatically replayed: at-most-once attempts avoid duplicate reminders but cannot guarantee delivery during a crash. Cancelled/failed/missed tasks can be recreated manually. `done` means the reply was saved, not that audio was heard.
+
+The activity log records policy changes, reasons, task outcomes, LLM request counts and provider-reported tokens/costs. Missing usage is marked **not reported**, never estimated as free. Audio/embedding charges and provider connection tests are not part of this log. Memory extraction has separate request/usage events. State, tasks (maximum 2,000 retained), and a rolling 500-entry activity log live in `companion.json`; the settings UI shows the latest 100 character-scoped events. **Memory exports do not include tasks or behavior state**, and importing memory cannot arm tasks. Deleting chat history does not cancel reminders or clear behavior; use the task manager/global pause for that. Plugins, Telegram, MCP and game/PC actions remain future sprints.
+
 ## Storage and boundaries
 
 Application data lives in Electron's `userData` directory, normally:
@@ -96,7 +110,7 @@ API keys persist separately in `credentials.json`. When an OS keyring is availab
 
 Sprint-1 databases receive new defaults on load without resetting existing settings or memories. Legacy OS-encrypted credentials are preserved even when their keyring is locked; affected requests ask you to unlock the keyring or re-enter that key. Keys that were previously session-only must be entered once again, then saved. Audio and microphone pre-roll stay in memory and are not written to disk by this app.
 
-All provider requests execute in the main process. Renderer windows use a sandboxed preload, context isolation, disabled Node integration, a narrow validated IPC bridge, and restricted navigation. The avatar asset protocol serves only bundled animation names and imported avatar IDs. No plugins, MCP servers, desktop access, or autonomous timers execute in sprint 1.
+All provider requests execute in the main process. Renderer windows use a sandboxed preload, context isolation, disabled Node integration, a narrow validated IPC bridge, and restricted navigation. The avatar asset protocol serves only bundled animation names and imported avatar IDs. Sprint 2 adds bounded, opt-in conversational autonomy; no plugins, MCP servers or desktop control execute.
 
 ## Development and verification
 
@@ -108,9 +122,9 @@ npm run test:ui
 npm run test:desktop
 ```
 
-If Chromium is already installed elsewhere, set `EVA_TEST_BROWSER` to its executable for UI tests. The 8 UI tests generate screenshots in `test-results/` and cover image attachment controls, speech delivery settings, the browser preview, fixture MP3 audio and synthetic microphone input without paid provider requests. The 33 core tests include image validation/multimodal payloads/persistence, vault restart/migration, schema upgrades, semantic cache invalidation, model discovery, sentence/line boundaries, VAD, WAV encoding and stream cancellation.
+If Chromium is already installed elsewhere, set `EVA_TEST_BROWSER` to its executable for UI tests. The 10 UI tests cover Consciousness controls, image attachments, speech delivery settings, the browser preview, fixture MP3 audio and synthetic microphone input without paid provider requests. The 49 core tests include fake-clock scheduling, restart/approval/cancellation, quiet hours/DST, budgets, user priority, bounded tools and usage accounting, plus existing memory/voice/image regressions.
 
-The desktop smoke test opens temporary Electron windows on your normal display and uses an isolated profile under the system temporary directory. It verifies real local HTTP calls through IPC, VRM/VRMA loading, model lists, semantic recall, sentence ordering, synthetic-microphone interruption, archive round-trips, and persistence across restarts without a keyring. It then closes its windows and removes its own test data. File/confirmation dialogs are stubbed. The test does not use your credentials or app profile. A real display (or an X virtual framebuffer) is recommended: Electron's Ozone headless backend crashed during validation here.
+The desktop smoke test opens temporary Electron windows on your normal display and uses an isolated profile under the system temporary directory. It verifies real local HTTP calls through IPC, VRM/VRMA loading, model lists, semantic recall, sentence ordering, synthetic-microphone interruption, archive round-trips, and persistence across restarts without a keyring. It also verifies an authorized reminder across restart, typing deferral, cancellation, activity logs and immediate autonomy pause. It then closes its windows and removes its own test data. File/confirmation dialogs are stubbed. The test does not use your credentials or app profile. A real display (or an X virtual framebuffer) is recommended: Electron's Ozone headless backend crashed during validation here.
 
 See [PLAN.MD](PLAN.MD) for architecture, sprint checklists, limitations, and the validation record.
 

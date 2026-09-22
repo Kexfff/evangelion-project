@@ -6,6 +6,12 @@ const api: Bridge = {
     ipcRenderer.invoke("eva:settings", settings, keys),
   send: (text, images) => ipcRenderer.invoke("eva:send", text, images),
   cancel: () => ipcRenderer.invoke("eva:cancel"),
+  presence: (state) => ipcRenderer.invoke("eva:presence", state),
+  setAutonomyPaused: (paused) =>
+    ipcRenderer.invoke("eva:autonomy:pause", paused),
+  setBehavior: (levels) => ipcRenderer.invoke("eva:autonomy:state", levels),
+  createTask: (task) => ipcRenderer.invoke("eva:task:create", task),
+  taskAction: (id, action) => ipcRenderer.invoke("eva:task:action", id, action),
   transcribe: (bytes, mime) =>
     ipcRenderer.invoke("eva:transcribe", bytes, mime),
   speak: (text) => ipcRenderer.invoke("eva:speak", text),

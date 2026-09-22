@@ -4,7 +4,7 @@
 
 Build a personal desktop companion that listens, responds naturally, remembers, and inhabits an animated VRM avatar. Maintain a focused transparent companion window and a separate settings workspace. Use independently configurable OpenAI-compatible APIs for LLM, ASR, and TTS, with OpenRouter as the initial LLM provider.
 
-“Consciousness” means a future observable behavioral system: mood, boredom, relationship state, timers, and persistent intentions. It does not imply actual sentience. Proactive conversation and game actions belong to later sprints.
+“Consciousness” means an observable behavioral system: mood, boredom, relationship state, timers, and persistent intentions. It does not imply actual sentience. Sprint 2 implements opt-in proactive conversation and reminders; game actions remain later-sprint work.
 
 ## Architecture decisions
 
@@ -35,7 +35,8 @@ Companion window                  Settings window
                              |
                local data + OS credential vault
 
-Later inputs: Telegram / scheduler / Minecraft observations
+Current additional input: durable scheduler / trusted interaction events
+Later inputs: Telegram / Minecraft observations
 Later outputs: permissioned plugin actions / MCP tools
 ```
 
@@ -155,18 +156,30 @@ Line means an explicit model-generated newline, not visual wrapping. A reply wit
 
 Goal: she can initiate appropriate conversation and follow through on scheduled intentions.
 
-- [ ] Durable state model for mood, boredom, energy and relationship dimensions; bounded values with explainable update rules.
-- [ ] Internal clock and event loop; combine user interactions, idle time and plugin events into decisions.
-- [ ] Proactive-message policy: opt-in, cooldown, quiet hours, per-day budget, pause when the user is busy, and a global autonomy switch.
-- [ ] LLM scheduling tools: create/list/cancel tasks with exact times, time zones and persistent task IDs.
-- [ ] Scheduler survives restarts and sleep/wake, avoids duplicate execution, and handles overdue tasks explicitly.
-- [ ] Shared action arbiter: prevent overlapping speech, user turns, reminders and external actions.
-- [ ] Consciousness settings: state visibility, editable bounds, initiative level, schedules and task manager.
-- [ ] Activity log showing why an action occurred, token/request cost and cancellation outcome.
-- [ ] Mood-to-expression/gesture mapping and interruption-aware animation blending.
-- [ ] Tests using a fake clock: quiet hours, cancellation, restart recovery, cooldowns and user priority.
+- [x] Durable state model for mood, boredom, energy, trust and affinity; bounded values with explainable deterministic update rules.
+- [x] Five-second clock/event loop, user/session interaction events and idle drift; trusted event ingress is ready for the future permissioned plugin host (no plugins execute yet).
+- [x] Proactive-message policy: separate opt-ins, cooldown, IANA-zone quiet hours, per-character daily attempt budget, busy deferral, immediate pause and global autonomy switch.
+- [x] LLM scheduling tools: create/list/cancel reminders with exact ISO timestamps, IANA zones and persistent task IDs. LLM-created tasks require individual user approval.
+- [x] Durable scheduler with overdue catch-up/missed policy and fail-closed recovery of ambiguous in-flight tasks. Power suspend/lock blocks actions; resume requires a new renderer heartbeat.
+- [x] Main-process turn ownership plus companion presence/queued-speech gating; user turns preempt autonomous generation. Tagged autonomous deltas cannot contaminate a new user turn. External actions remain unavailable until later sprints.
+- [x] Consciousness settings: state visibility/editor, bounds, initiative, schedules, approval/cancellation, immediate pause/resume and task outcomes.
+- [x] Character-scoped bounded activity log: decision reasons, LLM request counts, provider-reported tokens/cost, cancellation/failure outcomes. Missing usage is explicit, not estimated; audio/embedding charges are excluded.
+- [x] Mood-to-expression mapping and short one-shot greeting/peace-sign gestures with crossfades back to manual idle on interruption; expressive behavior can be disabled.
+- [x] Fake-clock regressions: quiet hours/DST, approvals, cancellation, restart recovery, catch-up expiry, cooldown/day budgets, user priority and bounded tool loops.
 
 Acceptance: an authorized scheduled reminder survives restart and fires once, can be cancelled, respects quiet hours and never interrupts an active user turn.
+
+Implementation/validation (2026-09-12, v0.2.0): 49 core tests, 10 browser tests and the extended real-Electron desktop smoke pass. Desktop validation creates and authorizes a reminder, cancels a second task, restarts the app, confirms typing defers delivery, then confirms one saved reminder plus activity and immediate pause. Existing voice/image/VRM/archive tests still pass. Tests use disposable profiles and local mock providers, never user credentials or paid services.
+
+Operating boundaries and remaining checks:
+
+- All autonomous network calls are opt-in. The default time zone is UTC; configure it before enabling quiet-hours policies. State evolution and subtle expressions work locally even when proactive actions are off.
+- Reminders are conversational only, one-time, future-within-one-year, and scoped to the active character. No tool can arm its own proposal or change permissions. Scheduling-enabled user chat uses up to four non-streaming LLM requests, so synthesis begins after the final answer; tool-disabled chat retains streaming.
+- The app must be running with a visible, idle companion. Closed/minimized/hidden UI, typing/image drafts, any active mic, queued or playing speech, user turns, quiet hours, pause, suspend/lock and stale heartbeats defer actions. Manual pause is the busy indicator for other apps; no PC monitoring is added.
+- Both reminders and openers consume the same per-character cooldown/daily attempt allowance. Pending overdue tasks inside the configurable window catch up when safe; older tasks become missed. Tasks left running by a crash become failed and are not replayed. This is at-most-once automatic attempts, not guaranteed delivery across a crash. Done means reply persisted, not audio heard.
+- Behavior/tasks/activity persist in the existing plaintext JSON database and backup. Memory exports/imports deliberately exclude them, so archive imports cannot arm tasks. Clearing history preserves tasks/state; cancel reminders separately. Tasks cap at 2,000 retained entries; scalable task archival/retention is later work.
+- Live model scheduling accuracy, local TTS quality, mood aesthetics and actual system suspend/lock behavior still need user-device verification. No claim of actual sentience or inferred user emotions is made.
+- [x] Refresh the unpacked Linux release for Sprint 2 in `release/linux-unpacked/`; production source build is also available through `npm start` / `npm run dev`.
 
 ## Sprint 3 — plugin host and Telegram
 

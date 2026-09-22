@@ -48,6 +48,9 @@ export function Companion() {
   const draftVersion = useRef(0);
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => {
+    app.setDraftBusy(!!text.trim() || images.length > 0 || readingImages);
+  }, [text, images.length, readingImages]);
+  useEffect(() => {
     ++draftVersion.current;
     setImages([]);
     setReadingImages(false);
@@ -106,6 +109,23 @@ export function Companion() {
           </span>
         </div>
         <div className="window-controls">
+          {settings.autonomy.enabled && (
+            <button
+              title={
+                settings.autonomy.paused ? "Resume autonomy" : "Pause autonomy"
+              }
+              aria-label={
+                settings.autonomy.paused ? "Resume autonomy" : "Pause autonomy"
+              }
+              onClick={() =>
+                void bridge
+                  .setAutonomyPaused(!settings.autonomy.paused)
+                  .catch(app.report)
+              }
+            >
+              {settings.autonomy.paused ? "▶" : "Ⅱ"}
+            </button>
+          )}
           <button
             title="Settings"
             aria-label="Open settings"
@@ -140,6 +160,17 @@ export function Companion() {
           settings={settings.vrm}
           speaking={app.phase === "speaking"}
           amplitude={app.amplitude}
+          behavior={
+            settings.autonomy.expressive ? app.state.autonomy?.state : undefined
+          }
+          gesture={
+            settings.autonomy.expressive &&
+            !busy &&
+            !app.micOn &&
+            last?.role === "assistant"
+              ? last.id
+              : undefined
+          }
         />
       </div>
       <div className="conversation-overlay">

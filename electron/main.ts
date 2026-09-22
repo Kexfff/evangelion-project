@@ -8,6 +8,7 @@ import {
   safeStorage,
   session,
   systemPreferences,
+  powerMonitor,
 } from "electron";
 import { readFileSync, mkdirSync, copyFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -18,6 +19,11 @@ import { Store, atomicWrite } from "./store";
 import { CompanionRuntime } from "./runtime";
 import { CredentialVault } from "./credentials";
 import { outgoingMessageSchema } from "../src/shared/images";
+import {
+  presenceSchema,
+  levelsSchema,
+  taskInputSchema,
+} from "../src/shared/autonomy";
 import {
   settingsSchema,
   providerKinds,
@@ -214,7 +220,9 @@ else {
           return fn(...args);
         });
       handle("snapshot", () => runtime.snapshot());
-      handle("settings", (raw, rawKeys) => {
+      handle("settings", async (raw, rawKeys) => {
+        // Settings changes invalidate autonomous decisions, including a switch-off.
+        if (runtime.snapshot().busy) await runtime.cancel();
         idle();
         const settings = settingsSchema.parse(raw);
         const incoming = z
@@ -238,6 +246,37 @@ else {
         return runtime.send(message.text, message.images);
       });
       handle("cancel", () => runtime.cancel());
+      ipcMain.handle("eva:presence", (event, raw) => {
+        if (
+          !companion ||
+          event.sender !== companion.webContents ||
+          event.senderFrame !== event.sender.mainFrame ||
+          !trustedOrigin(event.senderFrame!.url)
+        )
+          throw new Error("Only the companion may report playback presence.");
+        runtime.autonomy.setPresence({
+          ...presenceSchema.parse(raw),
+          visible:
+            companion.isVisible() &&
+            !companion.isMinimized() &&
+            presenceSchema.parse(raw).visible,
+        });
+      });
+      handle("autonomy:pause", (paused) =>
+        runtime.pauseAutonomy(z.boolean().parse(paused)),
+      );
+      handle("autonomy:state", (levels) =>
+        runtime.autonomy.setBehavior(levelsSchema.parse(levels)),
+      );
+      handle("task:create", (task) => {
+        runtime.autonomy.createTask(taskInputSchema.parse(task));
+      });
+      handle("task:action", (id, action) =>
+        runtime.taskAction(
+          z.string().uuid().parse(id),
+          z.enum(["approve", "cancel"]).parse(action),
+        ),
+      );
       handle("transcribe", (bytes, mime) => {
         if (
           !(bytes instanceof ArrayBuffer) ||
@@ -371,6 +410,10 @@ else {
         store.update((d) => {
           d.sessions[store.characterId] = randomUUID();
         });
+        runtime.autonomy.observe({
+          type: "session:started",
+          characterId: store.characterId,
+        });
         runtime.broadcast();
       });
       handle("history:clear", async () => {
@@ -494,6 +537,31 @@ else {
         else companion?.close();
       });
       showCompanion();
+      const scheduler = setInterval(() => {
+        void runtime.autonomy.tick().catch(() =>
+          send({
+            type: "warning",
+            message:
+              "Autonomy tick failed; check local storage and Consciousness activity.",
+          }),
+        );
+      }, 5000);
+      scheduler.unref();
+      const suspend = () => {
+        runtime.autonomy.suspend(true);
+        void runtime.cancel();
+      };
+      const resume = () => {
+        runtime.autonomy.suspend(false);
+      };
+      powerMonitor.on("suspend", suspend);
+      powerMonitor.on("lock-screen", suspend);
+      powerMonitor.on("resume", resume);
+      powerMonitor.on("unlock-screen", resume);
+      app.on("before-quit", () => {
+        clearInterval(scheduler);
+        runtime.autonomy.suspend(true);
+      });
       if (
         !store.data.settings.providers.llm.hasKey &&
         store.data.settings.providers.llm.baseUrl.includes("openrouter.ai")

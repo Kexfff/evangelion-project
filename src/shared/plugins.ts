@@ -27,10 +27,4 @@ export interface CompanionPlugin {
   activate(context: PluginContext): Promise<void>;
   deactivate(): Promise<void>;
 }
-export interface ScheduledTask {
-  id: string;
-  characterId: string;
-  dueAt: string;
-  intent: string;
-  status: "pending" | "running" | "done" | "cancelled";
-}
+export type { ScheduledTask } from "./autonomy";

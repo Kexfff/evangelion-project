@@ -26,6 +26,24 @@ export function useCompanion() {
   const queue = useRef<Promise<void>>(Promise.resolve());
   const buffer = useRef(createSpeechBuffer());
   const accepting = useRef(false);
+  const autonomous = useRef<string | null>(null);
+  const draftBusy = useRef(false);
+  const pendingSpeech = useRef(0);
+  const heartbeat = () => {
+    if (active.current)
+      void bridge
+        .presence({
+          visible: document.visibilityState === "visible",
+          blocked:
+            draftBusy.current ||
+            !!microphone.current ||
+            generating.current ||
+            transcribing.current ||
+            speaking.current ||
+            pendingSpeech.current > 0,
+        })
+        .catch(() => {});
+  };
   const interrupting = useRef<Promise<void>>(Promise.resolve());
   const report = (err: unknown) => {
     if (active.current)
@@ -40,6 +58,7 @@ export function useCompanion() {
   };
   function restingPhase() {
     if (!active.current) return;
+    heartbeat();
     setPhase(
       capturing.current
         ? "listening"
@@ -64,6 +83,8 @@ export function useCompanion() {
   function interrupt(closeMic = false) {
     ++generation.current;
     accepting.current = false;
+    autonomous.current = null;
+    pendingSpeech.current = 0;
     audio.current?.abort();
     audio.current = null;
     speaking.current = false;
@@ -83,6 +104,8 @@ export function useCompanion() {
   function enqueue(text: string, token: number) {
     if (!text.trim() || token !== generation.current) return;
     const voice = latest.current!.settings.voice;
+    pendingSpeech.current++;
+    heartbeat();
     queue.current = queue.current.then(async () => {
       if (token !== generation.current || !active.current) return;
       const controller = new AbortController();
@@ -107,6 +130,9 @@ export function useCompanion() {
           report(err);
       } finally {
         if (token === generation.current) {
+          pendingSpeech.current--;
+          if (!pendingSpeech.current && !generating.current)
+            autonomous.current = null;
           audio.current = null;
           speaking.current = false;
           restingPhase();
@@ -116,6 +142,8 @@ export function useCompanion() {
   }
   useEffect(() => {
     active.current = true;
+    const timer = setInterval(heartbeat, 2000);
+    document.addEventListener("visibilitychange", heartbeat);
     void bridge
       .snapshot()
       .then((s) => {
@@ -126,7 +154,56 @@ export function useCompanion() {
       })
       .catch(report);
     const off = bridge.onEvent((event) => {
-      if (event.type === "state") {
+      if (event.type === "autonomous-start") {
+        if (
+          draftBusy.current ||
+          microphone.current ||
+          generating.current ||
+          speaking.current ||
+          pendingSpeech.current
+        ) {
+          void bridge.cancel();
+          return;
+        }
+        autonomous.current = event.id;
+        ++generation.current;
+        buffer.current = createSpeechBuffer(
+          latest.current?.settings.voice.speechChunking,
+        );
+        accepting.current = true;
+        generating.current = true;
+        setPartial("");
+        restingPhase();
+      } else if (
+        event.type === "autonomous-end" &&
+        autonomous.current === event.id
+      ) {
+        accepting.current = false;
+        generating.current = false;
+        const s = latest.current?.settings;
+        if (s?.voice.autoSpeak && s.providers.tts.enabled) {
+          if (s.voice.sentenceBuffering)
+            for (const chunk of buffer.current.push("", true))
+              enqueue(chunk, generation.current);
+          else enqueue(event.text, generation.current);
+        }
+        if (!pendingSpeech.current) autonomous.current = null;
+        restingPhase();
+      } else if (event.type === "autonomous-cancel" && autonomous.current) {
+        // Local cleanup only: calling cancel again here would recurse through IPC.
+        autonomous.current = null;
+        ++generation.current;
+        accepting.current = false;
+        audio.current?.abort();
+        audio.current = null;
+        pendingSpeech.current = 0;
+        queue.current = Promise.resolve();
+        speaking.current = false;
+        generating.current = false;
+        setPartial("");
+        setAmplitude(0);
+        restingPhase();
+      } else if (event.type === "state") {
         const old = latest.current;
         const changedSession =
           old &&
@@ -137,11 +214,18 @@ export function useCompanion() {
           old &&
           JSON.stringify(old.settings.voice) !==
             JSON.stringify(event.state.settings.voice);
+        const stoppedAutonomy =
+          autonomous.current &&
+          (!event.state.settings.autonomy.enabled ||
+            event.state.settings.autonomy.paused);
         latest.current = event.state;
         setState(event.state);
-        if (changedSession || changedVoice) void interrupt(true);
+        if (changedSession || changedVoice || stoppedAutonomy)
+          void interrupt(true);
         if (!event.state.busy) setPartial("");
       } else if (event.type === "delta" && accepting.current) {
+        if (event.autonomousId && event.autonomousId !== autonomous.current)
+          return;
         setPartial((p) => p + event.text);
         const s = latest.current?.settings;
         if (
@@ -155,6 +239,9 @@ export function useCompanion() {
     });
     return () => {
       active.current = false;
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", heartbeat);
+      void bridge.presence({ blocked: true, visible: false }).catch(() => {});
       off();
       generation.current++;
       accepting.current = false;
@@ -312,5 +399,9 @@ export function useCompanion() {
     speak,
     toggleRecording,
     report,
+    setDraftBusy: (value: boolean) => {
+      draftBusy.current = value;
+      heartbeat();
+    },
   };
 }

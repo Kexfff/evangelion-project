@@ -9,6 +9,7 @@ import {
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import { automationSchema } from "../src/shared/autonomy";
 import {
   defaultSettings,
   settingsSchema,
@@ -24,6 +25,7 @@ const databaseSchema = z.object({
   facts: z.array(factSchema),
   messages: z.array(messageSchema),
   sessions: z.record(z.string(), z.string()),
+  automation: automationSchema.default({ states: {}, tasks: [], activity: [] }),
 });
 export type Database = z.infer<typeof databaseSchema>;
 export function atomicWrite(file: string, data: string) {
@@ -49,6 +51,7 @@ export class Store {
         facts: [],
         messages: [],
         sessions: { eva: randomUUID() },
+        automation: { states: {}, tasks: [], activity: [] },
       };
       this.save();
     }

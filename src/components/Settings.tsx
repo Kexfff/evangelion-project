@@ -28,6 +28,7 @@ import {
   X,
 } from "lucide-react";
 import { bridge } from "../bridge";
+import { ConsciousnessSettings } from "./ConsciousnessSettings";
 import {
   defaultSettings,
   settingsSchema,
@@ -59,7 +60,7 @@ const descriptions: Record<Tab, string> = {
   voice: "Find the rhythm of your conversations.",
   vrm: "A little light. A little movement. A lot of personality.",
   memory: "The things that stay with her, long after a conversation.",
-  consciousness: "The next step: a life between conversations.",
+  consciousness: "A rhythm of her own, with you in control.",
   plugins: "A foundation for a much bigger world.",
 };
 function Field({
@@ -174,6 +175,20 @@ export function Settings() {
   const [factText, setFactText] = useState("");
   const [editing, setEditing] = useState<Fact>();
   useEffect(() => {
+    if (snapshot)
+      setDraft((old) =>
+        old
+          ? {
+              ...old,
+              autonomy: {
+                ...old.autonomy,
+                paused: snapshot.settings.autonomy.paused,
+              },
+            }
+          : old,
+      );
+  }, [snapshot?.settings.autonomy.paused]);
+  useEffect(() => {
     void bridge
       .snapshot()
       .then((s) => {
@@ -270,9 +285,7 @@ export function Settings() {
             >
               <Icon size={18} />
               <span>{label}</span>
-              {(id === "consciousness" || id === "plugins") && (
-                <span className="nav-soon">SOON</span>
-              )}
+              {id === "plugins" && <span className="nav-soon">SOON</span>}
             </button>
           ))}
         </nav>
@@ -295,7 +308,7 @@ export function Settings() {
             <ExternalLink size={14} />
           </button>
           <div className="version">
-            evangelion_project <span>v0.1.5</span>
+            evangelion_project <span>v0.2.0</span>
           </div>
         </div>
       </aside>
@@ -307,7 +320,7 @@ export function Settings() {
           </div>
           <span className="foundation-badge">
             <span className="status-dot" />
-            Foundation build
+            Sprint 2 build
           </span>
         </header>
         <main className="settings-content">
@@ -1281,42 +1294,19 @@ export function Settings() {
           )}
 
           {tab === "consciousness" && (
-            <Section
-              title="A spark of her own"
-              subtitle="Planned for sprint 02. These capabilities are not running yet."
-            >
-              <div className="future-hero">
-                <Sparkles size={48} />
-                <h2>More than a reply.</h2>
-                <p>
-                  A future behavioral state system will give her changing moods,
-                  curiosity, and a rhythm of her own. This simulates autonomous
-                  behavior; it is not a claim of sentience.
-                </p>
-              </div>
-              <div className="roadmap-grid">
-                {[
-                  [
-                    "Emotional state",
-                    "Mood, boredom, and a relationship state that evolve from interactions.",
-                  ],
-                  [
-                    "A sense of time",
-                    "An internal timer with quiet hours, cooldowns, and a limit on proactive messages.",
-                  ],
-                  [
-                    "Intent & follow-through",
-                    "Durable scheduled tasks, wake-ups, cancellation, and a visible activity log.",
-                  ],
-                ].map(([title, text]) => (
-                  <div className="roadmap-card" key={title}>
-                    <h3>{title}</h3>
-                    <p>{text}</p>
-                    <span className="coming">Sprint 02</span>
-                  </div>
-                ))}
-              </div>
-            </Section>
+            <ConsciousnessSettings
+              key={snapshot.settings.activeCharacterId}
+              config={draft.autonomy}
+              data={snapshot.autonomy}
+              change={(patch) =>
+                update((d) => {
+                  Object.assign(d.autonomy, patch);
+                })
+              }
+              report={(error) =>
+                setError(error instanceof Error ? error.message : String(error))
+              }
+            />
           )}
           {tab === "plugins" && (
             <>

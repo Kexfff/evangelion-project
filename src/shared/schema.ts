@@ -1,5 +1,13 @@
 import { z } from "zod";
 import { attachmentsSchema, type ImageAttachment } from "./images";
+import {
+  autonomyConfigSchema,
+  defaultAutonomyConfig,
+  type AutonomySnapshot,
+  type Levels,
+  type TaskInput,
+  type Presence,
+} from "./autonomy";
 
 export const providerSchema = z.object({
   baseUrl: z
@@ -102,6 +110,7 @@ export const settingsSchema = z
       semanticThreshold: z.number().min(0).max(1).default(0.3),
     }),
     window: z.object({ alwaysOnTop: z.boolean() }),
+    autonomy: autonomyConfigSchema.default(defaultAutonomyConfig),
   })
   .superRefine((s, ctx) => {
     if (!s.characters.some((c) => c.id === s.activeCharacterId))
@@ -127,6 +136,7 @@ export const messageSchema = z.object({
   role: z.enum(["user", "assistant"]),
   content: z.string().max(50000),
   images: attachmentsSchema.optional(),
+  origin: z.enum(["user", "reminder", "initiative"]).optional(),
   createdAt: z.string().datetime(),
 });
 export const memoryExportSchema = z.object({
@@ -149,10 +159,14 @@ export interface Snapshot {
   sessionId: string;
   busy: boolean;
   secretStorage: "encrypted" | "local-file" | "session-only";
+  autonomy?: AutonomySnapshot;
 }
 export type RuntimeEvent =
+  | { type: "autonomous-start"; id: string }
+  | { type: "autonomous-end"; id: string; text: string }
+  | { type: "autonomous-cancel" }
   | { type: "state"; state: Snapshot }
-  | { type: "delta"; text: string }
+  | { type: "delta"; text: string; autonomousId?: string }
   | { type: "phase"; phase: Phase }
   | { type: "warning"; message: string };
 export interface Bridge {
@@ -163,6 +177,11 @@ export interface Bridge {
   ): Promise<void>;
   send(text: string, images?: ImageAttachment[]): Promise<void>;
   cancel(): Promise<void>;
+  presence(state: Presence): Promise<void>;
+  setAutonomyPaused(paused: boolean): Promise<void>;
+  setBehavior(levels: Levels): Promise<void>;
+  createTask(task: TaskInput): Promise<void>;
+  taskAction(id: string, action: "approve" | "cancel"): Promise<void>;
   transcribe(bytes: ArrayBuffer, mime: string): Promise<string>;
   speak(text: string): Promise<ArrayBuffer>;
   openSpeech(text: string): Promise<{ id: string; mime: string }>;
@@ -260,4 +279,5 @@ export const defaultSettings: Settings = {
     semanticThreshold: 0.3,
   },
   window: { alwaysOnTop: false },
+  autonomy: defaultAutonomyConfig,
 };

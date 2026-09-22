@@ -388,20 +388,121 @@ try {
     window.testMicrophone.oscillator.stop();
     await window.testMicrophone.context.close();
   });
+  // Authorize one reminder and cancel another, then restart the real desktop.
+  await reopened.evaluate(async () => {
+    const s = (await window.eva.snapshot()).settings;
+    s.voice.vadEnabled = false;
+    s.autonomy.enabled = true;
+    s.autonomy.proactive = false;
+    s.autonomy.quietEnabled = false;
+    s.autonomy.cooldownMinutes = 1;
+    await window.eva.saveSettings(s, {});
+    const dueAt = new Date(Date.now() + 2000).toISOString();
+    await window.eva.createTask({
+      title: "Restart reminder",
+      intent: "Remember the desktop test",
+      dueAt,
+      timeZone: "UTC",
+    });
+    await window.eva.createTask({
+      title: "Cancelled reminder",
+      intent: "Must not fire",
+      dueAt,
+      timeZone: "UTC",
+    });
+    const task = (await window.eva.snapshot()).autonomy.tasks.find(
+      (t) => t.title === "Cancelled reminder",
+    );
+    await window.eva.taskAction(task.id, "cancel");
+  });
+  await desktop.close();
+  desktop = await launch();
+  const scheduledWindow = await desktop.firstWindow();
+  await scheduledWindow.waitForFunction(() => !!window.eva);
+  // Draft text is a blocking user interaction, even with an overdue task.
+  await scheduledWindow
+    .getByRole("textbox", { name: "Message Eva" })
+    .fill("I am typing");
+  await expect
+    .poll(
+      () =>
+        scheduledWindow.evaluate(async () =>
+          (await window.eva.snapshot()).autonomy.gate.includes("busy"),
+        ),
+      { timeout: 15000 },
+    )
+    .toBe(true);
+  assert.equal(
+    (
+      await scheduledWindow.evaluate(() => window.eva.snapshot())
+    ).autonomy.tasks.find((t) => t.title === "Restart reminder").status,
+    "pending",
+  );
+  await scheduledWindow.getByRole("textbox", { name: "Message Eva" }).fill("");
+  await expect
+    .poll(
+      () =>
+        scheduledWindow.evaluate(async () =>
+          (await window.eva.snapshot()).autonomy.tasks.some(
+            (t) => t.title === "Restart reminder" && t.status === "done",
+          ),
+        ),
+      { timeout: 40000 },
+    )
+    .toBe(true);
+  await scheduledWindow.waitForFunction(
+    () =>
+      document.querySelector(".phase-label")?.textContent === "here with you",
+    null,
+    { timeout: 15000 },
+  );
+  const scheduled = await scheduledWindow.evaluate(() => window.eva.snapshot());
+  assert.equal(
+    scheduled.messages.filter((m) => m.origin === "reminder").length,
+    1,
+    JSON.stringify({
+      messages: scheduled.messages.map((m) => ({
+        role: m.role,
+        origin: m.origin,
+        sessionId: m.sessionId,
+      })),
+      tasks: scheduled.autonomy.tasks,
+      activity: scheduled.autonomy.activity,
+      sessionId: scheduled.sessionId,
+    }),
+  );
+  assert.equal(
+    scheduled.autonomy.tasks.find((t) => t.title === "Cancelled reminder")
+      .status,
+    "cancelled",
+  );
+  assert.ok(
+    scheduled.autonomy.activity.some(
+      (e) => e.kind === "autonomous-reply" && e.requests === 1,
+    ),
+  );
+  await scheduledWindow
+    .getByRole("button", { name: "Pause autonomy", exact: true })
+    .click();
+  assert.equal(
+    (await scheduledWindow.evaluate(() => window.eva.snapshot())).settings
+      .autonomy.paused,
+    true,
+  );
   await desktop.evaluate(({ dialog }) => {
     dialog.showMessageBox = async () => ({
       response: 1,
       checkboxChecked: false,
     });
   });
-  await reopened.evaluate(() => window.eva.clearHistory());
+  await scheduledWindow.evaluate(() => window.eva.clearHistory());
   const cleared = JSON.parse(
     await readFile(path.join(profile, "companion.json"), "utf8"),
   );
   assert.equal(cleared.messages.length, 0);
   assert.equal(cleared.facts.length, 1);
   console.log(
-    "Desktop smoke passed: image attachment UI/IPC/HTTP/persistence, key persistence without a keyring, models, semantic recall, sentence/line/full-response speech ordering, synthetic-microphone barge-in, streamed audio, VRM, archive round-trip, deletion and restart persistence.",
+    "Desktop smoke passed: restart-safe authorized reminders, typing deferral, task cancellation, pause, activity logs, image attachments, credential persistence, models, semantic recall, all speech modes, barge-in, VRM and archives.",
   );
 } finally {
   if (desktop) await desktop.close();

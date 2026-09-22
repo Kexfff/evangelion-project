@@ -1,5 +1,14 @@
 import type { Provider } from "../src/shared/schema";
 import type { ChatMessage } from "./memory";
+export type Usage = { tokens?: number; cost?: number };
+function usageOf(raw: any): Usage {
+  return {
+    ...(Number.isFinite(raw?.total_tokens) && raw.total_tokens >= 0
+      ? { tokens: raw.total_tokens }
+      : {}),
+    ...(Number.isFinite(raw?.cost) && raw.cost >= 0 ? { cost: raw.cost } : {}),
+  };
+}
 
 export function endpoint(base: string, route: string) {
   return `${base.replace(/\/+$/, "")}/${route}`;
@@ -25,6 +34,7 @@ async function checked(response: Response) {
 export async function consumeSSE(
   body: ReadableStream<Uint8Array>,
   onText: (text: string) => void,
+  onUsage?: (usage: Usage) => void,
 ) {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -40,6 +50,7 @@ export async function consumeSSE(
       return;
     }
     const json = JSON.parse(data);
+    if (json.usage) onUsage?.(usageOf(json.usage));
     if (json.error)
       throw new Error(
         "The provider reported a streaming error. Check the model and quota.",
@@ -157,6 +168,7 @@ export class OpenAICompatibleProvider {
     onText: (s: string) => void,
     signal?: AbortSignal,
     stream = true,
+    onUsage?: (usage: Usage) => void,
   ) {
     if (!provider.enabled || !provider.model.trim())
       throw new Error(
@@ -185,13 +197,100 @@ export class OpenAICompatibleProvider {
       response.headers.get("content-type")?.includes("text/event-stream") &&
       response.body
     )
-      return consumeSSE(response.body, onText);
+      return consumeSSE(response.body, onText, onUsage);
     const data = await response.json();
+    if (data.usage) onUsage?.(usageOf(data.usage));
     const content = data.choices?.[0]?.message?.content;
     if (typeof content !== "string" || !content.trim())
       throw new Error("The model returned no text.");
     onText(content);
     return content;
+  }
+  async chatWithTools(
+    provider: Provider,
+    key: string,
+    messages: ChatMessage[],
+    tools: unknown[],
+    execute: (name: string, args: unknown) => unknown,
+    signal: AbortSignal,
+    onRequest: () => void,
+    onUsage: (usage: Usage) => void,
+  ) {
+    if (!provider.enabled || !provider.model.trim())
+      throw new Error(
+        "Enable the LLM provider and choose a tool-capable model.",
+      );
+    const history: unknown[] = [...messages];
+    // A bounded non-streaming tool loop prevents partial tool JSON or intermediate
+    // planning text from being spoken. Normal/tool-disabled chat still streams.
+    for (let round = 0; round < 4; round++) {
+      signal.throwIfAborted();
+      onRequest();
+      const response = await checked(
+        await fetch(endpoint(provider.baseUrl, "chat/completions"), {
+          method: "POST",
+          headers: { ...headers(key), "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: provider.model,
+            messages: history,
+            tools,
+            tool_choice: round === 3 ? "none" : "auto",
+            parallel_tool_calls: false,
+            stream: false,
+            max_tokens: 700,
+          }),
+          signal: providerSignal(signal),
+        }),
+      );
+      const data = await response.json();
+      onUsage(usageOf(data.usage));
+      signal.throwIfAborted();
+      const message = data.choices?.[0]?.message;
+      if (!message) throw new Error("Tool-capable model returned no message.");
+      if (!message.tool_calls?.length) {
+        if (typeof message.content !== "string" || !message.content.trim())
+          throw new Error("Model returned no text.");
+        return message.content;
+      }
+      if (
+        round === 3 ||
+        !Array.isArray(message.tool_calls) ||
+        message.tool_calls.length > 4
+      )
+        throw new Error("Scheduling tool limit exceeded.");
+      history.push({
+        role: "assistant",
+        content: message.content ?? null,
+        tool_calls: message.tool_calls,
+      });
+      for (const call of message.tool_calls) {
+        signal.throwIfAborted();
+        if (
+          typeof call.id !== "string" ||
+          typeof call.function?.arguments !== "string" ||
+          call.function.arguments.length > 8000
+        )
+          throw new Error("Invalid scheduling tool call.");
+        let result: unknown;
+        try {
+          result = execute(
+            call.function.name,
+            JSON.parse(call.function.arguments),
+          );
+        } catch {
+          result = {
+            error:
+              "Invalid or unauthorized task operation. Use a future ISO timestamp with offset, valid IANA time zone and an existing task ID. Creation always requires user approval.",
+          };
+        }
+        history.push({
+          role: "tool",
+          tool_call_id: call.id,
+          content: JSON.stringify(result),
+        });
+      }
+    }
+    throw new Error("Scheduling tool limit exceeded.");
   }
   async transcribe(
     provider: Provider,
