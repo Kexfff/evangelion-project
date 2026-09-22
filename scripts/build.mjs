@@ -1,6 +1,6 @@
 import { build } from "esbuild";
 await build({
-  entryPoints: ["electron/main.ts"],
+  entryPoints: ["electron/main.ts", "electron/telegram-worker.ts"],
   outdir: "dist-electron",
   bundle: true,
   platform: "node",

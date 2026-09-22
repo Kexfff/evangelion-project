@@ -192,7 +192,10 @@ export function Companion() {
             )}
             {messages.map((m) => (
               <div className={`chat-message ${m.role}`} key={m.id}>
-                <small>{m.role === "user" ? "You" : character.name}</small>
+                <small>
+                  {m.role === "user" ? "You" : character.name}
+                  {m.channel === "telegram" ? " · Telegram" : ""}
+                </small>
                 <p>{m.content}</p>
                 <MessageImages images={m.images} />
                 {m.role === "assistant" && settings.providers.tts.enabled && (

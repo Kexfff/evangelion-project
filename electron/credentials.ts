@@ -4,6 +4,8 @@ import path from "node:path";
 import { z } from "zod";
 import { atomicWrite } from "./store";
 import { providerKinds, type ProviderKind } from "../src/shared/schema";
+const secretKinds = [...providerKinds, "telegram"] as const;
+type SecretKind = ProviderKind | "telegram";
 
 interface OSStorage {
   encryptString(text: string): Buffer;
@@ -17,8 +19,8 @@ const entrySchema = z.object({
 });
 type Entry = z.infer<typeof entrySchema>;
 export class CredentialVault {
-  private entries: Partial<Record<ProviderKind, Entry>> = {};
-  private unlocked: Partial<Record<ProviderKind, string>> = {};
+  private entries: Partial<Record<SecretKind, Entry>> = {};
+  private unlocked: Partial<Record<SecretKind, string>> = {};
   readonly file: string;
   private keyFile: string;
   get mode(): "encrypted" | "local-file" {
@@ -37,7 +39,7 @@ export class CredentialVault {
     const raw = JSON.parse(readFileSync(this.file, "utf8"));
     if (raw.version === 2)
       this.entries = z
-        .partialRecord(z.enum(providerKinds), entrySchema)
+        .partialRecord(z.enum(secretKinds), entrySchema)
         .parse(raw.entries);
     else {
       // Preserve sprint-1 OS-encrypted entries, including keys that are currently locked.
@@ -45,7 +47,7 @@ export class CredentialVault {
       for (const kind of providerKinds)
         if (old[kind]) this.entries[kind] = { mode: "os", data: old[kind] };
     }
-    for (const kind of providerKinds) {
+    for (const kind of secretKinds) {
       const entry = this.entries[kind];
       if (!entry) continue;
       try {
@@ -82,19 +84,19 @@ export class CredentialVault {
     if (process.platform !== "win32") chmodSync(this.keyFile, 0o600);
     return key;
   }
-  has(kind: ProviderKind) {
+  has(kind: SecretKind) {
     return !!this.entries[kind];
   }
-  get(kind: ProviderKind) {
+  get(kind: SecretKind) {
     if (this.entries[kind] && !this.unlocked[kind])
       throw new Error(
-        `The saved ${kind} key is locked. Unlock your OS keyring or re-enter this key in Providers.`,
+        `The saved ${kind} key is locked. Unlock your OS keyring or re-enter this key in ${kind === "telegram" ? "Plugins & MCP" : "Providers"}.`,
       );
     return this.unlocked[kind] ?? "";
   }
-  save(incoming: Partial<Record<ProviderKind, string>>) {
+  save(incoming: Partial<Record<SecretKind, string>>) {
     const next = { ...this.entries };
-    for (const kind of providerKinds) {
+    for (const kind of secretKinds) {
       const value = incoming[kind];
       if (value === undefined) continue;
       if (!value) {

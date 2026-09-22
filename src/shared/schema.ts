@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { PluginAction, PluginSnapshot, TelegramSettings } from "./plugins";
 import { attachmentsSchema, type ImageAttachment } from "./images";
 import {
   autonomyConfigSchema,
@@ -137,6 +138,7 @@ export const messageSchema = z.object({
   content: z.string().max(50000),
   images: attachmentsSchema.optional(),
   origin: z.enum(["user", "reminder", "initiative"]).optional(),
+  channel: z.enum(["desktop", "telegram"]).optional(),
   createdAt: z.string().datetime(),
 });
 export const memoryExportSchema = z.object({
@@ -160,6 +162,7 @@ export interface Snapshot {
   busy: boolean;
   secretStorage: "encrypted" | "local-file" | "session-only";
   autonomy?: AutonomySnapshot;
+  plugins?: PluginSnapshot;
 }
 export type RuntimeEvent =
   | { type: "autonomous-start"; id: string }
@@ -170,6 +173,8 @@ export type RuntimeEvent =
   | { type: "phase"; phase: Phase }
   | { type: "warning"; message: string };
 export interface Bridge {
+  pluginAction(action: PluginAction): Promise<string | void>;
+  configureTelegram(config: TelegramSettings, token?: string): Promise<void>;
   snapshot(): Promise<Snapshot>;
   saveSettings(
     settings: Settings,

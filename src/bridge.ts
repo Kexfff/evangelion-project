@@ -29,6 +29,8 @@ const desktopOnly = async (): Promise<never> => {
   );
 };
 const preview: Bridge = {
+  pluginAction: desktopOnly,
+  configureTelegram: desktopOnly,
   preview: true,
   snapshot: async () => structuredClone(previewState),
   saveSettings: async (settings, keys) => {

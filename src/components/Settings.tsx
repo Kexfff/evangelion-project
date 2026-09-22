@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { bridge } from "../bridge";
 import { ConsciousnessSettings } from "./ConsciousnessSettings";
+import { PluginSettings } from "./PluginSettings";
 import {
   defaultSettings,
   settingsSchema,
@@ -285,7 +286,6 @@ export function Settings() {
             >
               <Icon size={18} />
               <span>{label}</span>
-              {id === "plugins" && <span className="nav-soon">SOON</span>}
             </button>
           ))}
         </nav>
@@ -308,7 +308,7 @@ export function Settings() {
             <ExternalLink size={14} />
           </button>
           <div className="version">
-            evangelion_project <span>v0.2.0</span>
+            evangelion_project <span>v0.3.0</span>
           </div>
         </div>
       </aside>
@@ -320,7 +320,7 @@ export function Settings() {
           </div>
           <span className="foundation-badge">
             <span className="status-dot" />
-            Sprint 2 build
+            Sprint 3 build
           </span>
         </header>
         <main className="settings-content">
@@ -1308,49 +1308,7 @@ export function Settings() {
               }
             />
           )}
-          {tab === "plugins" && (
-            <>
-              <Section
-                title="Room to grow"
-                subtitle="Contracts are defined. Plugin execution and MCP connections arrive in later sprints."
-              >
-                <div className="future-hero">
-                  <Puzzle size={48} />
-                  <h2>Her world, extended.</h2>
-                  <p>
-                    New channels and abilities will connect to the same
-                    conversation and memory runtime, with explicit permissions
-                    for each capability.
-                  </p>
-                </div>
-                <div className="roadmap-grid">
-                  {[
-                    [
-                      "Telegram",
-                      "Stay connected away from your desktop. Account pairing and the same character memory.",
-                      "Sprint 03",
-                    ],
-                    [
-                      "MCP connections",
-                      "A tool registry, server configuration, permission prompts, timeouts, and audit history.",
-                      "Sprint 04",
-                    ],
-                    [
-                      "Minecraft",
-                      "Observe the world, plan actions, and play together through a dedicated game adapter.",
-                      "Sprint 04",
-                    ],
-                  ].map(([title, text, sprint]) => (
-                    <div className="roadmap-card" key={title}>
-                      <h3>{title}</h3>
-                      <p>{text}</p>
-                      <span className="coming">{sprint}</span>
-                    </div>
-                  ))}
-                </div>
-              </Section>
-            </>
-          )}
+          {tab === "plugins" && <PluginSettings data={snapshot.plugins} />}
           <footer className="page-footer">
             <span>Built for a connection that feels a little more human.</span>
             <span>EVANGELION / FOUNDATION</span>

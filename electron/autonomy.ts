@@ -83,6 +83,7 @@ export class Autonomy {
     private deliver: (task?: ScheduledTask) => Promise<void>,
     private changed: () => void,
     readonly now: () => number = Date.now,
+    private remoteAvailable: () => boolean = () => false,
   ) {
     this.store.update((d) => {
       for (const task of d.automation.tasks)
@@ -228,13 +229,11 @@ export class Autonomy {
     if (!cfg.enabled) return "Autonomy is off";
     if (cfg.paused) return "Paused by user";
     if (this.suspended) return "System suspended or locked";
-    if (
-      !this.presence.visible ||
-      now - this.heartbeat > 6500 ||
-      !this.heartbeat
-    )
+    const freshPresence = !!this.heartbeat && now - this.heartbeat <= 6500;
+    const desktopAvailable = this.presence.visible && freshPresence;
+    if (!desktopAvailable && !this.remoteAvailable())
       return "Companion unavailable";
-    if (this.presence.blocked || this.busy())
+    if ((freshPresence && this.presence.blocked) || this.busy())
       return "User, speech or another action is busy";
     if (quietNow(now, cfg)) return "Quiet hours";
     if (!this.store.data.settings.providers.llm.enabled)

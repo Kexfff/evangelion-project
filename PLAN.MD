@@ -8,17 +8,17 @@ Build a personal desktop companion that listens, responds naturally, remembers, 
 
 ## Architecture decisions
 
-| Layer                | Foundation choice                                                     | Reason / extension path                                                                                               |
-| -------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Desktop shell        | Electron, isolated preload, two windows                               | Transparent avatar, native dialogs, microphone, future OS integrations                                                |
-| UI                   | React, TypeScript, Vite, CSS                                          | Shared types and independently organized settings / companion surfaces                                                |
-| Avatar               | Three.js, three-vrm, three-vrm-animation                              | Render supplied VRM and retarget supplied VRMA animations                                                             |
-| Conversation runtime | Main-process TypeScript service                                       | One conversation pipeline that future Telegram and game adapters can call                                             |
-| Providers            | OpenAI-compatible chat / ASR / TTS adapters                           | Independent URLs, models and credentials; local and hosted backends                                                   |
-| Memory               | Versioned local JSON with atomic replacement and previous-file backup | Simple inspectable persistence with no native DB compilation; replace the store behind its boundary as scale requires |
-| Retrieval            | Recent-message budget + optional cached embeddings + lexical fallback | Character-scoped cosine retrieval; configurable compatible embedding provider added in sprint 1.5                     |
-| Secrets              | OS-backed Electron safeStorage; persistent local AES-GCM fallback     | Keys remain in main process; local fallback key has owner-only file permissions and is identified in Settings         |
-| Extensions           | Typed plugin, capability, event, and scheduled-task contracts         | Establish boundaries now; implement the host and tool execution in later sprints                                      |
+| Layer                | Foundation choice                                                            | Reason / extension path                                                                                               |
+| -------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Desktop shell        | Electron, isolated preload, two windows                                      | Transparent avatar, native dialogs, microphone, future OS integrations                                                |
+| UI                   | React, TypeScript, Vite, CSS                                                 | Shared types and independently organized settings / companion surfaces                                                |
+| Avatar               | Three.js, three-vrm, three-vrm-animation                                     | Render supplied VRM and retarget supplied VRMA animations                                                             |
+| Conversation runtime | Main-process TypeScript service                                              | One conversation pipeline that future Telegram and game adapters can call                                             |
+| Providers            | OpenAI-compatible chat / ASR / TTS adapters                                  | Independent URLs, models and credentials; local and hosted backends                                                   |
+| Memory               | Versioned local JSON with atomic replacement and previous-file backup        | Simple inspectable persistence with no native DB compilation; replace the store behind its boundary as scale requires |
+| Retrieval            | Recent-message budget + optional cached embeddings + lexical fallback        | Character-scoped cosine retrieval; configurable compatible embedding provider added in sprint 1.5                     |
+| Secrets              | OS-backed Electron safeStorage; persistent local AES-GCM fallback            | Keys remain in main process; local fallback key has owner-only file permissions and is identified in Settings         |
+| Extensions           | Built-in plugin host, validated manifests/grants, channel port and event bus | Telegram network worker and shared runtime; arbitrary-code sandbox and MCP tools remain later work                    |
 
 ```text
 Companion window                  Settings window
@@ -35,8 +35,8 @@ Companion window                  Settings window
                              |
                local data + OS credential vault
 
-Current additional input: durable scheduler / trusted interaction events
-Later inputs: Telegram / Minecraft observations
+Current additional inputs: durable scheduler / Telegram text, images and voice / trusted interaction events
+Later inputs: Minecraft observations
 Later outputs: permissioned plugin actions / MCP tools
 ```
 
@@ -185,16 +185,32 @@ Operating boundaries and remaining checks:
 
 Goal: the same character is available away from the desktop through one complete plugin.
 
-- [ ] Versioned plugin manifest validation, API compatibility, lifecycle, settings schema and enable/disable controls.
-- [ ] Explicit grants for capabilities; minimize the data and actions exposed to each plugin.
-- [ ] Implement event bus and channel abstraction around the existing conversation runtime.
-- [ ] Isolated plugin execution strategy, cancellation, bounded retries, resource limits and failure reporting.
-- [ ] Telegram credentials in the vault; pairing flow and allowlisted user/chat IDs.
-- [ ] Text and voice routing, shared character memory, message chunking, rate limits, reconnect/backoff and duplicate-update handling.
-- [ ] Coherent turn ownership when desktop and Telegram send at the same time.
-- [ ] Plugin installation/update/removal UI, diagnostics and test fixtures.
+- [x] Versioned plugin manifest validation, API compatibility, lifecycle, settings schema and enable/disable controls for the bundled catalog.
+- [x] Explicit chat/shared-memory, image, voice and notification grants; adapters receive a narrow channel port, not database access or LLM/ASR/TTS credentials.
+- [x] Failure-isolated event bus and channel abstraction around the existing conversation runtime. Telegram uses the same active-character session, short-term context, facts, semantic recall and optional fact extraction.
+- [x] Trusted built-in execution strategy: Telegram HTTP in a dedicated worker with a 64 MB old-generation heap cap, four pending requests maximum, request/body/file limits, cancellation and redacted failures. This is not a sandbox for hostile code.
+- [x] Telegram token in the existing vault; five-minute single-use random pairing commands; exact private user/chat allowlist bound to the selected character. Groups, bots and unpaired senders never reach providers or download attachments.
+- [x] Text, captions, attached photos and PNG/JPEG/WebP/GIF image documents; OGG/Opus voice notes through configured ASR; optional MP3 voice replies through configured TTS.
+- [x] Unicode-safe 4,000-character response chunks; serialized sends at least 1.1 seconds apart; 12 accepted incoming messages/minute; polling batches of 20; bounded reconnect/backoff and durable update cursor.
+- [x] Single runtime turn owner. Telegram waits up to 60 seconds behind an existing turn; desktop receives the existing busy/stop behavior during Telegram generation. Remote deltas never feed desktop TTS. Session changes during pending media work fail closed.
+- [x] Settings for bundled install/update/remove, token, grants, pairing/revocation, enable/disable/restart, optional voice/notifications and the latest 100 redacted diagnostics.
+- [x] Authorized reminders/openers route to the paired channel when notification permission is enabled and connected, including with the avatar minimized. Existing autonomy opt-ins, approvals, pause, quiet hours, budgets, system suspend/lock and fresh busy presence still apply.
 
 Acceptance: a paired user can chat from Telegram, recall a desktop fact, and receive a scheduled message; unpaired chats are rejected and disabling the plugin stops communication.
+
+Implementation/validation (2026-09-22, v0.3.0): 72 core tests and 12 browser tests pass, production build passes, and the extended Electron smoke passes. Core tests include the real worker protocol with fixture HTTP, host → polling → pairing → shared runtime → reply, image/voice routing, grants, unauthorized senders, duplicate claims, encrypted token restart, Unicode chunking, reconnect limits, cancellation, shared desktop facts/history, concurrent turn ownership and remote reminders. Desktop smoke verifies actual installation/settings IPC, encrypted token/grant persistence across restart and removal while retaining shared memory. All network/provider tests use mocks; no real Telegram account or paid provider was contacted.
+
+Operating boundaries and remaining work:
+
+- The initial catalog contains only the bundled Telegram adapter. Install/update selects the version shipped with the app, disables it until explicitly enabled, and never downloads or executes arbitrary plugin files. Third-party code loading, marketplace discovery, signatures, hot updates and an OS-level hostile-code sandbox remain future work. MCP remains Sprint 4.
+- One bot and one paired private account/character per app profile. Inactive-character messages are skipped with diagnostics, not redirected to another character. New desktop sessions also become Telegram's current session. Desktop conversations are not automatically mirrored to Telegram; only Telegram replies and opted-in autonomous messages are sent there.
+- The app must remain running. Minimize it to stay connected; closing all windows quits on Linux/Windows. No tray/service/OS wake is implemented. Stop other pollers or remove an existing bot webhook yourself; the app never takes over another deployment automatically.
+- Incoming photos/image documents use existing vision-model and 2 MB/image limits; photo size selection chooses a supported Telegram rendition. Albums are separate incoming messages/turns, not one combined album prompt. No arbitrary document, sticker, video, visual embedding or generated-image output support yet.
+- Voice notes are capped at 60 seconds and 10 MB; the ASR endpoint must accept Telegram OGG/Opus. Voice replies are optional MP3 uploads after the text reply (up to the existing 12,000-character synthesis limit). Audio is not persisted locally; transcripts and images are retained in shared history/archives. Raw text is always delivered independently of optional speech success.
+- Update cursors are persisted before work: crashes/cancellation may lose an accepted message, but never automatically replay an ambiguous turn. Messages older than 24 hours are skipped. Send timeouts/5xx are not retried because delivery may already have happened. Explicit 429 rejections retry at most twice (delays above 60 seconds fail closed); reconnection stops after eight consecutive failures, or immediately on authentication/conflict/long rate-limit errors, until manual restart.
+- Disable/unpair/remove abort polling, downloads, in-flight remote generation and audio requests, and queued sends. Telegram may already have accepted a request before cancellation; previously delivered messages are not revoked. Shared messages/facts survive plugin removal. Token, pairing, grants, cursor and diagnostics are excluded from memory exports; local JSON backups can retain older non-secret plugin state.
+- [ ] Live private-bot acceptance with the user's token, image-capable LLM and actual OGG-compatible ASR/MP3 TTS; verify Telegram delivery and voice quality on target devices.
+- [x] Refresh the unpacked Linux release for Sprint 3 in `release/linux-unpacked/`; source build is also runnable with `npm start` or `npm run dev`.
 
 ## Sprint 4 — MCP and Minecraft
 

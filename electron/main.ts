@@ -18,6 +18,8 @@ import { z } from "zod";
 import { Store, atomicWrite } from "./store";
 import { CompanionRuntime } from "./runtime";
 import { CredentialVault } from "./credentials";
+import { PluginHost } from "./plugin-host";
+import { telegramSettingsSchema } from "../src/shared/plugins";
 import { outgoingMessageSchema } from "../src/shared/images";
 import {
   presenceSchema,
@@ -54,6 +56,7 @@ let settingsWindow: BrowserWindow | null = null;
 let runtime: CompanionRuntime;
 let store: Store;
 let vault: CredentialVault;
+let plugins: PluginHost;
 const providerKind = z.enum(providerKinds);
 const animations = new Set([
   "idle_loop",
@@ -151,6 +154,8 @@ else {
         vault.mode,
         send,
       );
+      plugins = new PluginHost(runtime, vault);
+      void plugins.start();
       const assets = app.isPackaged
         ? path.join(process.resourcesPath, "assets")
         : path.join(here, "..");
@@ -220,27 +225,50 @@ else {
           return fn(...args);
         });
       handle("snapshot", () => runtime.snapshot());
-      handle("settings", async (raw, rawKeys) => {
-        // Settings changes invalidate autonomous decisions, including a switch-off.
-        if (runtime.snapshot().busy) await runtime.cancel();
-        idle();
-        const settings = settingsSchema.parse(raw);
-        const incoming = z
-          .object({
-            llm: z.string().max(2000).optional(),
-            asr: z.string().max(2000).optional(),
-            tts: z.string().max(2000).optional(),
-            embedding: z.string().max(2000).optional(),
-          })
-          .strict()
-          .parse(rawKeys);
-        vault.save(incoming);
-        for (const kind of providerKinds)
-          settings.providers[kind].hasKey = vault.has(kind);
-        store.settings(settings);
-        companion?.setAlwaysOnTop(settings.window.alwaysOnTop);
-        runtime.broadcast();
-      });
+      handle("plugin:action", (action) =>
+        plugins.action(
+          z
+            .enum([
+              "install",
+              "update",
+              "remove",
+              "disable",
+              "unpair",
+              "pair",
+              "restart",
+            ])
+            .parse(action),
+        ),
+      );
+      handle("plugin:telegram", (config, token) =>
+        plugins.configure(
+          telegramSettingsSchema.parse(config),
+          z.string().max(150).optional().parse(token),
+        ),
+      );
+      handle("settings", async (raw, rawKeys) =>
+        plugins.withPaused(async () => {
+          // Settings changes invalidate autonomous decisions, including a switch-off.
+          if (runtime.snapshot().busy) await runtime.cancel();
+          idle();
+          const settings = settingsSchema.parse(raw);
+          const incoming = z
+            .object({
+              llm: z.string().max(2000).optional(),
+              asr: z.string().max(2000).optional(),
+              tts: z.string().max(2000).optional(),
+              embedding: z.string().max(2000).optional(),
+            })
+            .strict()
+            .parse(rawKeys);
+          vault.save(incoming);
+          for (const kind of providerKinds)
+            settings.providers[kind].hasKey = vault.has(kind);
+          store.settings(settings);
+          companion?.setAlwaysOnTop(settings.window.alwaysOnTop);
+          runtime.broadcast();
+        }),
+      );
       handle("send", (text, images) => {
         const message = outgoingMessageSchema.parse({ text, images });
         return runtime.send(message.text, message.images);
@@ -410,7 +438,7 @@ else {
         store.update((d) => {
           d.sessions[store.characterId] = randomUUID();
         });
-        runtime.autonomy.observe({
+        runtime.events.emit({
           type: "session:started",
           characterId: store.characterId,
         });
@@ -559,6 +587,7 @@ else {
       powerMonitor.on("resume", resume);
       powerMonitor.on("unlock-screen", resume);
       app.on("before-quit", () => {
+        void plugins.stop();
         clearInterval(scheduler);
         runtime.autonomy.suspend(true);
       });

@@ -389,6 +389,47 @@ try {
     await window.testMicrophone.context.close();
   });
   // Authorize one reminder and cancel another, then restart the real desktop.
+  // Exercise real plugin settings IPC and vault persistence without contacting Telegram.
+  await reopened.evaluate(() => window.eva.openSettings());
+  await expect
+    .poll(() =>
+      desktop.windows().some((w) => w.url().includes("window=settings")),
+    )
+    .toBe(true);
+  const pluginWindow = desktop
+    .windows()
+    .find((w) => w.url().includes("window=settings"));
+  await pluginWindow
+    .getByRole("button", { name: "Plugins & MCP", exact: true })
+    .click();
+  await pluginWindow
+    .getByRole("button", { name: "Install bundled Telegram" })
+    .click();
+  await pluginWindow
+    .getByLabel("Bot token", { exact: true })
+    .fill("123456:abcdefghijklmnopqrstuvwx0123456789");
+  await pluginWindow
+    .getByRole("checkbox", {
+      name: "Chat — shared character history and memory (required)",
+    })
+    .check();
+  await pluginWindow
+    .getByRole("button", { name: "Save Telegram configuration" })
+    .click();
+  await expect(pluginWindow.getByRole("status")).toContainText(
+    "Telegram configuration saved",
+  );
+  const pluginSaved = (await reopened.evaluate(() => window.eva.snapshot()))
+    .plugins;
+  assert.equal(pluginSaved.hasToken, true);
+  assert.equal(pluginSaved.config.enabled, false);
+  assert.ok(!JSON.stringify(pluginSaved).includes("abcdefghijklmnopqrstuvwx"));
+  assert.ok(
+    !(await readFile(path.join(profile, "credentials.json"), "utf8")).includes(
+      "abcdefghijklmnopqrstuvwx",
+    ),
+  );
+  await pluginWindow.close();
   await reopened.evaluate(async () => {
     const s = (await window.eva.snapshot()).settings;
     s.voice.vadEnabled = false;
@@ -419,6 +460,12 @@ try {
   desktop = await launch();
   const scheduledWindow = await desktop.firstWindow();
   await scheduledWindow.waitForFunction(() => !!window.eva);
+  const persistedPlugin = (
+    await scheduledWindow.evaluate(() => window.eva.snapshot())
+  ).plugins;
+  assert.equal(persistedPlugin.hasToken, true);
+  assert.equal(persistedPlugin.installedVersion, "1.0.0");
+  assert.deepEqual(persistedPlugin.config.grants, ["channel:chat"]);
   // Draft text is a blocking user interaction, even with an overdue task.
   await scheduledWindow
     .getByRole("textbox", { name: "Message Eva" })
@@ -501,8 +548,18 @@ try {
   );
   assert.equal(cleared.messages.length, 0);
   assert.equal(cleared.facts.length, 1);
+  await scheduledWindow.evaluate(() => window.eva.pluginAction("remove"));
+  assert.equal(
+    (await scheduledWindow.evaluate(() => window.eva.snapshot())).plugins
+      .hasToken,
+    false,
+  );
+  assert.equal(
+    (await scheduledWindow.evaluate(() => window.eva.snapshot())).facts.length,
+    1,
+  );
   console.log(
-    "Desktop smoke passed: restart-safe authorized reminders, typing deferral, task cancellation, pause, activity logs, image attachments, credential persistence, models, semantic recall, all speech modes, barge-in, VRM and archives.",
+    "Desktop smoke passed: plugin installation/settings, vault and grant persistence/removal, restart-safe authorized reminders, typing deferral, task cancellation, pause, activity logs, image attachments, credential persistence, models, semantic recall, all speech modes, barge-in, VRM and archives.",
   );
 } finally {
   if (desktop) await desktop.close();

@@ -5,6 +5,7 @@ import { buildContext } from "./memory";
 import { OpenAICompatibleProvider } from "./providers";
 import { SemanticMemory } from "./semantic-memory";
 import { Autonomy } from "./autonomy";
+import { PluginEvents } from "./plugin-events";
 import { schedulingTools, executeScheduleTool } from "./scheduling-tools";
 import type { ScheduledTask } from "../src/shared/autonomy";
 import type { Usage } from "./providers";
@@ -19,7 +20,14 @@ import type {
 } from "../src/shared/schema";
 
 export class CompanionRuntime {
+  readonly events = new PluginEvents();
+  remote?: {
+    available(): boolean;
+    notify(text: string, signal: AbortSignal): Promise<void>;
+  };
+  pluginSnapshot?: () => Snapshot["plugins"];
   private turn?: AbortController;
+  private turnChannel?: "desktop" | "telegram";
   private extraction?: AbortController;
   private audio = new Set<AbortController>();
   private streams = new Map<
@@ -57,7 +65,9 @@ export class CompanionRuntime {
       (task) => this.initiate(task),
       () => this.broadcast(),
       now,
+      () => this.remote?.available() ?? false,
     );
+    this.events.on((event) => this.autonomy.observe(event));
   }
   get busy() {
     return !!this.turn;
@@ -66,6 +76,7 @@ export class CompanionRuntime {
     return {
       ...this.store.snapshot(this.storage, this.busy),
       autonomy: this.autonomy.snapshot(),
+      plugins: this.pluginSnapshot?.(),
     };
   }
   broadcast() {
@@ -83,16 +94,28 @@ export class CompanionRuntime {
     );
     await this.turnDone;
   }
-  async send(text: string, images: ImageAttachment[] = []) {
+  async cancelChannel(channel: "desktop" | "telegram") {
+    if (this.turnChannel === channel) await this.cancel();
+  }
+  async send(
+    text: string,
+    images: ImageAttachment[] = [],
+    channel: "desktop" | "telegram" = "desktop",
+    signal?: AbortSignal,
+  ) {
     ({ text, images } = outgoingMessageSchema.parse({ text, images }));
     if (this.autonomousId) await this.cancel();
+    signal?.throwIfAborted();
     if (this.turn)
       throw new Error(
         "A reply is already in progress. Stop it before sending another message.",
       );
     const controller = new AbortController();
+    const abort = () => controller.abort();
+    signal?.addEventListener("abort", abort, { once: true });
     this.indexing?.abort();
     this.turn = controller;
+    this.turnChannel = channel;
     let finish!: () => void;
     this.turnDone = new Promise<void>((resolve) => {
       finish = resolve;
@@ -106,7 +129,7 @@ export class CompanionRuntime {
       if (u.cost !== undefined) usage.cost = (usage.cost ?? 0) + u.cost;
     };
     try {
-      this.autonomy.observe({ type: "message:received", characterId });
+      this.events.emit({ type: "message:received", characterId, channel });
       const userId = randomUUID();
       this.store.update((d) => {
         d.messages.push({
@@ -114,13 +137,15 @@ export class CompanionRuntime {
           characterId,
           sessionId,
           role: "user",
+          channel,
           content: text,
           ...(images.length ? { images } : {}),
           createdAt: new Date().toISOString(),
         });
       });
       this.broadcast();
-      this.emit({ type: "phase", phase: "thinking" });
+      if (channel === "desktop")
+        this.emit({ type: "phase", phase: "thinking" });
       let scores: Map<string, number> | undefined;
       if (text && this.store.data.settings.memory.semanticEnabled) {
         try {
@@ -153,13 +178,19 @@ export class CompanionRuntime {
             this.store.data.settings.providers.llm,
             this.getKey("llm"),
             context,
-            (delta) => this.emit({ type: "delta", text: delta }),
+            (delta) => {
+              if (channel === "desktop")
+                this.emit({ type: "delta", text: delta });
+            },
             controller.signal,
             true,
             (u) => Object.assign(usage, u),
           );
       controller.signal.throwIfAborted();
-      if (this.store.data.settings.autonomy.schedulingTools)
+      if (
+        channel === "desktop" &&
+        this.store.data.settings.autonomy.schedulingTools
+      )
         this.emit({ type: "delta", text: reply });
       this.store.update((d) => {
         d.messages.push({
@@ -167,10 +198,12 @@ export class CompanionRuntime {
           characterId,
           sessionId,
           role: "assistant",
+          channel,
           content: reply,
           createdAt: new Date().toISOString(),
         });
       });
+      this.events.emit({ type: "message:sent", characterId, channel });
       this.autonomy.log(
         "user-reply",
         "Reply saved; user turn has priority over autonomous actions.",
@@ -181,9 +214,12 @@ export class CompanionRuntime {
         this.extraction?.abort();
         const extraction = new AbortController();
         this.extraction = extraction;
-        void this.remember(text, characterId, userId, extraction.signal)
+        const extractionSignal = signal
+          ? AbortSignal.any([signal, extraction.signal])
+          : extraction.signal;
+        void this.remember(text, characterId, userId, extractionSignal)
           .catch(() => {
-            if (!extraction.signal.aborted)
+            if (!extractionSignal.aborted)
               this.emit({
                 type: "warning",
                 message:
@@ -194,6 +230,7 @@ export class CompanionRuntime {
             if (this.extraction === extraction) this.extraction = undefined;
           });
       }
+      return reply;
     } catch (error) {
       this.autonomy.log(
         controller.signal.aborted ? "cancelled" : "failed",
@@ -204,8 +241,10 @@ export class CompanionRuntime {
       throw error;
     } finally {
       this.turn = undefined;
+      this.turnChannel = undefined;
+      signal?.removeEventListener("abort", abort);
       finish();
-      this.emit({ type: "phase", phase: "idle" });
+      if (channel === "desktop") this.emit({ type: "phase", phase: "idle" });
       this.broadcast();
     }
   }
@@ -245,7 +284,9 @@ export class CompanionRuntime {
       finish = resolve;
     });
     const usage: Usage = {};
-    this.emit({ type: "autonomous-start", id });
+    const remote = this.remote?.available() ? this.remote : undefined;
+    this.turnChannel = remote ? "telegram" : "desktop";
+    if (!remote) this.emit({ type: "autonomous-start", id });
     this.broadcast();
     try {
       const context = buildContext(
@@ -260,7 +301,9 @@ export class CompanionRuntime {
         this.store.data.settings.providers.llm,
         this.getKey("llm"),
         context,
-        (text) => this.emit({ type: "delta", text, autonomousId: id }),
+        (text) => {
+          if (!remote) this.emit({ type: "delta", text, autonomousId: id });
+        },
         controller.signal,
         true,
         (u) => Object.assign(usage, u),
@@ -274,6 +317,7 @@ export class CompanionRuntime {
           role: "assistant",
           content: reply,
           origin: task ? "reminder" : "initiative",
+          channel: remote ? "telegram" : "desktop",
           createdAt: new Date(this.autonomy.now()).toISOString(),
         });
       });
@@ -283,7 +327,13 @@ export class CompanionRuntime {
         { requests: 1, ...usage },
         characterId,
       );
-      this.emit({ type: "autonomous-end", id, text: reply });
+      if (remote) await remote.notify(reply, controller.signal);
+      else this.emit({ type: "autonomous-end", id, text: reply });
+      this.events.emit({
+        type: "message:sent",
+        characterId,
+        channel: remote ? "telegram" : "desktop",
+      });
     } catch (error) {
       this.emit({ type: "autonomous-cancel" });
       this.autonomy.log(
@@ -301,6 +351,7 @@ export class CompanionRuntime {
       throw error;
     } finally {
       this.turn = undefined;
+      this.turnChannel = undefined;
       this.autonomousId = undefined;
       this.autonomousTask = undefined;
       finish();
@@ -369,7 +420,7 @@ export class CompanionRuntime {
     });
     this.broadcast();
   }
-  async transcribe(bytes: ArrayBuffer, mime: string) {
+  async transcribe(bytes: ArrayBuffer, mime: string, signal?: AbortSignal) {
     const c = new AbortController();
     this.audio.add(c);
     try {
@@ -379,7 +430,7 @@ export class CompanionRuntime {
         bytes,
         mime,
         this.store.data.settings.voice.language,
-        c.signal,
+        signal ? AbortSignal.any([signal, c.signal]) : c.signal,
       );
     } finally {
       this.audio.delete(c);
@@ -452,7 +503,7 @@ export class CompanionRuntime {
     this.audio.delete(stream.controller);
     await stream.reader.cancel().catch(() => {});
   }
-  async speak(text: string) {
+  async speak(text: string, signal?: AbortSignal) {
     const c = new AbortController();
     this.audio.add(c);
     try {
@@ -461,7 +512,7 @@ export class CompanionRuntime {
         this.getKey("tts"),
         text,
         this.store.data.settings.voice.speed,
-        c.signal,
+        signal ? AbortSignal.any([signal, c.signal]) : c.signal,
       );
     } finally {
       this.audio.delete(c);

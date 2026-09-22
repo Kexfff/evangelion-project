@@ -529,6 +529,35 @@ nav button.active:before {
 .section-heading {
   margin-bottom: 22px;
 }
+.plugin-settings > p,
+.plugin-settings fieldset > p,
+.plugin-settings li {
+  color: #b2aabd;
+  font-size: 12px;
+  line-height: 1.7;
+  margin: 12px 0;
+  overflow-wrap: anywhere;
+}
+.plugin-settings fieldset {
+  border: 1px solid #393240;
+  border-radius: 10px;
+  padding: 18px;
+  margin: 24px 0;
+  min-width: 0;
+}
+.plugin-settings legend {
+  padding: 0 8px;
+  font-size: 13px;
+}
+.plugin-settings h3 {
+  margin-top: 24px;
+}
+.plugin-settings .button-row {
+  flex-wrap: wrap;
+}
+.plugin-settings > .field {
+  margin-top: 16px;
+}
 .section-heading h2 {
   font-size: 15px;
   font-weight: 550;

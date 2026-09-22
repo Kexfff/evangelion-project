@@ -10,6 +10,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { automationSchema } from "../src/shared/autonomy";
+import { telegramStateSchema } from "../src/shared/plugins";
 import {
   defaultSettings,
   settingsSchema,
@@ -26,6 +27,7 @@ const databaseSchema = z.object({
   messages: z.array(messageSchema),
   sessions: z.record(z.string(), z.string()),
   automation: automationSchema.default({ states: {}, tasks: [], activity: [] }),
+  telegram: telegramStateSchema.default(() => telegramStateSchema.parse({})),
 });
 export type Database = z.infer<typeof databaseSchema>;
 export function atomicWrite(file: string, data: string) {
@@ -52,6 +54,7 @@ export class Store {
         messages: [],
         sessions: { eva: randomUUID() },
         automation: { states: {}, tasks: [], activity: [] },
+        telegram: telegramStateSchema.parse({}),
       };
       this.save();
     }
