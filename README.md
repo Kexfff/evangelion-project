@@ -1,6 +1,6 @@
 # evangelion_project
 
-A desktop AI companion with a transparent animated VRM window, separate settings, voice conversation, persistent memory, opt-in proactive conversation/reminders, and a private Telegram channel. Inspired by [AIRI](https://github.com/moeru-ai/airi); this is an independent implementation using your supplied `Eva.vrm` and `animations/*.vrma` assets. Current build: Sprint 3 / v0.3.0.
+A desktop AI companion with a transparent animated VRM window, separate settings, voice conversation, persistent memory, opt-in proactive conversation/reminders, and a private Telegram channel. Inspired by [AIRI](https://github.com/moeru-ai/airi); this is an independent implementation using your supplied `Eva.vrm` and `animations/*.vrma` assets. Current build: Sprint 3 / v0.3.1.
 
 ## Run
 
@@ -52,7 +52,13 @@ Provider adapters and discovery use these OpenAI-compatible HTTP endpoints:
 | Embeddings      | `POST {base}/embeddings`, JSON model/input/encoding_format                        | Float vectors in `data[].embedding`, ordered using `index`         |
 | Model discovery | `GET {base}/models` (`/embeddings/models` for OpenRouter embeddings)              | `data[].id`                                                        |
 
-Provider errors show an actionable status without reflecting potentially sensitive upstream response bodies. Requests time out after 90 seconds. No automatic retry spends additional credits after a failure.
+Provider errors show an actionable status without reflecting potentially sensitive upstream response bodies. Requests time out after 90 seconds. Chat replies and transport/auth/quota failures are not automatically retried. Automatic fact extraction has the bounded format-recovery exception below.
+
+### Automatic memory extraction
+
+When enabled in Memory, this is a separate background LLM request after the chat reply is saved. It uses temperature 0.1 and a 2,048-token output cap; OpenRouter requests also ask to disable optional reasoning through its [reasoning parameter](https://openrouter.ai/docs/guides/best-practices/reasoning-tokens). Ordinary chat settings are unchanged. Complete JSON arrays, `{"facts":[...]}` objects and a single JSON code block are accepted; facts remain validated, deduplicated and limited to three short strings. Partial JSON and reasoning text are never stored as facts.
+
+Invalid, empty or token-truncated extraction output gets **one fresh attempt**, capped at 4,096 tokens. This can incur an additional LLM charge; both requests and reported usage appear in Consciousness activity. Unsupported JSON-mode/function-calling features are not required. HTTP failures are not retried. Cancellation and deleted source messages do not generate false extraction warnings or restore deleted facts. If extraction still fails, the warning and `memory-failed` activity entry identify the failure category without logging the model output, credentials or provider response body. Your chat reply and existing memories remain saved; add any missing fact manually. Failed past extractions are not replayed automatically.
 
 ## Image messages
 
@@ -143,7 +149,7 @@ npm run test:ui
 npm run test:desktop
 ```
 
-If Chromium is already installed elsewhere, set `EVA_TEST_BROWSER` to its executable for UI tests. The 12 UI tests cover plugin settings/pairing controls, Consciousness, images, speech delivery, browser preview, fixture MP3 audio and synthetic microphone input. The 72 core tests include plugin grants, vault persistence, pairing, unpaired rejection, image/voice routing, shared memory, concurrency, remote reminders, bounded retries, cancellation and the actual worker protocol with fixture HTTP, plus the earlier scheduling/memory/voice/image regressions. No real Telegram or paid provider is contacted.
+If Chromium is already installed elsewhere, set `EVA_TEST_BROWSER` to its executable for UI tests. The 12 UI tests cover plugin settings/pairing controls, Consciousness, images, speech delivery, browser preview, fixture MP3 audio and synthetic microphone input. The 93 core tests include extraction JSON normalization, bounded recovery, truncation, redacted diagnostics and cancellation, plugin grants, vault persistence, pairing, unpaired rejection, image/voice routing, shared memory, concurrency, remote reminders, bounded retries, cancellation and the actual worker protocol with fixture HTTP, plus the earlier scheduling/memory/voice/image regressions. No real Telegram or paid provider is contacted.
 
 The desktop smoke test opens temporary Electron windows on your normal display and uses an isolated profile under the system temporary directory. It verifies real local HTTP calls through IPC, VRM/VRMA loading, model lists, semantic recall, sentence ordering, synthetic-microphone interruption, archive round-trips, and persistence across restarts without a keyring. It also verifies an authorized reminder across restart, typing deferral, cancellation, activity logs, immediate autonomy pause, and real plugin installation/settings, encrypted token/grant persistence and removal. It then closes its windows and removes its own test data. File/confirmation dialogs are stubbed. The test does not use your credentials or app profile. A real display (or an X virtual framebuffer) is recommended: Electron's Ozone headless backend crashed during validation here. Live Telegram connectivity and actual vision/ASR/TTS quality still need validation with your bot and providers.
 

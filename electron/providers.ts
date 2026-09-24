@@ -1,6 +1,22 @@
 import type { Provider } from "../src/shared/schema";
 import type { ChatMessage } from "./memory";
 export type Usage = { tokens?: number; cost?: number };
+export class ProviderChatError extends Error {
+  constructor(
+    readonly kind:
+      "http" | "empty" | "truncated" | "blocked" | "invalid-response",
+    message: string,
+    readonly status?: number,
+  ) {
+    super(message);
+  }
+}
+export type ChatOptions = {
+  temperature?: number;
+  maxTokens?: number;
+  requireComplete?: boolean;
+  disableReasoning?: boolean;
+};
 function usageOf(raw: any): Usage {
   return {
     ...(Number.isFinite(raw?.total_tokens) && raw.total_tokens >= 0
@@ -25,8 +41,10 @@ async function checked(response: Response) {
   if (!response.ok) {
     // Do not reflect upstream bodies: some gateways include credentials and internal URLs.
     await response.body?.cancel();
-    throw new Error(
+    throw new ProviderChatError(
+      "http",
       `Provider returned HTTP ${response.status}. Check its URL, model, credentials, and quota in Settings.`,
+      response.status,
     );
   }
   return response;
@@ -169,6 +187,7 @@ export class OpenAICompatibleProvider {
     signal?: AbortSignal,
     stream = true,
     onUsage?: (usage: Usage) => void,
+    options: ChatOptions = {},
   ) {
     if (!provider.enabled || !provider.model.trim())
       throw new Error(
@@ -186,8 +205,12 @@ export class OpenAICompatibleProvider {
           model: provider.model,
           messages,
           stream,
-          temperature: 0.8,
-          max_tokens: 700,
+          temperature: options.temperature ?? 0.8,
+          max_tokens: options.maxTokens ?? 700,
+          ...(options.disableReasoning &&
+          new URL(provider.baseUrl).hostname === "openrouter.ai"
+            ? { reasoning: { enabled: false } }
+            : {}),
         }),
         signal: providerSignal(signal),
       }),
@@ -198,11 +221,34 @@ export class OpenAICompatibleProvider {
       response.body
     )
       return consumeSSE(response.body, onText, onUsage);
-    const data = await response.json();
+    const data = await response.json().catch((error: unknown) => {
+      if (error instanceof SyntaxError)
+        throw new ProviderChatError(
+          "invalid-response",
+          "The provider returned invalid JSON.",
+        );
+      throw error;
+    });
     if (data.usage) onUsage?.(usageOf(data.usage));
+    if (
+      options.requireComplete &&
+      data.choices?.[0]?.finish_reason === "length"
+    )
+      throw new ProviderChatError(
+        "truncated",
+        "The model reached its output token limit.",
+      );
+    if (
+      options.requireComplete &&
+      data.choices?.[0]?.finish_reason === "content_filter"
+    )
+      throw new ProviderChatError(
+        "blocked",
+        "The provider blocked the response.",
+      );
     const content = data.choices?.[0]?.message?.content;
     if (typeof content !== "string" || !content.trim())
-      throw new Error("The model returned no text.");
+      throw new ProviderChatError("empty", "The model returned no text.");
     onText(content);
     return content;
   }

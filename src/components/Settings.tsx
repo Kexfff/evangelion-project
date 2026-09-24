@@ -308,7 +308,7 @@ export function Settings() {
             <ExternalLink size={14} />
           </button>
           <div className="version">
-            evangelion_project <span>v0.3.0</span>
+            evangelion_project <span>v0.3.1</span>
           </div>
         </div>
       </aside>
@@ -1245,7 +1245,7 @@ export function Settings() {
                     />
                     <Toggle
                       label="Automatically remember facts"
-                      hint="An additional LLM request extracts explicit preferences and facts after each reply. Review and edit them here."
+                      hint="An additional LLM request extracts explicit facts after each reply. Invalid or truncated output retries once (additional usage). Review and edit facts here."
                       checked={draft.memory.autoRemember}
                       onChange={(v) =>
                         update((d) => {

@@ -212,6 +212,17 @@ Operating boundaries and remaining work:
 - [ ] Live private-bot acceptance with the user's token, image-capable LLM and actual OGG-compatible ASR/MP3 TTS; verify Telegram delivery and voice quality on target devices.
 - [x] Refresh the unpacked Linux release for Sprint 3 in `release/linux-unpacked/`; source build is also runnable with `npm start` or `npm run dev`.
 
+## Automatic memory extraction fix — v0.3.1
+
+- [x] Investigate the generic post-reply warning. The background extraction path used chat's 700-token cap/temperature 0.8 and required an exact JSON array, while discarding failure details. Recent local activity confirmed extraction responses/usage but did not retain enough information to identify the historical failure precisely.
+- [x] Dedicated extraction settings: temperature 0.1, 2,048-token cap, OpenRouter-only request to disable optional reasoning; ordinary chat remains unchanged.
+- [x] Validate arrays, facts-object envelopes and single fenced JSON responses; trim/deduplicate and retain at most three short strings. Never salvage partial JSON or persist reasoning/free-form output as a fact.
+- [x] Detect token exhaustion from finish_reason even when content is empty; allow exactly one fresh retry for invalid/empty/truncated extraction, capped at 4,096 tokens. Do not retry HTTP/auth/quota failures. Preserve cancellation, source-message deletion and character scoping.
+- [x] Actionable, redacted warnings and memory-failed activity; account for both attempts, disclose additional usage, and keep malformed output/credentials out of diagnostics. Do not automatically replay old failed extractions.
+- [x] 93 core tests, production build and Electron regression smoke pass (2026-09-24), including 21 new extraction regressions using mock responses. No live provider calls or user-profile mutations were performed.
+- [x] Refresh v0.3.1 unpacked Linux build in `release/linux-unpacked/`.
+- [ ] Verify extraction against the user's live model after restart; original failed output was not retained, and no paid live requests were made during this fix.
+
 ## Sprint 4 — MCP and Minecraft
 
 Goal: controlled observation and action in a Minecraft world.
