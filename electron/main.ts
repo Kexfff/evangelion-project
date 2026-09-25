@@ -16,6 +16,15 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { Store, atomicWrite } from "./store";
+import {
+  historyQuerySchema,
+  conversationQuerySchema,
+  historyImageQuerySchema,
+  assertHistoryCharacter,
+  listHistory,
+  readConversation,
+  readHistoryImage,
+} from "../src/shared/history";
 import { CompanionRuntime } from "./runtime";
 import { CredentialVault } from "./credentials";
 import { PluginHost } from "./plugin-host";
@@ -225,6 +234,21 @@ else {
           return fn(...args);
         });
       handle("snapshot", () => runtime.snapshot());
+      handle("history:list", (raw) => {
+        const query = historyQuerySchema.parse(raw);
+        assertHistoryCharacter(query.characterId, store.characterId);
+        return listHistory(store.data.messages, store.sessionId, query);
+      });
+      handle("history:read", (raw) => {
+        const query = conversationQuerySchema.parse(raw);
+        assertHistoryCharacter(query.characterId, store.characterId);
+        return readConversation(store.data.messages, query);
+      });
+      handle("history:image", (raw) => {
+        const query = historyImageQuerySchema.parse(raw);
+        assertHistoryCharacter(query.characterId, store.characterId);
+        return readHistoryImage(store.data.messages, query);
+      });
       handle("plugin:action", (action) =>
         plugins.action(
           z

@@ -4,6 +4,11 @@ import {
   type RuntimeEvent,
   type Snapshot,
 } from "./shared/schema";
+import {
+  listHistory,
+  readConversation,
+  readHistoryImage,
+} from "./shared/history";
 declare global {
   interface Window {
     eva?: Bridge;
@@ -29,6 +34,12 @@ const desktopOnly = async (): Promise<never> => {
   );
 };
 const preview: Bridge = {
+  listHistory: async (query) =>
+    listHistory(previewState.messages, previewState.sessionId, query),
+  readConversation: async (query) =>
+    readConversation(previewState.messages, query),
+  readHistoryImage: async (query) =>
+    readHistoryImage(previewState.messages, query),
   pluginAction: desktopOnly,
   configureTelegram: desktopOnly,
   preview: true,

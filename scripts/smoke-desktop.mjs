@@ -231,6 +231,79 @@ try {
     (await win.evaluate(() => window.eva.snapshot())).messages.length,
     0,
   );
+  const history = await win.evaluate(() =>
+    window.eva.listHistory({
+      characterId: "eva",
+      search: "",
+      channel: "all",
+      offset: 0,
+    }),
+  );
+  assert.equal(history.totalMessages, 2);
+  assert.equal(history.sessions.length, 1);
+  assert.equal(history.sessions[0].current, false);
+  const historyMessages = await win.evaluate(
+    (sessionId) =>
+      window.eva.readConversation({
+        characterId: "eva",
+        sessionId,
+        search: "",
+        channel: "all",
+        offset: 0,
+      }),
+    history.sessions[0].id,
+  );
+  assert.equal(historyMessages.total, 2);
+  assert.deepEqual(historyMessages.messages[0].images, [
+    { name: imageAttachment.name },
+  ]);
+  assert.equal(JSON.stringify(historyMessages).includes("data:image"), false);
+  assert.deepEqual(
+    await win.evaluate(
+      ({ sessionId, messageId }) =>
+        window.eva.readHistoryImage({
+          characterId: "eva",
+          sessionId,
+          messageId,
+          index: 0,
+        }),
+      {
+        sessionId: history.sessions[0].id,
+        messageId: historyMessages.messages[0].id,
+      },
+    ),
+    imageAttachment,
+  );
+  const foreignRejected = await win.evaluate(async () => {
+    try {
+      await window.eva.listHistory({
+        characterId: "other",
+        search: "",
+        channel: "all",
+        offset: 0,
+      });
+      return false;
+    } catch {
+      return true;
+    }
+  });
+  assert.equal(foreignRejected, true);
+  const historyWindow = desktop
+    .windows()
+    .find((window) => window.url().includes("window=settings"));
+  await historyWindow
+    .getByRole("button", { name: "Memory", exact: true })
+    .click();
+  await historyWindow
+    .getByRole("button", { name: "Conversation history", exact: true })
+    .click();
+  await expect(historyWindow.locator(".history-message")).toHaveCount(2);
+  await historyWindow
+    .getByRole("button", { name: "View image: pixel.png" })
+    .click();
+  await expect(
+    historyWindow.getByRole("img", { name: "pixel.png", exact: true }),
+  ).toBeVisible();
   await desktop.close();
   desktop = null;
   const persisted = JSON.parse(

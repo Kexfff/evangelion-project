@@ -1,7 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
   Activity,
-  ArrowDownToLine,
   ArrowUpFromLine,
   AudioLines,
   Box,
@@ -21,7 +20,6 @@ import {
   Settings2,
   ShieldCheck,
   Sparkles,
-  Trash2,
   UserRound,
   Volume2,
   WandSparkles,
@@ -29,13 +27,13 @@ import {
 } from "lucide-react";
 import { bridge } from "../bridge";
 import { ConsciousnessSettings } from "./ConsciousnessSettings";
+import { MemorySettings } from "./MemorySettings";
 import { PluginSettings } from "./PluginSettings";
 import {
   defaultSettings,
   settingsSchema,
   providerKinds,
   type Character,
-  type Fact,
   type ProviderKind,
   type Settings as AppSettings,
   type Snapshot,
@@ -172,9 +170,6 @@ export function Settings() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
-  const [search, setSearch] = useState("");
-  const [factText, setFactText] = useState("");
-  const [editing, setEditing] = useState<Fact>();
   useEffect(() => {
     if (snapshot)
       setDraft((old) =>
@@ -261,9 +256,6 @@ export function Settings() {
   const counts = ["llm", "asr", "tts"]
     .map((k) => snapshot.settings.providers[k as ProviderKind])
     .filter((p) => p.enabled).length;
-  const facts = snapshot.facts.filter((f) =>
-    f.text.toLowerCase().includes(search.toLowerCase()),
-  );
   const launch = () => perform(() => bridge.windowAction("companion"));
   return (
     <div className="settings-shell">
@@ -308,7 +300,7 @@ export function Settings() {
             <ExternalLink size={14} />
           </button>
           <div className="version">
-            evangelion_project <span>v0.3.1</span>
+            evangelion_project <span>v0.3.3</span>
           </div>
         </div>
       </aside>
@@ -1017,280 +1009,127 @@ export function Settings() {
           )}
 
           {tab === "memory" && (
-            <>
-              <div className="memory-header">
-                <div className="info-banner">
-                  <Brain size={20} />
-                  <div>
-                    {persistedCharacter.name}’s memory
-                    <small>
-                      Facts and past conversations belong to the saved active
-                      character. Imports merge into this character without
-                      replacing existing memories.
-                    </small>
-                  </div>
-                </div>
-                <div className="button-row">
+            <MemorySettings
+              key={snapshot.settings.activeCharacterId}
+              snapshot={snapshot}
+              working={working}
+              perform={perform}
+              notice={setNotice}
+            >
+              <Section
+                title="How remembering works"
+                subtitle="These preferences use Save changes below."
+              >
+                <Toggle
+                  label="Automatically remember facts"
+                  hint="Save explicit details from conversations using an extra LLM request. Invalid output retries once (additional usage)."
+                  checked={draft.memory.autoRemember}
+                  onChange={(v) =>
+                    update((d) => {
+                      d.memory.autoRemember = v;
+                    })
+                  }
+                />
+                <Toggle
+                  label="Semantic memory"
+                  hint="Recall related ideas even when the words differ. Enable an embedding provider first; memories and queries are sent to it."
+                  checked={draft.memory.semanticEnabled}
+                  onChange={(v) =>
+                    update((d) => {
+                      d.memory.semanticEnabled = v;
+                    })
+                  }
+                />
+                {!draft.providers.embedding.enabled && (
                   <button
-                    className="button secondary"
-                    disabled={working || snapshot.busy}
+                    className="text-button"
+                    onClick={() => setTab("providers")}
+                  >
+                    Set up an embedding provider <ChevronRight size={13} />
+                  </button>
+                )}
+                <details className="memory-advanced">
+                  <summary>
+                    <Settings2 size={14} /> Fine-tune recall
+                  </summary>
+                  <p className="memory-helper">
+                    Recent messages stay in context. Older conversations can be
+                    recalled by meaning, with keyword fallback if embeddings are
+                    unavailable.
+                  </p>
+                  <Range
+                    label="Minimum semantic similarity"
+                    value={draft.memory.semanticThreshold}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    onChange={(v) =>
+                      update((d) => {
+                        d.memory.semanticThreshold = v;
+                      })
+                    }
+                  />
+                  <button
+                    className="button secondary full"
+                    disabled={
+                      working ||
+                      dirty ||
+                      snapshot.busy ||
+                      !draft.providers.embedding.enabled
+                    }
                     onClick={() =>
                       void perform(async () => {
-                        if (await bridge.importMemory())
-                          setNotice("Memories imported.");
+                        const result = await bridge.reindexMemory();
+                        setNotice(
+                          `Semantic index ready: ${result.indexed} of ${result.total} memories and past messages.`,
+                        );
                       })
                     }
                   >
-                    <ArrowUpFromLine size={15} />
-                    Import
+                    Build / update semantic index
                   </button>
-                  <button
-                    className="button secondary"
-                    disabled={working}
-                    onClick={() =>
-                      void perform(async () => {
-                        if (await bridge.exportMemory())
-                          setNotice(
-                            "Memory archive exported without API keys.",
-                          );
+                  <p className="memory-helper">
+                    {dirty
+                      ? "Save your changes before updating the index."
+                      : !draft.providers.embedding.enabled
+                        ? "Enable an embedding provider in Providers first."
+                        : "Sends saved facts and past message text to your embedding provider. Provider charges may apply."}
+                  </p>
+                  {working && (
+                    <button
+                      className="text-button"
+                      onClick={() => void bridge.cancel()}
+                    >
+                      Cancel current operation
+                    </button>
+                  )}
+                  <Range
+                    label="Recent messages in context"
+                    value={draft.memory.contextMessages}
+                    min={4}
+                    max={80}
+                    step={2}
+                    onChange={(v) =>
+                      update((d) => {
+                        d.memory.contextMessages = v;
                       })
                     }
-                  >
-                    <ArrowDownToLine size={15} />
-                    Export
-                  </button>
-                </div>
-              </div>
-              <div className="two-column">
-                <div>
-                  <Section
-                    title="Long-term memories"
-                    subtitle="Relevant facts are recalled when she replies."
-                  >
-                    <input
-                      className="memory-search"
-                      placeholder="Search memories…"
-                      aria-label="Search memories"
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                    />
-                    {!facts.length && (
-                      <div className="empty-state">
-                        <Brain size={34} />
-                        <h3>
-                          {search
-                            ? "No matching memories"
-                            : "The beginning of knowing you"}
-                        </h3>
-                        <p>
-                          {search
-                            ? "Try a different search."
-                            : "Add a preference, an interest, or something you’d like her to remember."}
-                        </p>
-                      </div>
-                    )}
-                    {facts.map((f) => (
-                      <div className="memory-item" key={f.id}>
-                        <p>{f.text}</p>
-                        <div>
-                          <span>
-                            {f.source === "manual"
-                              ? "Added by you"
-                              : "From conversation"}{" "}
-                            · {new Date(f.updatedAt).toLocaleDateString()}
-                          </span>
-                          <button
-                            className="text-button"
-                            onClick={() => {
-                              setEditing(f);
-                              setFactText(f.text);
-                            }}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            className="icon-button danger"
-                            title="Delete fact"
-                            aria-label={`Delete memory: ${f.text}`}
-                            disabled={working}
-                            onClick={() =>
-                              void perform(
-                                () => bridge.deleteFact(f.id),
-                                "Memory deleted.",
-                              )
-                            }
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </Section>
-                  <Section title={editing ? "Edit memory" : "Add a memory"}>
-                    <Field label="What should she remember?">
-                      <textarea
-                        rows={3}
-                        maxLength={1000}
-                        value={factText}
-                        onChange={(e) => setFactText(e.target.value)}
-                        placeholder="I like rainy evenings and building cozy houses in Minecraft."
-                      />
-                    </Field>
-                    <div className="button-row">
-                      <button
-                        className="button primary"
-                        disabled={working || !factText.trim()}
-                        onClick={() =>
-                          void perform(async () => {
-                            await bridge.saveFact({
-                              id: editing?.id,
-                              text: factText,
-                            });
-                            setFactText("");
-                            setEditing(undefined);
-                          }, "Memory saved.")
-                        }
-                      >
-                        <Plus size={15} />
-                        {editing ? "Update memory" : "Add memory"}
-                      </button>
-                      {editing && (
-                        <button
-                          className="button secondary"
-                          onClick={() => {
-                            setEditing(undefined);
-                            setFactText("");
-                          }}
-                        >
-                          Cancel
-                        </button>
-                      )}
-                    </div>
-                  </Section>
-                </div>
-                <div>
-                  <Section title="How remembering works">
-                    <Toggle
-                      label="Semantic memory"
-                      hint="Recall related ideas even when the words differ. Enable an embedding provider first; memories and queries are sent to it."
-                      checked={draft.memory.semanticEnabled}
-                      onChange={(v) =>
-                        update((d) => {
-                          d.memory.semanticEnabled = v;
-                        })
-                      }
-                    />
-                    <Range
-                      label="Minimum semantic similarity"
-                      value={draft.memory.semanticThreshold}
-                      min={0}
-                      max={1}
-                      step={0.05}
-                      onChange={(v) =>
-                        update((d) => {
-                          d.memory.semanticThreshold = v;
-                        })
-                      }
-                    />
-                    <button
-                      className="button secondary full"
-                      disabled={
-                        working ||
-                        dirty ||
-                        snapshot.busy ||
-                        !draft.providers.embedding.enabled
-                      }
-                      onClick={() =>
-                        void perform(async () => {
-                          const result = await bridge.reindexMemory();
-                          setNotice(
-                            `Semantic index ready: ${result.indexed} of ${result.total} memories and past messages.`,
-                          );
-                        })
-                      }
-                    >
-                      Build / update semantic index
-                    </button>
-                    {working && (
-                      <button
-                        className="text-button"
-                        onClick={() => void bridge.cancel()}
-                      >
-                        Cancel current operation
-                      </button>
-                    )}
-                    <Range
-                      label="Recent messages in context"
-                      value={draft.memory.contextMessages}
-                      min={4}
-                      max={80}
-                      step={2}
-                      onChange={(v) =>
-                        update((d) => {
-                          d.memory.contextMessages = v;
-                        })
-                      }
-                    />
-                    <Range
-                      label="Facts and past messages to recall (each)"
-                      value={draft.memory.recallCount}
-                      min={0}
-                      max={20}
-                      step={1}
-                      onChange={(v) =>
-                        update((d) => {
-                          d.memory.recallCount = v;
-                        })
-                      }
-                    />
-                    <Toggle
-                      label="Automatically remember facts"
-                      hint="An additional LLM request extracts explicit facts after each reply. Invalid or truncated output retries once (additional usage). Review and edit facts here."
-                      checked={draft.memory.autoRemember}
-                      onChange={(v) =>
-                        update((d) => {
-                          d.memory.autoRemember = v;
-                        })
-                      }
-                    />
-                    <p className="muted">
-                      Recent messages form short-term context. Older
-                      conversations remain on disk and can be recalled by
-                      meaning when semantic memory is enabled, with keyword
-                      fallback if the embedding service fails. Facts persist
-                      across sessions and app restarts.
-                    </p>
-                  </Section>
-                  <Section title="Conversation history">
-                    <p className="muted">
-                      Start fresh while keeping past conversations available for
-                      recall, or delete this character’s entire chat history.
-                    </p>
-                    <button
-                      className="button secondary full"
-                      disabled={working || snapshot.busy}
-                      onClick={() =>
-                        void perform(
-                          () => bridge.newSession(),
-                          "New conversation started. Memories are kept.",
-                        )
-                      }
-                    >
-                      <Plus size={15} />
-                      New conversation
-                    </button>
-                    <button
-                      className="text-button danger"
-                      disabled={working || snapshot.busy}
-                      onClick={() => void perform(() => bridge.clearHistory())}
-                    >
-                      <Trash2 size={14} />
-                      Delete conversation history…
-                    </button>
-                  </Section>
-                </div>
-              </div>
-            </>
+                  />
+                  <Range
+                    label="Facts and past messages to recall (each)"
+                    value={draft.memory.recallCount}
+                    min={0}
+                    max={20}
+                    step={1}
+                    onChange={(v) =>
+                      update((d) => {
+                        d.memory.recallCount = v;
+                      })
+                    }
+                  />
+                </details>
+              </Section>
+            </MemorySettings>
           )}
 
           {tab === "consciousness" && (

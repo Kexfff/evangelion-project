@@ -42,6 +42,7 @@ test("renders the supplied VRM, edits settings and manages facts", async ({
   await page
     .getByRole("button", { name: "Delete memory: I love cherry wood houses." })
     .click();
+  await page.getByRole("button", { name: "Confirm delete memory" }).click();
   await expect(page.locator(".memory-item")).toHaveCount(0);
   await page
     .getByRole("button", { name: "Avatar studio", exact: true })

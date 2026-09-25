@@ -173,6 +173,15 @@ export type RuntimeEvent =
   | { type: "phase"; phase: Phase }
   | { type: "warning"; message: string };
 export interface Bridge {
+  listHistory(
+    query: import("./history").HistoryQuery,
+  ): Promise<import("./history").HistoryPage>;
+  readConversation(
+    query: import("./history").ConversationQuery,
+  ): Promise<import("./history").ConversationPage>;
+  readHistoryImage(
+    query: import("./history").HistoryImageQuery,
+  ): Promise<ImageAttachment>;
   pluginAction(action: PluginAction): Promise<string | void>;
   configureTelegram(config: TelegramSettings, token?: string): Promise<void>;
   snapshot(): Promise<Snapshot>;

@@ -223,6 +223,26 @@ Operating boundaries and remaining work:
 - [x] Refresh v0.3.1 unpacked Linux build in `release/linux-unpacked/`.
 - [ ] Verify extraction against the user's live model after restart; original failed output was not retained, and no paid live requests were made during this fix.
 
+## Memory workspace refinement — v0.3.2
+
+- [x] Replace the utilitarian memory tab with a constellation hero, selected-memory preview, source-colored cards and a dedicated add/edit composer.
+- [x] Draw up to 36 recently updated facts locally with SVG/CSS, no dependencies or provider calls. Clearly label positions/links as artistic, not embedding similarities; do not invent sample memories or include chat history in the illustration.
+- [x] Search, source filters, counts, recently updated ordering and paginated display (12 facts at a time). Empty/no-result guidance, keyboard-selectable stars, responsive layout and reduced-motion support.
+- [x] Preserve character scoping, immediate fact saves, import/export and history actions. Add inline deletion confirmation and retain drafts after failed saves.
+- [x] Separate everyday controls from expandable recall tuning; explain save behavior, embedding-provider setup, indexing prerequisites and private archives. Leave storage and retrieval algorithms unchanged.
+- [x] Validation (2026-09-25): 93 core tests, all 17 browser tests (including five new memory tests), production build and Electron regression smoke pass. Reviewed desktop/narrow screenshots, checked layouts at 1,000/760/480 px and reduced-motion behavior; refreshed `release/linux-unpacked/` as v0.3.2. Tests used fixtures and an isolated desktop profile, not live providers or user memories.
+- [ ] Optional future refinement: a genuine embedding projection with similarity-backed links. The current constellation intentionally prioritizes appearance over analytical information.
+
+## Conversation archive refinement — v0.3.3
+
+- [x] Separate Saved facts and Conversation history views inside Memory; retain the fact-only constellation unchanged.
+- [x] Read-only archive browser for all saved sessions of the active character, independent of the companion window's 200-message/current-session snapshot. Show conversation/message totals, dated previews, active-chat and Desktop/Telegram labels.
+- [x] Search message text and image names, filter channels, read matching messages or expand their full conversation context. Paginate session summaries and messages in fixed 20-item pages, oldest-first within a conversation.
+- [x] Retrieve image bytes only when explicitly opened; routine history queries return attachment names only. Keep renderer payloads bounded and IPC inputs validated; reject stale character requests and ignore stale async responses.
+- [x] Keep browsing separate from the active chat; preserve existing new-conversation, export and native-confirmed history deletion behavior. Add empty/loading/error/retry states and keyboard-accessible, responsive transcript panels.
+- [x] No storage migration, memory deletion, provider calls or changes to semantic recall.
+- [x] Validation (2026-09-25): all 100 core tests, 22 browser tests, production build and extended Electron smoke pass. Real IPC checks cover archived sessions after starting a new chat, lazy image loading and foreign-character rejection; the settings UI opens the archived thread/image. Reviewed desktop/narrow screenshots and refreshed `release/linux-unpacked/` as v0.3.3. All tests used fixtures/disposable profiles; existing user memories and assets were untouched.
+
 ## Sprint 4 — MCP and Minecraft
 
 Goal: controlled observation and action in a Minecraft world.

@@ -1,6 +1,9 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { Bridge, RuntimeEvent } from "../src/shared/schema";
 const api: Bridge = {
+  listHistory: (query) => ipcRenderer.invoke("eva:history:list", query),
+  readConversation: (query) => ipcRenderer.invoke("eva:history:read", query),
+  readHistoryImage: (query) => ipcRenderer.invoke("eva:history:image", query),
   pluginAction: (action) => ipcRenderer.invoke("eva:plugin:action", action),
   configureTelegram: (config, token) =>
     ipcRenderer.invoke("eva:plugin:telegram", config, token),
