@@ -28,6 +28,7 @@ import {
 import { bridge } from "../bridge";
 import { ConsciousnessSettings } from "./ConsciousnessSettings";
 import { MemorySettings } from "./MemorySettings";
+import { OverviewStatistics } from "./OverviewStatistics";
 import { PluginSettings } from "./PluginSettings";
 import {
   defaultSettings,
@@ -300,7 +301,7 @@ export function Settings() {
             <ExternalLink size={14} />
           </button>
           <div className="version">
-            evangelion_project <span>v0.3.3</span>
+            evangelion_project <span>v0.3.4</span>
           </div>
         </div>
       </aside>
@@ -495,39 +496,10 @@ export function Settings() {
                   <ChevronRight size={16} />
                 </button>
               </div>
-              <div className="section-label">
-                <h2>A space that grows with you</h2>
-                <span>THE ROAD AHEAD</span>
-              </div>
-              <div className="roadmap-grid">
-                <div className="roadmap-card">
-                  <span className="sprint">02 / CONSCIOUSNESS</span>
-                  <Sparkles size={22} />
-                  <h3>A spark of her own</h3>
-                  <p>
-                    Moods, a sense of time, and conversations she starts
-                    herself.
-                  </p>
-                  <span className="coming">Next chapter</span>
-                </div>
-                <div className="roadmap-card">
-                  <span className="sprint">03 / CONNECTIONS</span>
-                  <MessageCircle size={22} />
-                  <h3>Take her with you</h3>
-                  <p>
-                    A Telegram connection, built on a permissioned plugin
-                    system.
-                  </p>
-                  <span className="coming">On the horizon</span>
-                </div>
-                <div className="roadmap-card">
-                  <span className="sprint">04 / SHARED WORLDS</span>
-                  <Box size={22} />
-                  <h3>Go on an adventure</h3>
-                  <p>MCP tools and Minecraft. Build something together.</p>
-                  <span className="coming">On the horizon</span>
-                </div>
-              </div>
+              <OverviewStatistics
+                name={persistedCharacter.name}
+                stats={snapshot.historyStats}
+              />
             </>
           )}
 

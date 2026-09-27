@@ -30,6 +30,41 @@ afterEach(() => {
 });
 const now = "2026-09-08T12:00:00.000Z";
 describe("persistence and character memory", () => {
+  it("includes full-archive statistics even when the live session snapshot is empty", () => {
+    const store = makeStore();
+    store.update((d) => {
+      d.messages.push({
+        id: "archived",
+        characterId: "eva",
+        sessionId: "previous-session",
+        role: "user",
+        content: "An earlier conversation",
+        createdAt: now,
+      });
+      d.messages.push({
+        id: "foreign",
+        characterId: "other",
+        sessionId: "foreign",
+        role: "user",
+        content: "Private",
+        createdAt: now,
+      });
+    });
+    expect(store.snapshot("local-file", false).messages).toHaveLength(0);
+    expect(store.snapshot("local-file", false).historyStats).toEqual({
+      conversations: 1,
+      messages: 1,
+      images: 0,
+    });
+    store.update((d) => {
+      d.messages = [];
+    });
+    expect(store.snapshot("local-file", false).historyStats).toEqual({
+      conversations: 0,
+      messages: 0,
+      images: 0,
+    });
+  });
   it("persists settings, session, facts and conversations across a restart", () => {
     const store = makeStore();
     store.update((d) => {

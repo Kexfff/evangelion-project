@@ -42,6 +42,26 @@ export interface HistoryPage {
   totalSessions: number;
   totalMessages: number;
 }
+export interface HistoryTotals {
+  conversations: number;
+  messages: number;
+  images: number;
+}
+export function historyTotals(
+  messages: Message[],
+  characterId: string,
+): HistoryTotals {
+  const sessions = new Set<string>();
+  let count = 0;
+  let images = 0;
+  for (const message of messages) {
+    if (message.characterId !== characterId) continue;
+    sessions.add(message.sessionId);
+    count++;
+    images += message.images?.length ?? 0;
+  }
+  return { conversations: sessions.size, messages: count, images };
+}
 export type HistoryMessage = Omit<Message, "images"> & {
   images: { name: string }[];
 };

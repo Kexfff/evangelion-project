@@ -4,6 +4,7 @@ import {
   conversationQuerySchema,
   historyImageQuerySchema,
   historyQuerySchema,
+  historyTotals,
   listHistory,
   readConversation,
   readHistoryImage,
@@ -25,6 +26,35 @@ const message = (i: number, patch: Partial<Message> = {}): Message => ({
 });
 const query = historyQuerySchema.parse({ characterId: "eva" });
 describe("read-only conversation archive", () => {
+  it("counts all saved sessions, both roles and images across channels without including other characters", () => {
+    const messages = Array.from({ length: 245 }, (_, i) =>
+      message(i, {
+        sessionId: i < 200 ? "older" : "current",
+        role: i % 2 ? "assistant" : "user",
+        channel: i % 3 ? "desktop" : "telegram",
+        images: i === 0 ? [image, image] : undefined,
+      }),
+    );
+    messages.push(
+      message(999, {
+        characterId: "other",
+        sessionId: "foreign",
+        images: [image],
+      }),
+    );
+    const before = structuredClone(messages);
+    expect(historyTotals(messages, "eva")).toEqual({
+      conversations: 2,
+      messages: 245,
+      images: 2,
+    });
+    expect(historyTotals(messages, "missing")).toEqual({
+      conversations: 0,
+      messages: 0,
+      images: 0,
+    });
+    expect(messages).toEqual(before);
+  });
   it("includes old sessions, separates characters and marks only the active chat", () => {
     const messages = [
       message(0),

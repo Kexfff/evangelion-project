@@ -155,6 +155,7 @@ export type Message = z.infer<typeof messageSchema>;
 export type Phase =
   "idle" | "listening" | "transcribing" | "thinking" | "speaking";
 export interface Snapshot {
+  historyStats?: import("./history").HistoryTotals;
   settings: Settings;
   facts: Fact[];
   messages: Message[];

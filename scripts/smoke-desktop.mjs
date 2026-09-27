@@ -240,6 +240,10 @@ try {
     }),
   );
   assert.equal(history.totalMessages, 2);
+  assert.deepEqual(
+    (await win.evaluate(() => window.eva.snapshot())).historyStats,
+    { conversations: 1, messages: 2, images: 1 },
+  );
   assert.equal(history.sessions.length, 1);
   assert.equal(history.sessions[0].current, false);
   const historyMessages = await win.evaluate(
@@ -291,6 +295,9 @@ try {
   const historyWindow = desktop
     .windows()
     .find((window) => window.url().includes("window=settings"));
+  await expect(
+    historyWindow.locator(".overview-statistics dd strong"),
+  ).toHaveText(["1", "2", "1"]);
   await historyWindow
     .getByRole("button", { name: "Memory", exact: true })
     .click();

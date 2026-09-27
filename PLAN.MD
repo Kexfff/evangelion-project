@@ -243,6 +243,13 @@ Operating boundaries and remaining work:
 - [x] No storage migration, memory deletion, provider calls or changes to semantic recall.
 - [x] Validation (2026-09-25): all 100 core tests, 22 browser tests, production build and extended Electron smoke pass. Real IPC checks cover archived sessions after starting a new chat, lazy image loading and foreign-character rejection; the settings UI opens the archived thread/image. Reviewed desktop/narrow screenshots and refreshed `release/linux-unpacked/` as v0.3.3. All tests used fixtures/disposable profiles; existing user memories and assets were untouched.
 
+## Overview statistics refinement — v0.3.4
+
+- [x] Replace the outdated “A space that grows with you” roadmap with a compact “Your story so far” statistics card; preserve the other overview sections.
+- [x] Show saved conversation, message and attached-image totals for the saved active character, including past sessions and Desktop/Telegram. Count both user and assistant messages; do not count empty sessions or other characters. No provider requests, schema migration or memory changes.
+- [x] Supply lightweight totals in desktop/browser snapshots; update on state changes, show honest zeroes for empty archives and dashes when statistics are unavailable. Responsive layout and source/scope labels.
+- [x] Validation (2026-09-26): 102 core tests, 24 browser tests, production build and extended desktop smoke pass. Verified full-archive totals after starting a fresh conversation, live character updates, empty/unavailable states and narrow layouts; visually reviewed the overview screenshot. Refreshed `release/linux-unpacked/` as v0.3.4. Tests used fixtures/disposable profiles; user memories and assets were not changed.
+
 ## Sprint 4 — MCP and Minecraft
 
 Goal: controlled observation and action in a Minecraft world.

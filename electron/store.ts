@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { automationSchema } from "../src/shared/autonomy";
 import { telegramStateSchema } from "../src/shared/plugins";
+import { historyTotals } from "../src/shared/history";
 import {
   defaultSettings,
   settingsSchema,
@@ -85,6 +86,7 @@ export class Store {
   }
   snapshot(secretStorage: Snapshot["secretStorage"], busy: boolean): Snapshot {
     return {
+      historyStats: historyTotals(this.data.messages, this.characterId),
       settings: this.data.settings,
       facts: this.data.facts.filter((f) => f.characterId === this.characterId),
       messages: this.data.messages

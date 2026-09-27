@@ -5,6 +5,7 @@ import {
   type Snapshot,
 } from "./shared/schema";
 import {
+  historyTotals,
   listHistory,
   readConversation,
   readHistoryImage,
@@ -25,9 +26,15 @@ const previewState: Snapshot = {
   secretStorage: "session-only",
 };
 const publish = () =>
-  listeners.forEach((fn) =>
-    fn({ type: "state", state: structuredClone(previewState) }),
-  );
+  listeners.forEach((fn) => fn({ type: "state", state: previewSnapshot() }));
+const previewSnapshot = (): Snapshot =>
+  structuredClone({
+    ...previewState,
+    historyStats: historyTotals(
+      previewState.messages,
+      previewState.settings.activeCharacterId,
+    ),
+  });
 const desktopOnly = async (): Promise<never> => {
   throw new Error(
     "This is the browser preview. Run npm run dev to use voice, providers, and persistent memory in the desktop app.",
@@ -43,7 +50,7 @@ const preview: Bridge = {
   pluginAction: desktopOnly,
   configureTelegram: desktopOnly,
   preview: true,
-  snapshot: async () => structuredClone(previewState),
+  snapshot: async () => previewSnapshot(),
   saveSettings: async (settings, keys) => {
     if (Object.values(keys).some(Boolean)) return desktopOnly();
     previewState.settings = structuredClone(settings);
