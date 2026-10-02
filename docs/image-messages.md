@@ -1,0 +1,9 @@
+# Image messages
+
+[← Documentation](README.md) · [Project home](../README.md)
+
+Click the paperclip in the companion composer to choose images, or paste an image from the clipboard. Preview and remove attachments before sending; a text caption is optional. PNG, JPEG, WebP and GIF are accepted, up to four images per message and 2 MB per file. Larger files must be resized before attaching. Choose a vision-capable LLM in Providers: the model catalog is not filtered by vision support, and text-only models or providers with stricter image limits may reject the request.
+
+Images use text-first `content` arrays with `image_url` data URLs through the existing chat-completions endpoint, following the [OpenRouter image-input format](https://openrouter.ai/docs/guides/overview/multimodal/image-understanding). No public upload or separate image provider is needed. Selecting/pasting only reads the image locally; sending uploads it to your configured LLM service. The four newest images within the bounded recent conversation are included on subsequent turns, so follow-up questions can reference them; older omitted images are explicitly marked. Starting a new conversation stops including images from the previous session.
+
+Attachments are stored inline with messages in `companion.json`, survive restarts and appear in chat history and memory exports. These images, including original metadata, are not encrypted or stripped; the normal database backup can retain deleted attachments until the next write. Treat archives as private. Base64 makes image-heavy histories larger, and the existing 50 MB archive import limit still applies. Deleting history also removes its attachments from the current database. Semantic indexing and automatic fact extraction use message text only, not image bytes; image-only turns skip both. Visual long-term retrieval, automatic resizing and a separate scalable attachment store remain future work.

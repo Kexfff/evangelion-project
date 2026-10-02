@@ -66,7 +66,7 @@ async function openMemory(page: Page, count = 8) {
         },
         assetUrl: (asset: string) =>
           asset === "builtin:eva"
-            ? "/Eva.vrm"
+            ? "/AvatarSample_B.vrm"
             : `/animations/${asset.slice(10)}.vrma`,
         saveSettings: async (settings: typeof data.settings) => {
           data.settings = settings;

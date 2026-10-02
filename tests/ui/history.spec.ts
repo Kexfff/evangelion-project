@@ -106,7 +106,7 @@ async function openHistory(
           },
           assetUrl: (asset: string) =>
             asset === "builtin:eva"
-              ? "/Eva.vrm"
+              ? "/AvatarSample_B.vrm"
               : `/animations/${asset.slice(10)}.vrma`,
           listHistory: async (query: unknown) => {
             calls.push("list");

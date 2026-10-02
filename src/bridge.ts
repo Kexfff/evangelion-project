@@ -114,7 +114,7 @@ const preview: Bridge = {
   },
   assetUrl: (asset) =>
     asset === "builtin:eva"
-      ? "/Eva.vrm"
+      ? "/AvatarSample_B.vrm"
       : `/animations/${asset.slice(10)}.vrma`,
 };
 export const bridge = window.eva ?? preview;

@@ -250,6 +250,15 @@ Operating boundaries and remaining work:
 - [x] Supply lightweight totals in desktop/browser snapshots; update on state changes, show honest zeroes for empty archives and dashes when statistics are unavailable. Responsive layout and source/scope labels.
 - [x] Validation (2026-09-26): 102 core tests, 24 browser tests, production build and extended desktop smoke pass. Verified full-archive totals after starting a fresh conversation, live character updates, empty/unavailable states and narrow layouts; visually reviewed the overview screenshot. Refreshed `release/linux-unpacked/` as v0.3.4. Tests used fixtures/disposable profiles; user memories and assets were not changed.
 
+## Default avatar and documentation refresh — v0.3.5
+
+- [x] Use the supplied `AvatarSample_B.vrm` in desktop development, browser preview and packaged resources. Retain `builtin:eva` for existing saved characters; leave custom avatars, settings and memories unchanged.
+- [x] Update the bundled-avatar control and test fixtures; replace the old model-size assertion with an exact SHA-256 asset comparison. Keep the provided VRM binary and all animations unchanged.
+- [x] Move the detailed README material into topic guides in `docs/`, with an index, relative navigation and a compact project front page. Keep the development plan at the repository root.
+- [x] Record embedded VRoid attribution and permissions in `docs/assets.md`; do not infer a named license from `licenseName: Other` and an empty license URL.
+- [x] Validation (2026-10-02): 102 core tests, 24 browser tests (including the new model and all nine animations), production build and full Electron smoke pass. Verified 52 local documentation links and exact source/packaged VRM hashes; refreshed `release/linux-unpacked/` as v0.3.5 with no old model in its assets. The smoke harness now waits for renderer initialization before changing voice settings after restart, waits for actual synthesis requests, and reports fixture-only diagnostics on failure. No application audio behavior or user data was changed.
+- [ ] Add the model's original source/license URL or license text when supplied.
+
 ## Sprint 4 — MCP and Minecraft
 
 Goal: controlled observation and action in a Minecraft world.

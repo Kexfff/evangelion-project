@@ -301,7 +301,7 @@ export function Settings() {
             <ExternalLink size={14} />
           </button>
           <div className="version">
-            evangelion_project <span>v0.3.4</span>
+            evangelion_project <span>v0.3.5</span>
           </div>
         </div>
       </aside>
@@ -620,7 +620,7 @@ export function Settings() {
                   className="text-button"
                   onClick={() => editCharacter({ avatar: "builtin:eva" })}
                 >
-                  Use bundled Eva
+                  Use bundled avatar
                 </button>
               </Section>
             </div>

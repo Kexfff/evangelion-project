@@ -174,7 +174,8 @@ else {
           return new Response("Not found", { status: 404 });
         const name = decodeURIComponent(url.pathname.slice(1));
         let file: string;
-        if (name === "builtin:eva") file = path.join(assets, "Eva.vrm");
+        if (name === "builtin:eva")
+          file = path.join(assets, "AvatarSample_B.vrm");
         else if (
           name.startsWith("animation:") &&
           animations.has(name.slice(10))

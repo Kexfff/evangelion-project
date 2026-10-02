@@ -28,7 +28,7 @@ export function Avatar({
   const host = useRef<HTMLDivElement>(null);
   const live = useRef({ settings, speaking, amplitude, behavior, gesture });
   live.current = { settings, speaking, amplitude, behavior, gesture };
-  const [status, setStatus] = useState("Loading Eva…");
+  const [status, setStatus] = useState("Loading avatar…");
   const [error, setError] = useState("");
   useEffect(() => {
     const element = host.current!;

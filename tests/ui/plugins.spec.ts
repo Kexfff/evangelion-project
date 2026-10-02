@@ -49,7 +49,7 @@ test("installed plugin UI defaults off, scopes optional permissions and validate
         },
         assetUrl: (asset: string) =>
           asset === "builtin:eva"
-            ? "/Eva.vrm"
+            ? "/AvatarSample_B.vrm"
             : `/animations/${asset.slice(10)}.vrma`,
         configureTelegram: async (
           config: typeof snapshot.plugins.config,

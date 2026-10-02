@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 
 // An isolated, disposable profile and a local provider exercise real Electron IPC/HTTP.
 const profile = await mkdtemp(path.join(tmpdir(), "eva-desktop-smoke-"));
@@ -183,12 +184,21 @@ try {
     (await win.evaluate(() => window.eva.reindexMemory())).indexed,
     2,
   );
-  const assetBytes = await win.evaluate(
-    async () =>
-      (await (await fetch(window.eva.assetUrl("builtin:eva"))).arrayBuffer())
-        .byteLength,
+  const assetHash = await win.evaluate(async () => {
+    const bytes = await (
+      await fetch(window.eva.assetUrl("builtin:eva"))
+    ).arrayBuffer();
+    return Array.from(
+      new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),
+      (b) => b.toString(16).padStart(2, "0"),
+    ).join("");
+  });
+  assert.equal(
+    assetHash,
+    createHash("sha256")
+      .update(await readFile("AvatarSample_B.vrm"))
+      .digest("hex"),
   );
-  assert.ok(assetBytes > 70000000);
   const blocked = await win.evaluate(
     async () => (await fetch("eva://assets/../../etc/passwd")).status,
   );
@@ -321,6 +331,11 @@ try {
   desktop = await launch();
   const reopened = await desktop.firstWindow();
   await reopened.waitForFunction(() => !!window.eva);
+  // A preload bridge exists before React has consumed its initial snapshot.
+  // Do not change voice settings until the restarted companion is initialized.
+  await reopened
+    .locator('.avatar-renderer[data-animation="idle_loop"]')
+    .waitFor({ timeout: 60000 });
   const state = await reopened.evaluate(() => window.eva.snapshot());
   assert.equal(state.facts[0].text, "The user likes Minecraft.");
   assert.equal(state.messages.length, 0);
@@ -338,6 +353,18 @@ try {
     .getByRole("textbox", { name: "Message Eva" })
     .fill("Test sentence queue");
   await reopened.getByRole("button", { name: "Send message" }).click();
+  // The UI may briefly report idle between streamed sentences. Wait for the
+  // observable synthesis requests before treating that label as completion.
+  await expect
+    .poll(
+      () =>
+        requests
+          .filter((r) => r.url === "/v1/audio/speech")
+          .slice(previousSpeechCount)
+          .map((r) => JSON.parse(r.body).input),
+      { timeout: 15000 },
+    )
+    .toEqual(["First sentence.", "Second sentence."]);
   await reopened.waitForFunction(
     () =>
       document.querySelector(".phase-label")?.textContent === "here with you" &&
@@ -347,11 +374,6 @@ try {
     null,
     { timeout: 15000 },
   );
-  const spoken = requests
-    .filter((r) => r.url === "/v1/audio/speech")
-    .slice(previousSpeechCount)
-    .map((r) => JSON.parse(r.body).input);
-  assert.deepEqual(spoken, ["First sentence.", "Second sentence."]);
   assert.equal(await reopened.getByRole("alert").count(), 0);
   const chatRequest = requests
     .filter((r) => r.url === "/v1/chat/completions")
@@ -641,6 +663,22 @@ try {
   console.log(
     "Desktop smoke passed: plugin installation/settings, vault and grant persistence/removal, restart-safe authorized reminders, typing deferral, task cancellation, pause, activity logs, image attachments, credential persistence, models, semantic recall, all speech modes, barge-in, VRM and archives.",
   );
+} catch (error) {
+  // Only fixture UI diagnostics; never dump credentials or conversation stores.
+  if (desktop)
+    for (const window of desktop.windows()) {
+      const diagnostic = await window
+        .evaluate(() => ({
+          phase: document.querySelector(".phase-label")?.textContent,
+          alerts: Array.from(
+            document.querySelectorAll('[role="alert"]'),
+            (node) => node.textContent,
+          ),
+        }))
+        .catch(() => ({ unavailable: true }));
+      console.error("Desktop smoke diagnostics:", JSON.stringify(diagnostic));
+    }
+  throw error;
 } finally {
   if (desktop) await desktop.close();
   await new Promise((resolve) => server.close(resolve));

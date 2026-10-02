@@ -1,6 +1,6 @@
 {
   "name": "evangelion_project",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "private": true,
   "description": "A local-first desktop companion with voice, memory, and a VRM avatar.",
   "type": "module",
@@ -14,7 +14,7 @@
     "test": "vitest run",
     "test:ui": "playwright test",
     "test:desktop": "npm run build && node scripts/smoke-desktop.mjs",
-    "format": "prettier --write src electron scripts tests *.ts *.json *.html *.md PLAN.MD",
+    "format": "prettier --write src electron scripts tests docs *.ts *.json *.html *.md PLAN.MD",
     "package": "npm run build && electron-builder --dir"
   },
   "dependencies": {
@@ -54,8 +54,8 @@
     ],
     "extraResources": [
       {
-        "from": "Eva.vrm",
-        "to": "assets/Eva.vrm"
+        "from": "AvatarSample_B.vrm",
+        "to": "assets/AvatarSample_B.vrm"
       },
       {
         "from": "animations",
