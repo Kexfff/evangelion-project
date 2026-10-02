@@ -2,7 +2,7 @@
 
 [← Documentation](README.md) · [Project home](../README.md)
 
-Sprint 4's foundation is available in v0.4.0. Telegram remains a bundled chat channel; MCP adds separately configured tool providers to the same companion. Minecraft's bundled adapter, persistent game jobs and autonomous gameplay are **not implemented yet**. The first game target is Java Edition in a LAN world.
+Sprint 4's MCP foundation landed in v0.4.0. Telegram remains a bundled chat channel; MCP adds separately configured tool providers to the same companion. v0.4.1 adds a [bundled Minecraft adapter](minecraft.md) for Java Edition LAN worlds, with persistent job history and bounded background actions. Proactive/autonomous game planning remains future work.
 
 ## Connect a server
 
@@ -14,7 +14,7 @@ Sprint 4's foundation is available in v0.4.0. Telegram remains a bundled chat ch
 6. Save, then **Connect / reconnect**. Review the native trust confirmation. Saving alone never runs a program or contacts a server.
 7. Review the discovered tools and choose their permissions. All tools start **Blocked**. Ask the companion to use an enabled tool from desktop or your paired Telegram account.
 
-External MCP servers must already be installed or hosted: the app does not install packages, runtimes or servers for you. Once configured and trusted, the app launches a local server itself. The future bundled Minecraft adapter will include its runtime dependencies, so users will not need a separate bot process or manual MCP setup for Minecraft.
+External MCP servers must already be installed or hosted: the app does not install packages, runtimes or servers for you. Once configured and trusted, the app launches a local server itself. The bundled Minecraft adapter includes its runtime dependencies and has its own controls above the generic MCP connections; no separate bot process or executable configuration is needed.
 
 The application must remain running. Enabled connections for the active character start when the app starts and reconnect after ordinary settings changes. Disconnect disables startup. Failed connections and changed tool lists require explicit reconnect; there is no automatic retry of tool execution or replay of ambiguous effects. The client negotiates protocol versions through the official SDK. Unsupported protocol versions fail closed.
 
@@ -44,7 +44,7 @@ The last 200 tool audit events persist locally: timestamp, connection ID, tool n
 - At most 64 external tools and 48,000 serialized characters of external tool definitions per LLM request. Tools beyond that budget are not advertised.
 - Tool definitions: 20,000 characters each; input/output schemas: 16,000 characters, 1,500 traversed nodes and depth 16. Standard object schemas, types, required fields, enums, bounds and combinators are supported with Draft 2020-12 or explicitly declared Draft 7. References (`$ref`, `$dynamicRef`), regex validation (`pattern`, `patternProperties`) and `format` are currently rejected. An unsupported schema fails discovery; the app does not silently skip validation.
 - Stdio buffers and individual HTTP response streams are capped at 1 MiB. A long-lived HTTP notification stream exceeding that bound requires reconnect.
-- Connection/discovery: 20-second overall deadline; individual discovery requests: 15 seconds. Calls: 30 seconds; approvals: 60 seconds. Long-running background jobs are future work.
+- Connection/discovery: 20-second overall deadline; individual discovery requests: 15 seconds. Calls: 30 seconds; approvals: 60 seconds. Minecraft action calls return a job ID promptly; its bounded background jobs have separate stop/progress controls. Generic MCP servers have no background-job manager.
 - Arguments: 8,000 characters. A result: 24,000 characters. Cumulative results per turn: 48,000 characters. At most three tool rounds of four calls each, then a final-answer request; calls execute sequentially.
 - Tools only: no MCP resources/prompts UI, sampling, elicitation, filesystem roots, OAuth login, legacy HTTP+SSE transport, marketplace or third-party in-process plugin loading.
 

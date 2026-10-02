@@ -16,6 +16,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { Store, atomicWrite } from "./store";
+import { configureTestProfile } from "./test-profile";
 import {
   historyQuerySchema,
   conversationQuerySchema,
@@ -28,6 +29,8 @@ import {
 import { CompanionRuntime } from "./runtime";
 import { CredentialVault } from "./credentials";
 import { PluginHost } from "./plugin-host";
+import { minecraftFactory } from "./minecraft-transport";
+import { MINECRAFT_ID, minecraftConfigSchema } from "../src/shared/minecraft";
 import { telegramSettingsSchema } from "../src/shared/plugins";
 import {
   mcpConfigSchema,
@@ -53,8 +56,7 @@ const devUrl = process.env.EVA_DEV_URL;
 if (devUrl && devUrl !== "http://127.0.0.1:5173")
   throw new Error("Unsupported development origin");
 app.setName("evangelion_project");
-if (!app.isPackaged && process.env.EVA_TEST_DATA_DIR)
-  app.setPath("userData", process.env.EVA_TEST_DATA_DIR);
+configureTestProfile(app, process.env.EVA_TEST_DATA_DIR);
 protocol.registerSchemesAsPrivileged([
   {
     scheme: "eva",
@@ -169,7 +171,12 @@ else {
         vault.mode,
         send,
       );
-      plugins = new PluginHost(runtime, vault);
+      plugins = new PluginHost(
+        runtime,
+        vault,
+        undefined,
+        minecraftFactory(path.join(here, "minecraft-worker.cjs")),
+      );
       void plugins.start();
       const assets = app.isPackaged
         ? path.join(process.resourcesPath, "assets")
@@ -241,17 +248,60 @@ else {
           return fn(...args);
         });
       handle("snapshot", () => runtime.snapshot());
-      handle("mcp:configure", (config, secrets) =>
+      handle("minecraft:configure", (raw) =>
         plugins.exclusive(() =>
-          plugins.mcp.configure(
-            mcpConfigSchema.parse(config),
-            mcpSecretsSchema.optional().parse(secrets),
+          plugins.minecraft.configure(
+            minecraftConfigSchema.parse(raw),
+            plugins.mcp,
           ),
         ),
+      );
+      handle("minecraft:action", (raw) => {
+        const action = z.enum(["connect", "disconnect", "stop"]).parse(raw);
+        if (action === "stop") {
+          plugins.minecraft.stopAction();
+          return;
+        }
+        return plugins.exclusive(async () => {
+          if (action === "connect") {
+            const c = store.data.minecraft.config;
+            const result = await dialog.showMessageBox({
+              type: "question",
+              title: "Join Minecraft world?",
+              message: `Join ${c.host}:${c.port} as ${c.username}?`,
+              detail: `Only join a world you own or have permission to use. Java ${c.version}, ${c.auth} authentication. Movement: ${c.movement ? "enabled" : "off"}; block modification: ${c.modifyBlocks ? "enabled within configured build area" : "off"}. Tool grants apply separately. No automatic replay of game jobs.`,
+              buttons: ["Cancel", "Join world"],
+              defaultId: 0,
+              cancelId: 0,
+            });
+            if (result.response !== 1) return;
+          }
+          await plugins.mcp.action(MINECRAFT_ID, action);
+        });
+      });
+      handle("minecraft:landmark", (name) =>
+        plugins.minecraft.saveLandmark(
+          z.string().trim().min(1).max(80).parse(name),
+        ),
+      );
+      handle("minecraft:delete-landmark", (id) =>
+        plugins.minecraft.deleteLandmark(z.string().uuid().parse(id)),
+      );
+      handle("mcp:configure", (config, secrets) =>
+        plugins.exclusive(() => {
+          if (config?.id === MINECRAFT_ID)
+            throw new Error("Use Minecraft settings for the bundled adapter.");
+          return plugins.mcp.configure(
+            mcpConfigSchema.parse(config),
+            mcpSecretsSchema.optional().parse(secrets),
+          );
+        }),
       );
       handle("mcp:action", (rawId, rawAction) =>
         plugins.exclusive(async () => {
           const id = mcpIdSchema.parse(rawId);
+          if (id === MINECRAFT_ID)
+            throw new Error("Use Minecraft controls for the bundled adapter.");
           const action = z
             .enum(["connect", "disconnect", "remove"])
             .parse(rawAction);
@@ -277,14 +327,15 @@ else {
           await plugins.mcp.action(id, action);
         }),
       );
-      handle("mcp:grant", (id, tool, fingerprint, policy) =>
-        plugins.mcp.grant(
+      handle("mcp:grant", (id, tool, fingerprint, policy) => {
+        if (id === MINECRAFT_ID) plugins.minecraft.stopAction();
+        return plugins.mcp.grant(
           mcpIdSchema.parse(id),
           z.string().min(1).max(128).parse(tool),
           z.string().length(64).parse(fingerprint),
           toolPolicySchema.parse(policy),
-        ),
-      );
+        );
+      });
       handle("mcp:approval", (id, allow) =>
         plugins.mcp.approve(
           z.string().uuid().parse(id),
@@ -519,6 +570,7 @@ else {
       });
       handle("session:new", () => {
         idle();
+        plugins.minecraft.stopAction();
         store.update((d) => {
           d.sessions[store.characterId] = randomUUID();
         });
@@ -661,6 +713,7 @@ else {
       scheduler.unref();
       const suspend = () => {
         runtime.autonomy.suspend(true);
+        plugins.minecraft.stopAction();
         void runtime.cancel();
       };
       const resume = () => {

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { assertSmokeProfile } from "./assert-smoke-profile.mjs";
 
 // An isolated, disposable profile and a local provider exercise real Electron IPC/HTTP.
 const profile = await mkdtemp(path.join(tmpdir(), "eva-desktop-smoke-"));
@@ -124,8 +125,8 @@ await new Promise((resolve, reject) => {
 });
 const baseUrl = `http://127.0.0.1:${server.address().port}/v1`;
 let desktop;
-const launch = () =>
-  electron.launch({
+const launch = async () => {
+  const instance = await electron.launch({
     args: [
       ".",
       ...(process.env.EVA_TEST_HEADLESS ? ["--ozone-platform=headless"] : []),
@@ -135,6 +136,14 @@ const launch = () =>
     env: { ...process.env, EVA_DEV_URL: "", EVA_TEST_DATA_DIR: profile },
     timeout: 30000,
   });
+  try {
+    await assertSmokeProfile(instance, profile);
+    return instance;
+  } catch (error) {
+    await instance.close();
+    throw error;
+  }
+};
 try {
   desktop = await launch();
   desktop.process().stderr.on("data", (data) => process.stderr.write(data));

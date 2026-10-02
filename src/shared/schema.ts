@@ -165,6 +165,7 @@ export interface Snapshot {
   autonomy?: AutonomySnapshot;
   plugins?: PluginSnapshot;
   mcp?: import("./mcp").McpSnapshot;
+  minecraft?: import("./minecraft").MinecraftSnapshot;
 }
 export type RuntimeEvent =
   | { type: "autonomous-start"; id: string }
@@ -175,6 +176,12 @@ export type RuntimeEvent =
   | { type: "phase"; phase: Phase }
   | { type: "warning"; message: string };
 export interface Bridge {
+  configureMinecraft(
+    config: import("./minecraft").MinecraftConfig,
+  ): Promise<void>;
+  minecraftAction(action: "connect" | "disconnect" | "stop"): Promise<void>;
+  saveLandmark(name: string): Promise<void>;
+  deleteLandmark(id: string): Promise<void>;
   configureMcp(
     config: import("./mcp").McpConfig,
     secrets?: import("./mcp").McpSecrets,

@@ -41,6 +41,10 @@ const desktopOnly = async (): Promise<never> => {
   );
 };
 const preview: Bridge = {
+  configureMinecraft: desktopOnly,
+  minecraftAction: desktopOnly,
+  saveLandmark: desktopOnly,
+  deleteLandmark: desktopOnly,
   configureMcp: desktopOnly,
   mcpAction: desktopOnly,
   mcpGrant: desktopOnly,

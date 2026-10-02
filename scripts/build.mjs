@@ -20,3 +20,12 @@ await build({
   target: "node22",
   external: ["electron"],
 });
+await build({
+  entryPoints: ["electron/minecraft-worker.ts"],
+  outfile: "dist-electron/minecraft-worker.cjs",
+  bundle: true,
+  platform: "node",
+  format: "cjs",
+  target: "node22",
+  external: ["mineflayer", "mineflayer-pathfinder", "vec3"],
+});

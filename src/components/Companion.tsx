@@ -241,6 +241,18 @@ export function Companion() {
             {!app.partial && <MessageImages images={last?.images} />}
           </div>
         )}
+        {app.state.minecraft?.live.job?.status === "running" && (
+          <div className="success-notice" role="status">
+            Minecraft: {app.state.minecraft.live.job.kind} in progress.{" "}
+            <button
+              onClick={() =>
+                void bridge.minecraftAction("stop").catch(app.report)
+              }
+            >
+              Stop game action
+            </button>
+          </div>
+        )}
         {!!app.state.mcp?.pending.length && (
           <div className="inline-error" role="status">
             A tool needs approval in Settings → Plugins &amp; MCP.{" "}

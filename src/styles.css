@@ -562,6 +562,24 @@ nav button.active:before {
   margin-block: 8px;
   overflow-wrap: anywhere;
 }
+.minecraft-settings {
+  margin-bottom: 24px;
+}
+.minecraft-settings details {
+  margin-block: 16px;
+}
+.minecraft-settings summary {
+  cursor: pointer;
+}
+.minecraft-jobs {
+  padding-left: 20px;
+}
+.minecraft-jobs li {
+  margin-block: 12px;
+}
+.minecraft-settings .field {
+  margin-block: 12px;
+}
 .mcp-settings + .plugin-settings {
   margin-top: 24px;
 }

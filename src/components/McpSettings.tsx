@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { bridge } from "../bridge";
+import { MINECRAFT_ID } from "../shared/minecraft";
 import {
   mcpConfigSchema,
   mcpSecretsSchema,
@@ -15,6 +16,10 @@ export function McpSettings({
   data?: McpSnapshot;
   characterId: string;
 }) {
+  data = data && {
+    ...data,
+    servers: data.servers.filter((s) => s.config.id !== MINECRAFT_ID),
+  };
   const [draft, setDraft] = useState<McpConfig>();
   const [editing, setEditing] = useState(false);
   const [args, setArgs] = useState("[]");
@@ -72,7 +77,8 @@ export function McpSettings({
       <p>
         Local servers run as trusted programs with your OS account’s access, not
         in a sandbox. Remote servers receive tool arguments. Only connect
-        servers you trust. Minecraft’s bundled adapter is the next step.
+        servers you trust. The bundled Minecraft adapter has its own controls
+        above.
       </p>
       <div className="button-row">
         <button

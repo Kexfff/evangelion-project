@@ -31,6 +31,7 @@ import { MemorySettings } from "./MemorySettings";
 import { OverviewStatistics } from "./OverviewStatistics";
 import { PluginSettings } from "./PluginSettings";
 import { McpSettings } from "./McpSettings";
+import { MinecraftSettings } from "./MinecraftSettings";
 import {
   defaultSettings,
   settingsSchema,
@@ -302,7 +303,7 @@ export function Settings() {
             <ExternalLink size={14} />
           </button>
           <div className="version">
-            evangelion_project <span>v0.4.0</span>
+            evangelion_project <span>v0.4.3</span>
           </div>
         </div>
       </aside>
@@ -314,7 +315,7 @@ export function Settings() {
           </div>
           <span className="foundation-badge">
             <span className="status-dot" />
-            Sprint 4 foundation
+            Sprint 4 · Minecraft
           </span>
         </header>
         <main className="settings-content">
@@ -1133,6 +1134,11 @@ export function Settings() {
           )}
           {tab === "plugins" && (
             <>
+              <MinecraftSettings
+                data={snapshot.minecraft}
+                mcp={snapshot.mcp}
+                characterId={snapshot.settings.activeCharacterId}
+              />
               <McpSettings
                 data={snapshot.mcp}
                 characterId={snapshot.settings.activeCharacterId}

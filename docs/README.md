@@ -14,6 +14,7 @@
 - [Consciousness](consciousness.md) — behavior simulation, initiative, quiet hours, and approved reminders.
 - [Telegram and plugins](telegram.md) — pairing, permissions, shared memory, and delivery limits.
 - [MCP connections and tools](mcp.md) — trusted local/remote servers, tool permissions, one-call approvals, cancellation, and limits.
+- [Minecraft](minecraft.md) — bundled Java LAN companion, following, bounded game jobs, and world landmarks.
 
 ## Under the hood
 

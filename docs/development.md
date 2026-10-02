@@ -14,12 +14,32 @@ If Chromium is already installed elsewhere, set `EVA_TEST_BROWSER` to its execut
 
 MCP integration tests launch `tests/fixtures/mcp-server.mjs` with Node and create disposable loopback HTTP servers. The suite needs permission to spawn that process and bind localhost. It verifies real SDK negotiation, stdio and Streamable HTTP (JSON and SSE responses), secret injection, bounded responses and cancellation, alongside mocked grants, approval expiry, session isolation, metadata invalidation and redacted audit tests. Restricted sandboxes may need explicit permission to run these tests.
 
-Validated v0.4.0 baseline: 125 core tests, 28 browser tests, production build, Linux unpacked packaging and full Electron smoke pass. The packaged main-process bundle was checked against the tested build; the bundled VRM was checked against its source hash.
+v0.4.1 adds 18 Minecraft core tests and two settings UI tests: **143 core tests and 30 browser tests pass**, along with the production build, full desktop smoke and optional packaged Minecraft smoke. Core tests use simulated game state; ordinary test commands do not connect to Minecraft. The Linux unpacked main/worker bundles and avatar match source. See [PLAN.MD](../PLAN.MD) for the live-test record and remaining acceptance work.
 
 The desktop smoke test opens temporary Electron windows on your normal display and uses an isolated profile under the system temporary directory. It verifies real local HTTP calls through IPC, VRM/VRMA loading, model lists, semantic recall, sentence ordering, synthetic-microphone interruption, archive round-trips, and persistence across restarts without a keyring. It also verifies an authorized reminder across restart, typing deferral, cancellation, activity logs, immediate autonomy pause, and real plugin installation/settings, encrypted token/grant persistence and removal. It then closes its windows and removes its own test data. File/confirmation dialogs are stubbed. The test does not use your credentials or app profile. A real display (or an X virtual framebuffer) is recommended: Electron's Ozone headless backend crashed during validation here. Live Telegram connectivity and actual vision/ASR/TTS quality still need validation with your bot and providers.
 
 The desktop smoke also checks the conversation archive through real IPC: old sessions remain readable after starting fresh, image payloads load only on request, foreign-character queries are rejected, and the settings history browser opens an archived thread and image.
 
 The extended MCP desktop smoke configures and launches the local fixture through real IPC (with its native trust dialog stubbed), grants an ask-each-time tool, approves it in Settings, and verifies the tool result reaches the fixture LLM. It then restarts Electron, checks connection/secret/grant persistence, exercises emergency stop and removes the fixture configuration. App shutdown waits for managed subprocess cleanup. The ESM main-process build includes a `createRequire` shim for bundled CommonJS dependencies used by the SDK's subprocess transport.
+
+## Optional live Minecraft smoke
+
+Only run against a world whose owner permits joining and movement. Build the app first, open a Java 26.1 LAN world, then explicitly opt in:
+
+```sh
+EVA_MINECRAFT_LIVE=yes EVA_MC_PLAYER=YourPlayerName node scripts/smoke-minecraft.mjs
+```
+
+The script defaults to `127.0.0.1:25556`; `EVA_MC_PORT` changes the port. It uses an isolated temporary app profile and fixture LLM, joins as `EvaCompanion`, observes inventory/state, saves a temporary landmark, follows the supplied player, verifies concurrent chat and stop, then emergency-disconnects. Omit `EVA_MC_PLAYER` to skip following. Block edits and public chat remain disabled. It closes the app and removes its own profile afterward; it does not alter your saved application settings. Native trust dialogs are stubbed only in this test.
+
+Set `EVA_TEST_EXECUTABLE` to the unpacked app executable to repeat the same test against a packaged build. The packaged worker loads Mineflayer and its data files from production dependencies and uses Electron's Node runtime, not a separately installed executable.
+
+**Packaged-test safety:** use v0.4.2 or later. v0.4.1 ignored `EVA_TEST_DATA_DIR` when packaged, allowing fixture settings/history to reach the normal profile. Both smoke harnesses now verify the actual `userData` and `sessionData` paths before fixture operations, and the app applies the override before opening storage in all builds. Do not run the old packaged smoke against a v0.4.1 binary.
+
+`node scripts/smoke-isolation.mjs` verifies an isolated settings write without connecting to Minecraft or any provider; `EVA_TEST_EXECUTABLE` selects a packaged executable. Optionally set `EVA_TEST_GUARD_PROFILE` to a closed app's `companion.json` to assert that its SHA-256 stays unchanged. The guard reads only; it never edits the normal profile.
+
+v0.4.2 verification: **148 core tests**, production build, full desktop regression smoke and packaged isolation smoke pass. The guarded normal profile was unchanged by the packaged test. The renderer's only v0.4.2 change is its version label; the 30-test UI result above is from v0.4.1.
+
+v0.4.3 verification: **154 core tests, 30 UI tests**, production/package build, full desktop smoke and packaged live Minecraft smoke pass. Following tests now require observed proximity within four blocks, not merely a running job; both source and packaged live trials traversed terrain and reached the player. The UI tests also cover resetting legacy movement limits and granting everyday tools without enabling public chat or block edits.
 
 See [PLAN.MD](../PLAN.MD) for architecture, sprint checklists, limitations, and the validation record.

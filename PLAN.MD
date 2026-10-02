@@ -269,8 +269,8 @@ Goal: controlled observation and action in a Minecraft world.
 - [x] Server configuration, vault-backed secret injection, bounded tool discovery, input/output schema validation, timeouts and cancellation.
 - [x] Tool permissions (blocked / ask each time / explicitly allowed), one-call desktop approvals, definition-fingerprinted grants, redacted persistent audit log and emergency stop.
 - [x] Existing LLM tool loop generalized for async MCP tools, advertised-tool allowlist, failed-tool retry suppression, bounded rounds/results/definitions, visible pending approvals and activity outcomes. Long-running task progress remains with game jobs below.
-- [ ] Minecraft adapter (evaluate Mineflayer for supported Java Edition versions) exposing observation, chat, navigation, inventory and simple build actions.
-- [ ] Configure game address, account/authentication, allowed worlds, movement/action limits and reconnect policy.
+- [x] Bundled Mineflayer adapter for Java 26.1 exposing observation, chat, navigation, inventory and bounded collect/build actions.
+- [x] Configure game address, account/authentication, world label/dimension, movement/action limits and explicit reconnect after failure. Microsoft authentication is implemented but not live-verified.
 - [ ] Task planning with explicit completion criteria; reconcile expected game state with real observations.
 - [ ] Coordinate game actions, voice, Telegram and internal tasks through the same arbiter.
 - [ ] Integration tests against a disposable local Minecraft server and simulated MCP failures.
@@ -294,9 +294,49 @@ Boundaries: tools only; no OAuth flow, resources/prompts UI, sampling/elicitatio
 
 Next steps:
 
-- [ ] Bundled Mineflayer MCP adapter: Java LAN connection/authentication, observation and following; no separate user-run bot/MCP process.
-- [ ] Persistent game jobs and action ownership independent of conversation turns; bounded collection/building, world-scoped memory and observed completion checks.
-- [ ] Authorized autonomous gameplay, game-specific permissions/limits and Minecraft server integration tests.
+- [x] Bundled Mineflayer MCP adapter: Java LAN connection/authentication, observation and following; no separate user-run bot/MCP process.
+- [x] Persistent game-job history and action ownership independent of conversation turns; bounded collection/building, world-scoped landmarks and observed completion checks. Interrupted jobs are not resumed/replayed.
+- [ ] Authorized autonomous gameplay and broader Minecraft server integration tests; basic game-specific permissions/limits landed in v0.4.1.
+
+### Minecraft adapter and bounded jobs — v0.4.1
+
+- [x] Bundle Mineflayer 4.39.0 / pathfinder 2.4.5 with an Electron utility-process MCP adapter; packaged users need no separate Node installation, bot process or generic MCP executable setup.
+- [x] Minecraft settings: host/port, distinct account name, offline/Microsoft authentication, world label/dimension, trusted follow target, movement radius, job deadline, public-chat flag, block-edit area and block-count cap. Movement, public chat and block changes default off; MCP tool grants independently default blocked.
+- [x] Eight bounded tools: observe (nearby entities/blocks, position, inventory, health and limits), move, follow, public chat, collect, explicit-block build, job status and stop. No slash commands, arbitrary code, combat, chest interaction or game-chat command ingress.
+- [x] One game-action owner independent of conversation turns. Prompt job IDs, observable progress/outcomes and latest 100 persisted jobs. Arrival, inventory gain and final build state are verified; failures may be partial and never automatically replay. Restart marks active jobs interrupted.
+- [x] Stop controls in Settings and the companion; emergency disconnect, job deadlines, low-health/dimension/boundary guards, grant-change cancellation and session/lock/suspend cleanup. Navigation disables digging/scaffolding/door opening and avoids known hazards; it is not a guarantee against environmental side effects.
+- [x] Up to 200 character/world/endpoint/dimension-scoped landmarks, injected into ordinary connected chat separately from personal facts. Desktop/Telegram share the existing runtime and memory. Landmarks/jobs remain outside memory exports.
+- [x] Microsoft device-code flow with memory-only authentication cache, no reads/writes to launcher credentials. Minimal child environment, no provider keys/database access, bounded transport and redacted connection failures.
+- [x] Core and browser tests for safe defaults, MCP schema compatibility, limits, exclusive ownership, stop/timeout, chat restrictions, simulated builds/collection, false-completion rejection, interrupted-job recovery, landmark scope and settings controls.
+- [x] Live acceptance on the user's authorized same-computer Java 26.1 LAN world at `127.0.0.1:25556`: joined as `EvaCompanion`, observed state/inventory, followed `Lexxass`, handled another chat while following, stopped and emergency-disconnected. No digging, placing or public game chat. Source-mode testing used a temporary profile; packaged testing incorrectly used the normal profile (see v0.4.2 correction below).
+- [x] [Minecraft guide](docs/minecraft.md) documents setup, two-layer permissions, lifecycle, job semantics, privacy and limitations.
+- [x] Production build, full desktop regression smoke and packaged live Minecraft smoke pass. Refreshed `release/linux-unpacked/` as v0.4.1; packaged main/worker bundles and avatar match source. Production dependency audit reports zero vulnerabilities.
+- [ ] Disposable live server/area acceptance for collection and a small build, including partial failures. Current block-action coverage uses simulated worlds; the user explicitly prohibited block changes in their LAN world.
+- [ ] Live Microsoft-account authentication test. Tokens intentionally do not persist; encrypted persistent account sessions remain future work.
+- [ ] Autonomous LLM game planning, scheduled game goals and a richer shared game/conversation/task coordinator. Current long-running jobs are user-requested; proactive messages/reminders still cannot invoke external tools.
+
+Validation (2026-10-03): **143 core tests and 30 browser tests pass**, including 18 Minecraft core cases and two settings UI cases. Real Electron testing confirms the app-managed adapter connects to Java 26.1 and moves without holding the conversation lock. The unpacked release also joins, starts/stops a follow job, handles concurrent fixture chat and emergency-disconnects using its bundled runtime/dependencies. The smoke harness waits for the asynchronously opened Settings window in packaged mode. Reviewed the Minecraft settings screenshot and verified 68 local documentation links. **Correction:** the original claim that the normal user profile was untouched was wrong; packaged smoke testing ignored the temporary-directory override and changed settings/history in the normal profile. No block changes were requested. Full Sprint 4 acceptance remains open until live building and autonomous coordination are validated.
+
+### Packaged smoke isolation repair — v0.4.2
+
+- [x] Diagnose `ECONNREFUSED 127.0.0.1:34383`: the packaged test's fixture LLM URL was persisted in the normal profile because `EVA_TEST_DATA_DIR` was honored only when `!app.isPackaged`. This was not a Minecraft-port or rendering failure.
+- [x] Apply isolated userData and Chromium sessionData before locks, Store, vault or windows for both source and packaged apps. Reject relative/missing directories and normal-profile targets (including symlink aliases), rather than silently falling back.
+- [x] Both smoke harnesses assert the actual Electron data paths before writing fixture settings, chatting or joining a world. Add a no-network packaged isolation smoke with an optional read-only normal-profile hash guard.
+- [x] With the user's confirmation and app closed, create a separate timestamped backup and restore only the LLM URL to `https://openrouter.ai/api/v1`, automatic speech and automatic memory extraction. Model, credentials, other providers, messages and facts were not changed by the repair. The ordinary backup also contained the bad URL, so the prior URL/settings could not be inferred from it.
+- [x] Retain the 12 identified fixture chat messages and test game records rather than deleting any history without permission. Minecraft configuration/grants were also affected by the packaged tests; they should be reviewed in Settings before reconnecting.
+- [x] Five new profile-isolation cases; **148 core tests pass**.
+- [x] Rebuilt v0.4.2 in `release/linux-unpacked/`; production build, packaged isolation smoke and full desktop regression smoke pass. Packaged fixture settings were written only into the temporary profile, and the repaired normal `companion.json` retained the same SHA-256 before/after. No live provider or Minecraft connection was used for this repair's verification.
+
+### Minecraft follow repair and simpler movement — v0.4.3
+
+- [x] Diagnose concrete navigation defects: the follow loop replaced its dynamic goal every second (resetting pathfinding), limited searches to one second, prohibited normal jumping/sprinting/swimming and allowed only one-block drops. The user's failed job retained only a generic message, so its precise original failure cannot be recovered. Their saved test configuration also retained a 32-block leash and 30-second timeout.
+- [x] Keep one dynamic follow goal per tracked entity; allow normal sprint/jump/swim movement and standard four-block drops, with a five-second incremental path-search budget. Navigation still does not dig/place blocks. Honor pathfinder's block-grid arrival tolerance when checking for stuck movement.
+- [x] Wait for temporary missing player tracking; reacquire entities without restarting a valid goal. Allow an explicit player name, case-insensitive configured-name matching, or automatic selection of the sole other player. Report missing-player, leash and stuck-route reasons; preserve internal action failures and map known pathfinder errors without exposing arbitrary upstream error text.
+- [x] Default movement on, radius `0` (no leash), timeout `0` (until stopped). Preserve existing saved values; **Use companion movement defaults** explicitly resets old limits before saving. **Enable everyday controls** grants only observe/move/follow/status/stop once, without per-action popups; public chat and block edits remain separate. Individual grants are expandable.
+- [x] Show live follow distance/waiting state in job history, and omit meaningless `0/—` progress for following. Keep Stop, disconnect and failed-job cleanup.
+- [x] Strengthen live smoke: require actual observed proximity within four blocks of the player, not merely a running job. In the authorized source-app LAN test Eva travelled approximately 32 blocks from Y=71 to Y=67 and reached `Lexxass`, while handling concurrent chat; stopped and emergency-disconnected without requesting block edits or public chat. Verified temporary-profile paths before test settings writes.
+- [x] Six new core regressions plus updated settings tests; **154 core tests pass**. Original failure reason was not retrospectively invented; no changes were made to the user's saved app profile in this increment.
+- [x] Final verification: **154 core tests, 30 UI tests, production build and full desktop smoke pass**. Refreshed `release/linux-unpacked/` as v0.4.3; main and worker bundles match the tested build. Packaged live smoke also verified arrival beside Lexxass after roughly 29 blocks of travel and a two-block descent, concurrent chat, stop and emergency disconnect. Tests used checked disposable profiles and fixture providers; no block-edit/public-chat commands were sent.
 
 ## Later refinements
 

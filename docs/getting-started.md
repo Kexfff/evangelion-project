@@ -31,4 +31,4 @@ npm run dev:ui      # Browser-only visual preview on http://127.0.0.1:5173
 
 The browser preview renders the real avatar and settings, but cannot call providers, use desktop dialogs, or persist data. Its in-memory changes disappear on refresh. Use Electron for the complete application. During `npm run dev`, renderer changes hot reload; restart the command after changing main-process or preload code.
 
-Next: [configure providers and voice](providers-and-voice.md). Current build: v0.4.0 (Sprint 4 foundation). The bundled model is [AvatarSample_B](assets.md).
+Next: [configure providers and voice](providers-and-voice.md). Current build: v0.4.3 (Minecraft follow fix and companion movement defaults). The bundled model is [AvatarSample_B](assets.md). The packaged desktop app includes the Minecraft adapter and its runtime; it does not need a separately launched bot or system Node installation.

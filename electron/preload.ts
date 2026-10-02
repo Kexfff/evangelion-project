@@ -1,6 +1,13 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { Bridge, RuntimeEvent } from "../src/shared/schema";
 const api: Bridge = {
+  configureMinecraft: (config) =>
+    ipcRenderer.invoke("eva:minecraft:configure", config),
+  minecraftAction: (action) =>
+    ipcRenderer.invoke("eva:minecraft:action", action),
+  saveLandmark: (name) => ipcRenderer.invoke("eva:minecraft:landmark", name),
+  deleteLandmark: (id) =>
+    ipcRenderer.invoke("eva:minecraft:delete-landmark", id),
   configureMcp: (config, secrets) =>
     ipcRenderer.invoke("eva:mcp:configure", config, secrets),
   mcpAction: (id, action) => ipcRenderer.invoke("eva:mcp:action", id, action),

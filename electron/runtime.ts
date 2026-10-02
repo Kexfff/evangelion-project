@@ -31,6 +31,8 @@ export class CompanionRuntime {
   };
   pluginSnapshot?: () => Snapshot["plugins"];
   mcpSnapshot?: () => Snapshot["mcp"];
+  minecraftSnapshot?: () => Snapshot["minecraft"];
+  gameContext?: () => string;
   tools?: import("../src/shared/mcp").ToolProvider;
   private turn?: AbortController;
   private turnChannel?: "desktop" | "telegram";
@@ -84,6 +86,7 @@ export class CompanionRuntime {
       autonomy: this.autonomy.snapshot(),
       plugins: this.pluginSnapshot?.(),
       mcp: this.mcpSnapshot?.(),
+      minecraft: this.minecraftSnapshot?.(),
     };
   }
   broadcast() {
@@ -168,6 +171,7 @@ export class CompanionRuntime {
       }
       const context = buildContext(this.store.data, text, scores);
       context[0].content += `\n\n${this.behaviorPrompt()}`;
+      context[0].content += this.gameContext?.() ?? "";
       const tools = [
         ...(this.store.data.settings.autonomy.schedulingTools
           ? schedulingTools

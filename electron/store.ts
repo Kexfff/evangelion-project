@@ -12,6 +12,7 @@ import { z } from "zod";
 import { automationSchema } from "../src/shared/autonomy";
 import { telegramStateSchema } from "../src/shared/plugins";
 import { mcpStateSchema } from "../src/shared/mcp";
+import { minecraftStateSchema } from "../src/shared/minecraft";
 import { historyTotals } from "../src/shared/history";
 import {
   defaultSettings,
@@ -31,6 +32,7 @@ const databaseSchema = z.object({
   automation: automationSchema.default({ states: {}, tasks: [], activity: [] }),
   telegram: telegramStateSchema.default(() => telegramStateSchema.parse({})),
   mcp: mcpStateSchema.default(() => mcpStateSchema.parse({})),
+  minecraft: minecraftStateSchema.default(() => minecraftStateSchema.parse({})),
 });
 export type Database = z.infer<typeof databaseSchema>;
 export function atomicWrite(file: string, data: string) {
@@ -59,6 +61,7 @@ export class Store {
         automation: { states: {}, tasks: [], activity: [] },
         telegram: telegramStateSchema.parse({}),
         mcp: mcpStateSchema.parse({}),
+        minecraft: minecraftStateSchema.parse({}),
       };
       this.save();
     }
