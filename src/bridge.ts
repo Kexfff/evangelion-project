@@ -41,6 +41,11 @@ const desktopOnly = async (): Promise<never> => {
   );
 };
 const preview: Bridge = {
+  configureMcp: desktopOnly,
+  mcpAction: desktopOnly,
+  mcpGrant: desktopOnly,
+  mcpApproval: desktopOnly,
+  stopTools: desktopOnly,
   listHistory: async (query) =>
     listHistory(previewState.messages, previewState.sessionId, query),
   readConversation: async (query) =>

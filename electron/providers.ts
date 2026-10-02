@@ -267,6 +267,9 @@ export class OpenAICompatibleProvider {
         "Enable the LLM provider and choose a tool-capable model.",
       );
     const history: unknown[] = [...messages];
+    const advertised = new Set(tools.map((tool: any) => tool?.function?.name));
+    const failed = new Set<string>();
+    let resultBudget = 48000;
     // A bounded non-streaming tool loop prevents partial tool JSON or intermediate
     // planning text from being spoken. Normal/tool-disabled chat still streams.
     for (let round = 0; round < 4; round++) {
@@ -303,7 +306,7 @@ export class OpenAICompatibleProvider {
         !Array.isArray(message.tool_calls) ||
         message.tool_calls.length > 4
       )
-        throw new Error("Scheduling tool limit exceeded.");
+        throw new Error("Tool-call limit exceeded.");
       history.push({
         role: "assistant",
         content: message.content ?? null,
@@ -316,27 +319,42 @@ export class OpenAICompatibleProvider {
           typeof call.function?.arguments !== "string" ||
           call.function.arguments.length > 8000
         )
-          throw new Error("Invalid scheduling tool call.");
+          throw new Error("Invalid tool call.");
         let result: unknown;
         try {
-          result = execute(
+          if (
+            !advertised.has(call.function.name) ||
+            failed.has(call.function.name)
+          )
+            throw new Error("Unavailable tool");
+          result = await execute(
             call.function.name,
             JSON.parse(call.function.arguments),
           );
         } catch {
           result = {
             error:
-              "Invalid or unauthorized task operation. Use a future ISO timestamp with offset, valid IANA time zone and an existing task ID. Creation always requires user approval.",
+              "Invalid, failed or unauthorized tool operation. Do not retry. Scheduling requires a future ISO timestamp, valid IANA zone and user approval.",
           };
         }
+        signal.throwIfAborted();
+        const encoded = JSON.stringify(result) ?? "null";
+        if (encoded.length > 24000 || encoded.length > resultBudget)
+          throw new Error("Tool observation budget exceeded.");
+        resultBudget -= encoded.length;
+        if (
+          (result as any)?.error ||
+          (result as any)?.untrustedToolResult?.isError
+        )
+          failed.add(call.function.name);
         history.push({
           role: "tool",
           tool_call_id: call.id,
-          content: JSON.stringify(result),
+          content: encoded,
         });
       }
     }
-    throw new Error("Scheduling tool limit exceeded.");
+    throw new Error("Tool-call limit exceeded.");
   }
   async transcribe(
     provider: Provider,

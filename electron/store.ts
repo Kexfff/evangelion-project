@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { automationSchema } from "../src/shared/autonomy";
 import { telegramStateSchema } from "../src/shared/plugins";
+import { mcpStateSchema } from "../src/shared/mcp";
 import { historyTotals } from "../src/shared/history";
 import {
   defaultSettings,
@@ -29,6 +30,7 @@ const databaseSchema = z.object({
   sessions: z.record(z.string(), z.string()),
   automation: automationSchema.default({ states: {}, tasks: [], activity: [] }),
   telegram: telegramStateSchema.default(() => telegramStateSchema.parse({})),
+  mcp: mcpStateSchema.default(() => mcpStateSchema.parse({})),
 });
 export type Database = z.infer<typeof databaseSchema>;
 export function atomicWrite(file: string, data: string) {
@@ -56,6 +58,7 @@ export class Store {
         sessions: { eva: randomUUID() },
         automation: { states: {}, tasks: [], activity: [] },
         telegram: telegramStateSchema.parse({}),
+        mcp: mcpStateSchema.parse({}),
       };
       this.save();
     }

@@ -19,6 +19,7 @@ An animated AI companion with natural conversation, persistent memory, and a wor
 - **Bring her to life.** An animated VRM avatar in a transparent desktop window, with settings in their own workspace.
 - **Stay connected.** Private Telegram chat shares the same character and memories.
 - **Set her rhythm.** Opt-in conversation openers, mood simulation, and approved reminders.
+- **Extend her abilities.** Trusted MCP connections with per-tool permissions and approvals.
 
 Use your own OpenAI-compatible LLM, ASR, and TTS services. OpenRouter is the initial LLM provider; audio services are configured separately.
 
@@ -41,10 +42,11 @@ Open **Settings → Providers**, configure your services, and save. No LLM or au
 | [Characters & memory](docs/characters-and-memory.md) | Shape her personality and explore what she remembers.   |
 | [Consciousness](docs/consciousness.md)               | Configure initiative, behavior, and reminders.          |
 | [Telegram](docs/telegram.md)                         | Take the conversation with you.                         |
+| [MCP tools](docs/mcp.md)                             | Connect trusted tools with explicit permissions.        |
 | [Privacy & storage](docs/storage-and-privacy.md)     | Understand what stays local and what reaches providers. |
 | [Development](docs/development.md)                   | Build, test, and extend the application.                |
 
-Consciousness is a configurable behavior simulation, not actual sentience. MCP, Minecraft, and desktop-control features remain on the [roadmap](PLAN.MD).
+Consciousness is a configurable behavior simulation, not actual sentience. Minecraft and desktop-control features remain on the [roadmap](PLAN.MD).
 
 ---
 

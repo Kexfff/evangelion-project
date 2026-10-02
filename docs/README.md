@@ -13,6 +13,7 @@
 - [Characters, avatars and memory](characters-and-memory.md) — character cards, avatar studio, history, semantic recall, and archives.
 - [Consciousness](consciousness.md) — behavior simulation, initiative, quiet hours, and approved reminders.
 - [Telegram and plugins](telegram.md) — pairing, permissions, shared memory, and delivery limits.
+- [MCP connections and tools](mcp.md) — trusted local/remote servers, tool permissions, one-call approvals, cancellation, and limits.
 
 ## Under the hood
 

@@ -241,6 +241,16 @@ export function Companion() {
             {!app.partial && <MessageImages images={last?.images} />}
           </div>
         )}
+        {!!app.state.mcp?.pending.length && (
+          <div className="inline-error" role="status">
+            A tool needs approval in Settings → Plugins &amp; MCP.{" "}
+            <button
+              onClick={() => void bridge.openSettings().catch(app.report)}
+            >
+              Open settings
+            </button>
+          </div>
+        )}
         {app.error && (
           <div className="inline-error" role="alert">
             {app.error}

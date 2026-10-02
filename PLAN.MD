@@ -8,17 +8,17 @@ Build a personal desktop companion that listens, responds naturally, remembers, 
 
 ## Architecture decisions
 
-| Layer                | Foundation choice                                                            | Reason / extension path                                                                                               |
-| -------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Desktop shell        | Electron, isolated preload, two windows                                      | Transparent avatar, native dialogs, microphone, future OS integrations                                                |
-| UI                   | React, TypeScript, Vite, CSS                                                 | Shared types and independently organized settings / companion surfaces                                                |
-| Avatar               | Three.js, three-vrm, three-vrm-animation                                     | Render supplied VRM and retarget supplied VRMA animations                                                             |
-| Conversation runtime | Main-process TypeScript service                                              | One conversation pipeline that future Telegram and game adapters can call                                             |
-| Providers            | OpenAI-compatible chat / ASR / TTS adapters                                  | Independent URLs, models and credentials; local and hosted backends                                                   |
-| Memory               | Versioned local JSON with atomic replacement and previous-file backup        | Simple inspectable persistence with no native DB compilation; replace the store behind its boundary as scale requires |
-| Retrieval            | Recent-message budget + optional cached embeddings + lexical fallback        | Character-scoped cosine retrieval; configurable compatible embedding provider added in sprint 1.5                     |
-| Secrets              | OS-backed Electron safeStorage; persistent local AES-GCM fallback            | Keys remain in main process; local fallback key has owner-only file permissions and is identified in Settings         |
-| Extensions           | Built-in plugin host, validated manifests/grants, channel port and event bus | Telegram network worker and shared runtime; arbitrary-code sandbox and MCP tools remain later work                    |
+| Layer                | Foundation choice                                                             | Reason / extension path                                                                                                          |
+| -------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Desktop shell        | Electron, isolated preload, two windows                                       | Transparent avatar, native dialogs, microphone, future OS integrations                                                           |
+| UI                   | React, TypeScript, Vite, CSS                                                  | Shared types and independently organized settings / companion surfaces                                                           |
+| Avatar               | Three.js, three-vrm, three-vrm-animation                                      | Render supplied VRM and retarget supplied VRMA animations                                                                        |
+| Conversation runtime | Main-process TypeScript service                                               | One conversation pipeline that future Telegram and game adapters can call                                                        |
+| Providers            | OpenAI-compatible chat / ASR / TTS adapters                                   | Independent URLs, models and credentials; local and hosted backends                                                              |
+| Memory               | Versioned local JSON with atomic replacement and previous-file backup         | Simple inspectable persistence with no native DB compilation; replace the store behind its boundary as scale requires            |
+| Retrieval            | Recent-message budget + optional cached embeddings + lexical fallback         | Character-scoped cosine retrieval; configurable compatible embedding provider added in sprint 1.5                                |
+| Secrets              | OS-backed Electron safeStorage; persistent local AES-GCM fallback             | Keys remain in main process; local fallback key has owner-only file permissions and is identified in Settings                    |
+| Extensions           | Shared lifecycle registry, separate channel/tool interfaces, permissioned MCP | Telegram channel plus stdio/Streamable HTTP tool providers; bundled Minecraft adapter and hostile-code sandbox remain later work |
 
 ```text
 Companion window                  Settings window
@@ -37,7 +37,8 @@ Companion window                  Settings window
 
 Current additional inputs: durable scheduler / Telegram text, images and voice / trusted interaction events
 Later inputs: Minecraft observations
-Later outputs: permissioned plugin actions / MCP tools
+Current additional outputs: permissioned MCP tools for user-requested conversations
+Later outputs: persistent game jobs / approved autonomous game actions
 ```
 
 ## Sprint 1 — foundation
@@ -263,10 +264,11 @@ Operating boundaries and remaining work:
 
 Goal: controlled observation and action in a Minecraft world.
 
-- [ ] MCP client lifecycle, stdio and Streamable HTTP transports, version negotiation and reconnect behavior.
-- [ ] Server configuration, secret injection, tool discovery, schema validation, timeouts and cancellation.
-- [ ] Tool permissions, clear confirmation policies for consequential actions, per-tool audit log and emergency stop.
-- [ ] LLM tool-call loop with bounded steps, observation budgets and understandable progress.
+- [x] Step 1: shared plugin lifecycle registry; Telegram-specific behavior extracted into a channel plugin; separate channel and tool interfaces, preserving Telegram configuration/history/credentials.
+- [x] MCP client lifecycle, stdio and Streamable HTTP transports, SDK version negotiation and explicit reconnect after failure (no automatic action replay).
+- [x] Server configuration, vault-backed secret injection, bounded tool discovery, input/output schema validation, timeouts and cancellation.
+- [x] Tool permissions (blocked / ask each time / explicitly allowed), one-call desktop approvals, definition-fingerprinted grants, redacted persistent audit log and emergency stop.
+- [x] Existing LLM tool loop generalized for async MCP tools, advertised-tool allowlist, failed-tool retry suppression, bounded rounds/results/definitions, visible pending approvals and activity outcomes. Long-running task progress remains with game jobs below.
 - [ ] Minecraft adapter (evaluate Mineflayer for supported Java Edition versions) exposing observation, chat, navigation, inventory and simple build actions.
 - [ ] Configure game address, account/authentication, allowed worlds, movement/action limits and reconnect policy.
 - [ ] Task planning with explicit completion criteria; reconcile expected game state with real observations.
@@ -274,6 +276,27 @@ Goal: controlled observation and action in a Minecraft world.
 - [ ] Integration tests against a disposable local Minecraft server and simulated MCP failures.
 
 Acceptance: join an authorized test world, describe nearby state, follow the user and complete a small build task; emergency stop cancels tool execution promptly.
+
+### Steps 1–2 — plugin and MCP foundation (v0.4.0)
+
+Target confirmed with the user: **Minecraft Java Edition, LAN world**. This increment implements plugin/MCP foundations only; it does not connect to Minecraft, host a game server, or implement autonomous game jobs.
+
+- [x] Settings → Plugins & MCP: add/edit/remove stdio or Streamable HTTP connections, native trust confirmation, connect/disconnect, credential replacement, discovered tool permissions, exact one-time call approvals, emergency stop and audit history. Browser preview cannot execute programs or contact MCP services.
+- [x] New connections and edited connections are disabled; all tools start blocked. Connections bind to a character; calls recheck active character/session, grants and connection before dispatch. Description/schema changes cannot reuse old grants.
+- [x] Local programs have an explicit unsandboxed trust warning. Only configured secrets and the SDK's minimal environment are supplied. HTTP uses an exact configured HTTPS/loopback endpoint, no redirects or embedded URL credentials. External servers receive no provider keys or direct database handles.
+- [x] Emergency stop cancels pending approvals/calls and persists disabled connections. Quit waits for managed direct-child cleanup. External effects already accepted cannot be rolled back; generic MCP cancellation is cooperative.
+- [x] Existing profiles receive an empty MCP configuration without changing Telegram, memories or settings. MCP secrets/grants/audits stay out of memory archives. Connection removal preserves shared memory and audit history.
+- [x] Documentation: [MCP guide](docs/mcp.md) covers setup, trust, architecture, supported schema subset, limits and remaining work.
+
+Verification (2026-10-02): **125 core tests, 28 browser tests, production build, and the extended Electron smoke pass.** Coverage includes real stdio and Streamable HTTP JSON/SSE fixtures, schema validation, grants/approval expiry, cancellation, session isolation, metadata invalidation, pre-MCP profile compatibility, encrypted credential persistence, redaction and shared-runtime dispatch. Desktop smoke verifies the native-trust/IPC path, local subprocess discovery, one-call Settings approval, LLM tool results, restart persistence, emergency stop and removal, alongside all previous Telegram/voice/memory/VRM checks. Reviewed the MCP Settings screenshot; verified 59 local documentation links. Refreshed `release/linux-unpacked/` as v0.4.0 and verified its main bundle matches the validated build and its VRM matches the source asset. Dependency audit reports zero vulnerabilities after compatible transitive patches. No live MCP service, user credentials, Telegram account, paid provider or Minecraft world was used; tests used fixtures and disposable profiles.
+
+Boundaries: tools only; no OAuth flow, resources/prompts UI, sampling/elicitation, hostile-code sandbox, marketplace, or arbitrary in-process extensions. Local external servers must already be installed; their runtimes are not bundled. The future built-in Minecraft adapter will be app-managed and bundled. Schema references/regex/formats are currently rejected; discovery fails closed. Tools are exposed only to user-initiated chat, not proactive/scheduled messages. Tool-enabled turns produce a final non-streaming answer; background jobs and the game/conversation coordinator remain below.
+
+Next steps:
+
+- [ ] Bundled Mineflayer MCP adapter: Java LAN connection/authentication, observation and following; no separate user-run bot/MCP process.
+- [ ] Persistent game jobs and action ownership independent of conversation turns; bounded collection/building, world-scoped memory and observed completion checks.
+- [ ] Authorized autonomous gameplay, game-specific permissions/limits and Minecraft server integration tests.
 
 ## Later refinements
 

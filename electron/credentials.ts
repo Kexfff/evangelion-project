@@ -4,8 +4,11 @@ import path from "node:path";
 import { z } from "zod";
 import { atomicWrite } from "./store";
 import { providerKinds, type ProviderKind } from "../src/shared/schema";
-const secretKinds = [...providerKinds, "telegram"] as const;
-type SecretKind = ProviderKind | "telegram";
+const secretKindSchema = z.union([
+  z.enum([...providerKinds, "telegram"]),
+  z.string().regex(/^mcp:[a-z][a-z0-9-]{0,31}$/),
+]);
+type SecretKind = ProviderKind | "telegram" | `mcp:${string}`;
 
 interface OSStorage {
   encryptString(text: string): Buffer;
@@ -38,16 +41,14 @@ export class CredentialVault {
     if (!existsSync(this.file)) return;
     const raw = JSON.parse(readFileSync(this.file, "utf8"));
     if (raw.version === 2)
-      this.entries = z
-        .partialRecord(z.enum(secretKinds), entrySchema)
-        .parse(raw.entries);
+      this.entries = z.record(secretKindSchema, entrySchema).parse(raw.entries);
     else {
       // Preserve sprint-1 OS-encrypted entries, including keys that are currently locked.
       const old = z.partialRecord(z.enum(providerKinds), z.string()).parse(raw);
       for (const kind of providerKinds)
         if (old[kind]) this.entries[kind] = { mode: "os", data: old[kind] };
     }
-    for (const kind of secretKinds) {
+    for (const kind of Object.keys(this.entries) as SecretKind[]) {
       const entry = this.entries[kind];
       if (!entry) continue;
       try {
@@ -96,7 +97,8 @@ export class CredentialVault {
   }
   save(incoming: Partial<Record<SecretKind, string>>) {
     const next = { ...this.entries };
-    for (const kind of secretKinds) {
+    for (const kind of Object.keys(incoming) as SecretKind[]) {
+      secretKindSchema.parse(kind);
       const value = incoming[kind];
       if (value === undefined) continue;
       if (!value) {

@@ -1,6 +1,6 @@
 {
   "name": "evangelion_project",
-  "version": "0.3.5",
+  "version": "0.4.0",
   "private": true,
   "description": "A local-first desktop companion with voice, memory, and a VRM avatar.",
   "type": "module",
@@ -18,8 +18,10 @@
     "package": "npm run build && electron-builder --dir"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.31.0",
     "@pixiv/three-vrm": "^3.4.0",
     "@pixiv/three-vrm-animation": "^3.4.0",
+    "ajv": "^8.20.0",
     "lucide-react": "^0.577.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

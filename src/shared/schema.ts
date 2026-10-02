@@ -164,6 +164,7 @@ export interface Snapshot {
   secretStorage: "encrypted" | "local-file" | "session-only";
   autonomy?: AutonomySnapshot;
   plugins?: PluginSnapshot;
+  mcp?: import("./mcp").McpSnapshot;
 }
 export type RuntimeEvent =
   | { type: "autonomous-start"; id: string }
@@ -174,6 +175,22 @@ export type RuntimeEvent =
   | { type: "phase"; phase: Phase }
   | { type: "warning"; message: string };
 export interface Bridge {
+  configureMcp(
+    config: import("./mcp").McpConfig,
+    secrets?: import("./mcp").McpSecrets,
+  ): Promise<void>;
+  mcpAction(
+    id: string,
+    action: "connect" | "disconnect" | "remove",
+  ): Promise<void>;
+  mcpGrant(
+    id: string,
+    tool: string,
+    fingerprint: string,
+    policy: import("./mcp").ToolPolicy,
+  ): Promise<void>;
+  mcpApproval(id: string, allow: boolean): Promise<void>;
+  stopTools(): Promise<void>;
   listHistory(
     query: import("./history").HistoryQuery,
   ): Promise<import("./history").HistoryPage>;

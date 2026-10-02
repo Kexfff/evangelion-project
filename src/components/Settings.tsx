@@ -30,6 +30,7 @@ import { ConsciousnessSettings } from "./ConsciousnessSettings";
 import { MemorySettings } from "./MemorySettings";
 import { OverviewStatistics } from "./OverviewStatistics";
 import { PluginSettings } from "./PluginSettings";
+import { McpSettings } from "./McpSettings";
 import {
   defaultSettings,
   settingsSchema,
@@ -301,7 +302,7 @@ export function Settings() {
             <ExternalLink size={14} />
           </button>
           <div className="version">
-            evangelion_project <span>v0.3.5</span>
+            evangelion_project <span>v0.4.0</span>
           </div>
         </div>
       </aside>
@@ -313,7 +314,7 @@ export function Settings() {
           </div>
           <span className="foundation-badge">
             <span className="status-dot" />
-            Sprint 3 build
+            Sprint 4 foundation
           </span>
         </header>
         <main className="settings-content">
@@ -338,6 +339,17 @@ export function Settings() {
               <CircleHelp size={16} />
               Browser preview. Changes are temporary; launch the desktop app
               with <code>npm run dev</code> for chat and voice.
+            </div>
+          )}
+          {!!snapshot.mcp?.pending.length && tab !== "plugins" && (
+            <div className="success-notice" role="status">
+              An external tool needs your approval.{" "}
+              <button
+                className="button secondary"
+                onClick={() => setTab("plugins")}
+              >
+                Review tool request
+              </button>
             </div>
           )}
           {(error || notice) && (
@@ -1119,7 +1131,15 @@ export function Settings() {
               }
             />
           )}
-          {tab === "plugins" && <PluginSettings data={snapshot.plugins} />}
+          {tab === "plugins" && (
+            <>
+              <McpSettings
+                data={snapshot.mcp}
+                characterId={snapshot.settings.activeCharacterId}
+              />
+              <PluginSettings data={snapshot.plugins} />
+            </>
+          )}
           <footer className="page-footer">
             <span>Built for a connection that feels a little more human.</span>
             <span>EVANGELION / FOUNDATION</span>

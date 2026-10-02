@@ -1,6 +1,13 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { Bridge, RuntimeEvent } from "../src/shared/schema";
 const api: Bridge = {
+  configureMcp: (config, secrets) =>
+    ipcRenderer.invoke("eva:mcp:configure", config, secrets),
+  mcpAction: (id, action) => ipcRenderer.invoke("eva:mcp:action", id, action),
+  mcpGrant: (id, tool, fingerprint, policy) =>
+    ipcRenderer.invoke("eva:mcp:grant", id, tool, fingerprint, policy),
+  mcpApproval: (id, allow) => ipcRenderer.invoke("eva:mcp:approval", id, allow),
+  stopTools: () => ipcRenderer.invoke("eva:mcp:stop"),
   listHistory: (query) => ipcRenderer.invoke("eva:history:list", query),
   readConversation: (query) => ipcRenderer.invoke("eva:history:read", query),
   readHistoryImage: (query) => ipcRenderer.invoke("eva:history:image", query),

@@ -75,8 +75,8 @@ export function PluginSettings({ data }: { data?: PluginSnapshot }) {
       </p>
       <p>
         Trusted built-in adapters only. The network worker has bounded requests
-        and a heap limit; it is not a sandbox for third-party code. MCP and
-        Minecraft arrive in Sprint 4.
+        and a heap limit; it is not a sandbox for third-party code. External MCP
+        tools have their own connections and permissions above.
       </p>
       {error && (
         <p className="error-notice" role="alert">

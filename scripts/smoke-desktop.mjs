@@ -73,6 +73,36 @@ const server = createServer(async (req, res) => {
       res.end("data: [DONE]\n\n");
     } else {
       res.writeHead(200, { "Content-Type": "application/json" });
+      if (data.tools?.some((t) => t.function?.name?.startsWith("mcp_"))) {
+        const result = data.messages.findLast((m) => m.role === "tool");
+        res.end(
+          JSON.stringify({
+            choices: [
+              {
+                message: result
+                  ? { content: "MCP fixture finished." }
+                  : {
+                      tool_calls: [
+                        {
+                          id: "mcp-fixture-call",
+                          type: "function",
+                          function: {
+                            name: data.tools.find((t) =>
+                              t.function.name.startsWith("mcp_"),
+                            ).function.name,
+                            arguments: JSON.stringify({
+                              text: "desktop MCP works",
+                            }),
+                          },
+                        },
+                      ],
+                    },
+              },
+            ],
+          }),
+        );
+        return;
+      }
       res.end('{"choices":[{"message":{"content":"OK"}}]}');
     }
   } else if (req.url === "/v1/audio/transcriptions") {
@@ -660,8 +690,100 @@ try {
     (await scheduledWindow.evaluate(() => window.eva.snapshot())).facts.length,
     1,
   );
+  // Real MCP process, permissions, one-call UI approval, and encrypted persistence.
+  await desktop.evaluate(({ dialog }) => {
+    dialog.showMessageBox = async () => ({
+      response: 1,
+      checkboxChecked: false,
+    });
+  });
+  await scheduledWindow.evaluate(
+    async ({ command, script }) => {
+      await window.eva.configureMcp(
+        {
+          id: "smoke",
+          name: "MCP smoke fixture",
+          transport: "stdio",
+          command,
+          args: [script],
+          url: "",
+          enabled: false,
+          characterId: "eva",
+        },
+        { token: "", env: { MCP_FIXTURE_KEY: "fixture-secret" } },
+      );
+      await window.eva.mcpAction("smoke", "connect");
+      const s = (await window.eva.snapshot()).mcp.servers[0];
+      if (s.status !== "Connected") throw new Error(s.status);
+      const t = s.tools.find((t) => t.name === "echo");
+      await window.eva.mcpGrant("smoke", t.name, t.fingerprint, "ask");
+    },
+    {
+      command: process.execPath,
+      script: path.resolve("tests/fixtures/mcp-server.mjs"),
+    },
+  );
+  await scheduledWindow.evaluate(async () => {
+    await window.eva.openSettings();
+    window.mcpFixtureTurn = window.eva.send("Please use the echo tool");
+  });
+  await expect
+    .poll(
+      async () =>
+        (await scheduledWindow.evaluate(() => window.eva.snapshot())).mcp
+          .pending.length,
+    )
+    .toBe(1);
+  const mcpSettings = desktop
+    .windows()
+    .find((w) => w.url().includes("window=settings"));
+  await mcpSettings
+    .getByRole("button", { name: "Plugins & MCP", exact: true })
+    .click();
+  await mcpSettings.getByRole("button", { name: "Approve once" }).click();
+  await scheduledWindow.evaluate(() => window.mcpFixtureTurn);
+  let mcpState = (await scheduledWindow.evaluate(() => window.eva.snapshot()))
+    .mcp;
+  assert.equal(mcpState.audit.at(-1).outcome, "succeeded");
+  assert.ok(!JSON.stringify(mcpState).includes("fixture-secret"));
+  assert.ok(!JSON.stringify(mcpState.audit).includes("desktop MCP works"));
+  await desktop.close();
+  desktop = null;
+  assert.ok(
+    !(await readFile(path.join(profile, "credentials.json"), "utf8")).includes(
+      "fixture-secret",
+    ),
+  );
+  desktop = await launch();
+  const mcpReopened = await desktop.firstWindow();
+  await mcpReopened.waitForFunction(() => !!window.eva);
+  await expect
+    .poll(
+      async () =>
+        (await mcpReopened.evaluate(() => window.eva.snapshot())).mcp.servers[0]
+          .status,
+    )
+    .toBe("Connected");
+  mcpState = (await mcpReopened.evaluate(() => window.eva.snapshot())).mcp;
+  assert.equal(mcpState.servers[0].hasSecrets, true);
+  assert.equal(
+    mcpState.servers[0].tools.find((t) => t.name === "echo").policy,
+    "ask",
+  );
+  await mcpReopened.evaluate(() => window.eva.stopTools());
+  assert.equal(
+    (await mcpReopened.evaluate(() => window.eva.snapshot())).mcp.servers[0]
+      .config.enabled,
+    false,
+  );
+  await mcpReopened.evaluate(() => window.eva.mcpAction("smoke", "remove"));
+  assert.equal(
+    (await mcpReopened.evaluate(() => window.eva.snapshot())).mcp.servers
+      .length,
+    0,
+  );
   console.log(
-    "Desktop smoke passed: plugin installation/settings, vault and grant persistence/removal, restart-safe authorized reminders, typing deferral, task cancellation, pause, activity logs, image attachments, credential persistence, models, semantic recall, all speech modes, barge-in, VRM and archives.",
+    "Desktop smoke passed: MCP subprocess/discovery/approval/tool results/restart/stop, plugin installation/settings, vault and grant persistence/removal, restart-safe authorized reminders, typing deferral, task cancellation, pause, activity logs, image attachments, credential persistence, models, semantic recall, all speech modes, barge-in, VRM and archives.",
   );
 } catch (error) {
   // Only fixture UI diagnostics; never dump credentials or conversation stores.

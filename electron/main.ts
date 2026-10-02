@@ -29,6 +29,12 @@ import { CompanionRuntime } from "./runtime";
 import { CredentialVault } from "./credentials";
 import { PluginHost } from "./plugin-host";
 import { telegramSettingsSchema } from "../src/shared/plugins";
+import {
+  mcpConfigSchema,
+  mcpSecretsSchema,
+  mcpIdSchema,
+  toolPolicySchema,
+} from "../src/shared/mcp";
 import { outgoingMessageSchema } from "../src/shared/images";
 import {
   presenceSchema,
@@ -235,6 +241,59 @@ else {
           return fn(...args);
         });
       handle("snapshot", () => runtime.snapshot());
+      handle("mcp:configure", (config, secrets) =>
+        plugins.exclusive(() =>
+          plugins.mcp.configure(
+            mcpConfigSchema.parse(config),
+            mcpSecretsSchema.optional().parse(secrets),
+          ),
+        ),
+      );
+      handle("mcp:action", (rawId, rawAction) =>
+        plugins.exclusive(async () => {
+          const id = mcpIdSchema.parse(rawId);
+          const action = z
+            .enum(["connect", "disconnect", "remove"])
+            .parse(rawAction);
+          if (action === "connect") {
+            const config = store.data.mcp.servers.find(
+              (s) => s.config.id === id,
+            )?.config;
+            if (!config) throw new Error("Unknown MCP connection.");
+            const answer = await dialog.showMessageBox({
+              type: "warning",
+              title: "Trust this MCP server?",
+              message: `Connect to ${config.name}?`,
+              detail:
+                config.transport === "stdio"
+                  ? `This runs a local program with your OS account's access. It is NOT sandboxed. Only run software you trust.\n\nExecutable: ${config.command}\nArguments: ${JSON.stringify(config.args)}\n\nThe connection will start automatically with the app until disconnected. Tool grants are configured separately.`
+                  : `This contacts ${config.url} and sends its saved bearer token, if any. Only connect to a service you trust. Enabled tools may receive conversation-derived arguments.\n\nThe connection will start automatically with the app until disconnected. Tool grants are configured separately.`,
+              buttons: ["Cancel", "Trust and connect"],
+              defaultId: 0,
+              cancelId: 0,
+            });
+            if (answer.response !== 1) return;
+          }
+          await plugins.mcp.action(id, action);
+        }),
+      );
+      handle("mcp:grant", (id, tool, fingerprint, policy) =>
+        plugins.mcp.grant(
+          mcpIdSchema.parse(id),
+          z.string().min(1).max(128).parse(tool),
+          z.string().length(64).parse(fingerprint),
+          toolPolicySchema.parse(policy),
+        ),
+      );
+      handle("mcp:approval", (id, allow) =>
+        plugins.mcp.approve(
+          z.string().uuid().parse(id),
+          z.boolean().parse(allow),
+        ),
+      );
+      handle("mcp:stop", async () => {
+        await Promise.all([plugins.mcp.emergencyStop(), runtime.cancel()]);
+      });
       handle("history:list", (raw) => {
         const query = historyQuerySchema.parse(raw);
         assertHistoryCharacter(query.characterId, store.characterId);
@@ -611,8 +670,21 @@ else {
       powerMonitor.on("lock-screen", suspend);
       powerMonitor.on("resume", resume);
       powerMonitor.on("unlock-screen", resume);
-      app.on("before-quit", () => {
-        void plugins.stop();
+      let pluginsClosed = false;
+      let pluginsClosing = false;
+      app.on("before-quit", (event) => {
+        if (!pluginsClosed) {
+          event.preventDefault();
+          if (!pluginsClosing) {
+            pluginsClosing = true;
+            void Promise.allSettled([plugins.stop(), runtime.cancel()]).then(
+              () => {
+                pluginsClosed = true;
+                app.quit();
+              },
+            );
+          }
+        }
         clearInterval(scheduler);
         runtime.autonomy.suspend(true);
       });

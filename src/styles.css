@@ -529,6 +529,42 @@ nav button.active:before {
 .section-heading {
   margin-bottom: 22px;
 }
+.mcp-connection {
+  margin-top: 20px;
+  padding: 20px;
+  border: 1px solid #35313f;
+  border-radius: 16px;
+  background: rgba(150, 130, 200, 0.035);
+  min-width: 0;
+}
+.mcp-settings pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 240px;
+  overflow: auto;
+  font-size: 12px;
+}
+.mcp-tool {
+  border-top: 1px solid #35313f;
+  margin-top: 16px;
+  padding-top: 16px;
+}
+.mcp-settings details {
+  margin-top: 16px;
+}
+.mcp-settings summary {
+  cursor: pointer;
+}
+.mcp-empty {
+  padding: 24px 0;
+}
+.mcp-audit li {
+  margin-block: 8px;
+  overflow-wrap: anywhere;
+}
+.mcp-settings + .plugin-settings {
+  margin-top: 24px;
+}
 .plugin-settings > p,
 .plugin-settings fieldset > p,
 .plugin-settings li {
