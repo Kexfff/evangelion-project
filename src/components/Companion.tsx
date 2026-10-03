@@ -243,7 +243,9 @@ export function Companion() {
         )}
         {app.state.minecraft?.live.job?.status === "running" && (
           <div className="success-notice" role="status">
-            Minecraft: {app.state.minecraft.live.job.kind} in progress.{" "}
+            Minecraft:{" "}
+            {app.state.minecraft.live.job.detail ||
+              `${app.state.minecraft.live.job.kind} starting…`}{" "}
             <button
               onClick={() =>
                 void bridge.minecraftAction("stop").catch(app.report)

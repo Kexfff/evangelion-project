@@ -12,18 +12,25 @@ if (process.env.EVA_MINECRAFT_LIVE !== "yes")
     "Set EVA_MINECRAFT_LIVE=yes only with permission to join and move in the configured world.",
   );
 const profile = await mkdtemp(path.join(tmpdir(), "eva-minecraft-smoke-"));
+let lookupResult;
 const server = createServer(async (req, res) => {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
   const data = JSON.parse(Buffer.concat(chunks).toString());
   const result = data.messages.findLast((m) => m.role === "tool");
   const text = data.messages.findLast((m) => m.role === "user")?.content;
+  if (text === "Locate test" && result)
+    lookupResult = JSON.parse(
+      JSON.parse(result.content).untrustedToolResult.content[0].text,
+    );
   const name =
     text === "Follow test"
       ? "follow_player"
       : text === "Observe test"
         ? "observe"
-        : undefined;
+        : text === "Locate test"
+          ? "locate_player"
+          : undefined;
   const tool =
     name &&
     data.tools?.find((t) => t.function.description.includes(` / ${name}.`));
@@ -39,7 +46,15 @@ const server = createServer(async (req, res) => {
                     {
                       id: "minecraft-test",
                       type: "function",
-                      function: { name: tool.function.name, arguments: "{}" },
+                      function: {
+                        name: tool.function.name,
+                        arguments:
+                          name === "locate_player"
+                            ? JSON.stringify({
+                                player: process.env.EVA_MC_PLAYER,
+                              })
+                            : "{}",
+                      },
                     },
                   ],
                 }
@@ -81,7 +96,7 @@ try {
     });
   });
   await win.evaluate(
-    async ({ port, player, llmPort }) => {
+    async ({ port, player, llmPort, lookup }) => {
       const s = await window.eva.snapshot();
       s.settings.providers.llm.baseUrl = `http://127.0.0.1:${llmPort}/v1`;
       s.settings.memory.autoRemember = false;
@@ -91,6 +106,8 @@ try {
         ...s.minecraft.config,
         port,
         movement: true,
+        freePlay: false,
+        operatorLookup: lookup,
         modifyBlocks: false,
         chat: false,
         trustedPlayer: player,
@@ -103,6 +120,7 @@ try {
       port: Number(process.env.EVA_MC_PORT || 25556),
       player: process.env.EVA_MC_PLAYER || "",
       llmPort: server.address().port,
+      lookup: process.env.EVA_MC_LOOKUP === "yes",
     },
   );
   await expect
@@ -127,8 +145,21 @@ try {
     const server = s.mcp.servers.find(
       (s) => s.config.id === "builtin-minecraft",
     );
+    // Minecraft is now allow-by-default. Explicitly block edits/chat BEFORE
+    // requesting any movement, including pathfinder's terrain modifications.
     for (const tool of server.tools.filter((t) =>
-      ["observe", "job_status", "follow_player"].includes(t.name),
+      ["collect_blocks", "build_blocks", "say_in_game"].includes(t.name),
+    ))
+      await window.eva.mcpGrant(
+        server.config.id,
+        tool.name,
+        tool.fingerprint,
+        "deny",
+      );
+    for (const tool of server.tools.filter((t) =>
+      ["observe", "locate_player", "job_status", "follow_player"].includes(
+        t.name,
+      ),
     ))
       await window.eva.mcpGrant(
         server.config.id,
@@ -143,6 +174,16 @@ try {
     (await win.evaluate(() => window.eva.snapshot())).mcp.audit.at(-1).outcome,
     "succeeded",
   );
+  if (process.env.EVA_MC_LOOKUP === "yes") {
+    await win.evaluate(() => window.eva.send("Locate test"));
+    console.log("Player lookup:", JSON.stringify(lookupResult));
+    assert.ok(lookupResult?.position, "Lookup must return actual coordinates.");
+    assert.equal(
+      lookupResult.source,
+      "operator",
+      "For this test the player must be beyond tracking range, so the operator query is actually exercised.",
+    );
+  }
   if (process.env.EVA_MC_PLAYER) {
     await win.evaluate(() => window.eva.send("Follow test"));
     await expect
@@ -174,7 +215,7 @@ try {
           );
         },
         {
-          timeout: 25000,
+          timeout: process.env.EVA_MC_LOOKUP === "yes" ? 120000 : 25000,
           message:
             "Bot must actually reach the player, not just report a running job.",
         },

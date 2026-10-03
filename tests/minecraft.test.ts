@@ -54,6 +54,9 @@ afterEach(() => {
 });
 function fixture(patch = {}) {
   const config = minecraftConfigSchema.parse({
+    freePlay: false,
+    buildRadius: 4,
+    maxBlocks: 16,
     movement: true,
     modifyBlocks: false,
     trustedPlayer: "Player",
@@ -90,6 +93,7 @@ function fixture(patch = {}) {
       }),
     },
     clearControlStates: vi.fn(),
+    setControlState: vi.fn(),
     stopDigging: vi.fn(),
     chat: vi.fn(),
     blockAt: vi.fn((p: Vec3) => {
@@ -121,9 +125,102 @@ function fixture(patch = {}) {
 }
 
 describe("Minecraft boundaries and jobs", () => {
-  it("defaults to normal movement without a leash/timer, with block edits and public chat off", () => {
+  it("Free play permits terrain navigation only with explicit block permission", () => {
+    const disabled = fixture({ freePlay: true, modifyBlocks: false });
+    expect(disabled.bot.pathfinder.setMovements.mock.calls[0][0].canDig).toBe(
+      false,
+    );
+    const enabled = fixture({ freePlay: true, modifyBlocks: true });
+    const m = enabled.bot.pathfinder.setMovements.mock.calls[0][0];
+    expect([m.canDig, m.allow1by1towers, m.canOpenDoors]).toEqual([
+      true,
+      true,
+      true,
+    ]);
+    expect(m.exclusionAreasBreak[0]({ position: new Vec3(100, 64, 0) })).toBe(
+      100,
+    );
+  });
+  it("Free play can place registered materials without a build fence", async () => {
+    const h = fixture({ freePlay: true, modifyBlocks: true, buildRadius: 0 });
+    Object.assign(h.bot.registry.blocksByName, { bricks: { id: 45 } });
+    h.inventory.push({ name: "bricks", count: 3 });
+    await h.engine.call("build_blocks", {
+      blocks: [{ x: 100, y: 64, z: 0, block: "bricks" }],
+    });
+    await vi.waitFor(() => expect(h.engine.job?.status).toBe("succeeded"));
+    expect(h.world.get("100,64,0")).toBe("bricks");
+    expect(h.bot.setControlState).toHaveBeenLastCalledWith("sneak", false);
+  });
+  it("Free play replaces a running job cleanly when given another action", async () => {
+    const h = fixture({ freePlay: true });
+    await h.engine.call("follow_player", {});
+    await h.engine.call("move_to", { x: 10, y: 64, z: 0 });
+    await vi.waitFor(() => expect(h.engine.job?.status).toBe("succeeded"));
+    expect(h.engine.job?.kind).toBe("move");
+  });
+  it("exposes tracked player coordinates beyond the nearby-entity display radius", async () => {
+    const h = fixture();
+    h.bot.players.Player.entity.position = new Vec3(90, 64, 0);
+    expect(h.engine.observe().playerLocations?.[0]).toMatchObject({
+      source: "tracking",
+      position: { x: 90 },
+    });
+  });
+  it("follows fresh operator coordinates when no player entity is tracked", async () => {
+    const h = fixture({ operatorLookup: true });
+    h.bot.players.Player.entity = undefined as any;
+    h.bot.chat.mockImplementation((command: string) => {
+      queueMicrotask(() =>
+        h.bot.emit(
+          "message",
+          {
+            json: {
+              translate: "commands.data.entity.query",
+              with: [
+                "Player",
+                command.endsWith(" Pos")
+                  ? "[512d, 64d, 200d]"
+                  : '"minecraft:overworld"',
+              ],
+            },
+          },
+          "system",
+        ),
+      );
+    });
+    await h.engine.call("follow_player", {});
+    await vi.waitFor(() =>
+      expect(h.engine.job?.detail).toContain("server-reported"),
+    );
+    expect(h.bot.pathfinder.setGoal.mock.calls.at(-1)?.[0]).toMatchObject({
+      x: 512,
+      y: 64,
+      z: 200,
+    });
+    expect(h.bot.chat.mock.calls).toHaveLength(2);
+  });
+  it("follows a lost entity toward explicitly last-seen coordinates", async () => {
+    const h = fixture();
+    h.bot.players.Player.entity.position = new Vec3(150, 64, 0);
+    h.engine.observe();
+    h.bot.players.Player.entity = undefined as any;
+    await h.engine.call("follow_player", {});
+    await vi.waitFor(() => expect(h.engine.job?.detail).toContain("last-seen"));
+    expect(h.bot.pathfinder.setGoal.mock.calls.at(-1)?.[0]).toMatchObject({
+      x: 150,
+      y: 64,
+      z: 0,
+    });
+  });
+  it("defaults to free play without a leash/timer or second block/chat gate", () => {
     const c = minecraftConfigSchema.parse({});
-    expect([c.movement, c.chat, c.modifyBlocks]).toEqual([true, false, false]);
+    expect([c.movement, c.chat, c.modifyBlocks, c.freePlay]).toEqual([
+      true,
+      true,
+      true,
+      true,
+    ]);
     expect([c.radius, c.jobSeconds]).toEqual([0, 0]);
     expect(c.version).toBe("26.1");
     expect(minecraftConfigSchema.safeParse({ version: "1.12" }).success).toBe(
@@ -256,9 +353,7 @@ describe("Minecraft boundaries and jobs", () => {
     vi.spyOn(Date, "now").mockReturnValue(later);
     await realDelay(1100);
     expect(h.engine.job?.status).toBe("failed");
-    expect(h.engine.job?.detail).toContain(
-      "Cannot see Player after 30 seconds",
-    );
+    expect(h.engine.job?.detail).toContain("Cannot track Player");
   });
   it("reports a stuck path instead of claiming indefinite progress", async () => {
     const h = fixture();
@@ -279,8 +374,8 @@ describe("Minecraft boundaries and jobs", () => {
       "secret-token",
     );
   });
-  it("blocks public chat by default and forbids commands/newlines", async () => {
-    const h = fixture();
+  it("honors an explicit public-chat block and forbids commands/newlines", async () => {
+    const h = fixture({ chat: false });
     await expect(
       h.engine.call("say_in_game", { text: "hello" }),
     ).rejects.toThrow("permission");

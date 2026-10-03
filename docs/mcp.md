@@ -26,6 +26,8 @@ The application must remain running. Enabled connections for the active characte
 
 Grants bind to the connection, character, tool name and a fingerprint of the discovered definition. Editing a connection resets its grants, including when changing credentials. A changed definition cannot inherit an old grant. Character/session ownership, live connection and grants are checked again immediately before execution. Revoking a grant cancels pending calls for that server. Other characters cannot use the connection.
 
+**Bundled Minecraft exception (v0.4.6):** its known app-shipped game tools default to Allow and preserve explicit Blocked/Ask choices by stable tool name across description changes and connection saves for the same character. These are the sole Minecraft action permissions; there is no second block/chat gate. Unknown tool names, other server IDs and non-bundled endpoints do not inherit this exception. This does not loosen permissions for external MCP servers or PC access.
+
 Pending approvals appear in **Plugins & MCP**; banners in other settings tabs and the companion point to them. An approval is not a standing grant. Arguments may contain private information, so inspect them before sending them to an external service.
 
 Only ordinary user-initiated conversations receive external tools. Proactive messages and scheduled reminders still cannot call external tools. Tool-capable LLM support is required. While tools are available, the existing bounded, non-streaming tool loop speaks only the final answer, not intermediate planning or tool JSON. Normal chat remains streaming when no tools are available.

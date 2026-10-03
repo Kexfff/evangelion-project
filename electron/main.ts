@@ -269,7 +269,7 @@ else {
               type: "question",
               title: "Join Minecraft world?",
               message: `Join ${c.host}:${c.port} as ${c.username}?`,
-              detail: `Only join a world you own or have permission to use. Java ${c.version}, ${c.auth} authentication. Movement: ${c.movement ? "enabled" : "off"}; block modification: ${c.modifyBlocks ? "enabled within configured build area" : "off"}. Tool grants apply separately. No automatic replay of game jobs.`,
+              detail: `Only join a world you own or have permission to use. Java ${c.version}, ${c.auth} authentication. Minecraft actions are allowed unless explicitly blocked, including mining, building, terrain navigation and requested public game chat. Optional limits and your tool blocks still apply. Operator coordinate lookup: ${c.operatorLookup ? "on" : "off"}. No automatic replay of game actions.`,
               buttons: ["Cancel", "Join world"],
               defaultId: 0,
               cancelId: 0,
@@ -329,12 +329,13 @@ else {
       );
       handle("mcp:grant", (id, tool, fingerprint, policy) => {
         if (id === MINECRAFT_ID) plugins.minecraft.stopAction();
-        return plugins.mcp.grant(
+        plugins.mcp.grant(
           mcpIdSchema.parse(id),
           z.string().min(1).max(128).parse(tool),
           z.string().length(64).parse(fingerprint),
           toolPolicySchema.parse(policy),
         );
+        if (id === MINECRAFT_ID) plugins.minecraft.refreshPermissions();
       });
       handle("mcp:approval", (id, allow) =>
         plugins.mcp.approve(

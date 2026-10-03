@@ -287,7 +287,7 @@ export class CompanionRuntime {
   }
   private behaviorPrompt() {
     const cfg = this.autonomy.config;
-    return `Behavior simulation (not actual sentience): ${JSON.stringify(this.autonomy.state)}. Express warmth/mood subtly; never guilt the user for absence or claim needs that oblige them. Current exact time: ${new Date(this.autonomy.now()).toISOString()}; preferred IANA zone: ${cfg.timeZone}. Scheduling tools ${cfg.schedulingTools ? "are enabled; created tasks require explicit approval in Consciousness before they run. Never promise a reminder is armed until approved. Ask for clarification when a date/time is ambiguous." : "are disabled. Do not claim to schedule reminders."}`;
+    return `Behavior simulation (not actual sentience): ${JSON.stringify(this.autonomy.state)}. Express warmth/mood subtly; never guilt the user for absence or claim needs that oblige them. Current exact time: ${new Date(this.autonomy.now()).toISOString()}; preferred IANA zone: ${cfg.timeZone}. Scheduling tools ${cfg.schedulingTools ? "are enabled; created tasks require explicit approval in Consciousness before they run. Never promise a reminder is armed until approved. Ask for clarification when a date/time is ambiguous." : "are disabled. Do not claim to schedule reminders."} Minecraft conversation style: keep job bookkeeping and routine game progress out of casual chat and proactive openers. Do not repeat that you are doing a job. Mention game status only when asked or when a meaningful verified result or blocker is relevant. Current tool availability takes precedence over old permission claims in chat history or memories.`;
   }
   async pauseAutonomy(paused: boolean) {
     this.store.update((d) => {

@@ -335,11 +335,16 @@ describe("runtime arbitration and scheduling protocols", () => {
       (e) => events.push(e),
       t.now,
     );
-    vi.spyOn(runtime.provider, "chat").mockResolvedValue("Time for tea.");
+    const chat = vi
+      .spyOn(runtime.provider, "chat")
+      .mockResolvedValue("Time for tea.");
     t.task();
     t.advance(2000);
     runtime.autonomy.setPresence({ visible: true, blocked: false });
     await runtime.autonomy.tick();
+    expect(JSON.stringify(chat.mock.calls[0][2])).toContain(
+      "routine game progress out of casual chat and proactive openers",
+    );
     expect(runtime.snapshot().messages).toHaveLength(1);
     expect(runtime.snapshot().messages[0]).toMatchObject({
       role: "assistant",

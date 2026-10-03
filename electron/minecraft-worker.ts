@@ -14,10 +14,15 @@ import {
   type MinecraftLive,
 } from "../src/shared/minecraft";
 import { MinecraftEngine } from "./minecraft-engine";
+import {
+  minecraftPhysicsCompatibility,
+  MinecraftPhysicsHealth,
+} from "./minecraft-physics";
 
 const config = minecraftConfigSchema.parse(JSON.parse(process.argv[2] ?? "{}"));
 const parent = process.parentPort;
 let engine: MinecraftEngine | undefined;
+let physicsHealth: MinecraftPhysicsHealth | undefined;
 let live: MinecraftLive = {
   status: "Connecting to Minecraft…",
   connected: false,
@@ -62,9 +67,13 @@ const bot = mineflayer.createBot({
   checkTimeoutInterval: 20000,
 });
 bot.loadPlugin(pathfinder);
+bot.loadPlugin(minecraftPhysicsCompatibility);
 bot.on("physicsTick", () => engine?.tick());
-bot.once("spawn", () => {
-  if (bot.game.dimension !== config.dimension) {
+bot.on("spawn", () => {
+  physicsHealth?.dispose();
+  physicsHealth = new MinecraftPhysicsHealth(bot);
+  engine?.stop("Respawned or changed dimension; previous job stopped.");
+  if (!config.freePlay && bot.game.dimension !== config.dimension) {
     live.status =
       "Unexpected dimension. Disconnect and configure the correct world.";
     bot.quit();
@@ -77,6 +86,14 @@ bot.once("spawn", () => {
   state();
 });
 bot.on("death", () => {
+  if (config.freePlay) {
+    engine?.stop("Died; respawning without replaying the old job.");
+    live.connected = false;
+    live.status = "Respawning…";
+    state();
+    bot.respawn();
+    return;
+  }
   engine?.stop("Bot died; reconnect explicitly.");
   live.connected = false;
   live.status = "Bot died; no automatic respawn.";
@@ -106,6 +123,20 @@ bot.on("end", () => {
   state();
 });
 const timer = setInterval(() => {
+  const problem = live.connected && physicsHealth?.problem();
+  if (problem) {
+    // Do not attempt to serialize NaN positions or leave an old green job alive.
+    live = {
+      connected: false,
+      status: problem,
+      players: [],
+      inventory: [],
+      nearby: [],
+    };
+    engine?.stop(problem);
+    live.job = engine?.job;
+    bot.quit();
+  }
   engine?.tick();
   state();
 }, 1000);
@@ -113,6 +144,7 @@ async function shutdown() {
   if (closing) return;
   closing = true;
   clearInterval(timer);
+  physicsHealth?.dispose();
   engine?.stop("Adapter stopped.");
   bot.quit();
   await server?.close();
@@ -124,6 +156,21 @@ const transport: Transport = parent
   ? {
       async start() {
         parent.on("message", ({ data }) => {
+          if (data?.type === "permissions") {
+            const updated = minecraftConfigSchema.parse(data.data);
+            engine?.stop("Minecraft permissions changed.");
+            Object.assign(config, {
+              movement: updated.movement,
+              chat: updated.chat,
+              modifyBlocks: updated.modifyBlocks,
+              navigationBlocks: updated.navigationBlocks,
+              operatorLookup: updated.operatorLookup,
+              backgroundLookup: updated.backgroundLookup,
+            });
+            engine?.ready();
+            state();
+            return;
+          }
           if (data?.type === "stop") {
             engine?.stop();
             state();
@@ -148,7 +195,7 @@ const transport: Transport = parent
     }
   : new StdioServerTransport();
 server = new Server(
-  { name: "evangelion-minecraft", version: "0.4.3" },
+  { name: "evangelion-minecraft", version: "0.4.6" },
   { capabilities: { tools: {} } },
 );
 server.setRequestHandler(ListToolsRequestSchema, async () => ({

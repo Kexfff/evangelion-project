@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { defaultSettings } from "../../src/shared/schema";
 import { minecraftConfigSchema } from "../../src/shared/minecraft";
 
-test("Minecraft preview defaults safe, explains bundled setup and refuses connection writes", async ({
+test("Minecraft preview explains allow-by-default and has no duplicate block/chat gates", async ({
   page,
 }) => {
   await page.goto("/?window=settings");
@@ -17,7 +17,12 @@ test("Minecraft preview defaults safe, explains bundled setup and refuses connec
   );
   await expect(
     page.getByLabel("Allow block changes inside the build area"),
-  ).not.toBeChecked();
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("Minecraft actions are allowed by default.", {
+      exact: false,
+    }),
+  ).toBeVisible();
   await page.getByLabel("Movement radius (0 = no leash)").fill("32");
   await page.getByLabel("Job timeout seconds (0 = until stopped)").fill("30");
   await page
@@ -32,13 +37,25 @@ test("Minecraft preview defaults safe, explains bundled setup and refuses connec
   await expect(
     page.getByRole("button", { name: "Join world", exact: true }),
   ).toBeDisabled();
-  await page.getByLabel("Allow block changes inside the build area").check();
   await expect(page.getByLabel("Build center X")).toBeVisible();
   await expect(
     page.getByText("Block changes can permanently alter your world.", {
       exact: false,
     }),
   ).toBeVisible();
+  await expect(
+    page.getByLabel(
+      "Free play (navigation may change terrain when block changes are allowed)",
+    ),
+  ).toHaveCount(0);
+  await expect(page.getByLabel("Build radius (0 = anywhere)")).toHaveValue("0");
+  await expect(page.getByLabel("Maximum blocks per job")).toHaveValue("1024");
+  await expect(page.getByLabel("Allow public Minecraft chat")).toHaveCount(0);
+  await expect(
+    page.getByLabel(
+      "Operator coordinate lookup (requires cheats / operator permission)",
+    ),
+  ).not.toBeChecked();
   await page
     .getByRole("button", { name: "Save Minecraft configuration" })
     .click();
@@ -109,6 +126,7 @@ test("Minecraft jobs, stop control and world landmarks stay separate from chat",
             status: "Connected",
             tools: [
               "observe",
+              "locate_player",
               "move_to",
               "follow_player",
               "job_status",
@@ -130,6 +148,7 @@ test("Minecraft jobs, stop control and world landmarks stay separate from chat",
       mcFixture: snapshot,
       eva: {
         snapshot: async () => structuredClone(snapshot),
+        presence: async () => {},
         onEvent: (fn: typeof listener) => {
           listener = fn;
           return () => {};
@@ -190,6 +209,17 @@ test("Minecraft jobs, stop control and world landmarks stay separate from chat",
     await expect(
       page.getByLabel(`Minecraft permission for ${name}`, { exact: true }),
     ).toHaveValue("deny");
+  page.once("dialog", (d) => d.accept());
+  await page.getByRole("button", { name: "Enable all game tools" }).click();
+  for (const name of [
+    "collect_blocks",
+    "build_blocks",
+    "say_in_game",
+    "locate_player",
+  ])
+    await expect(
+      page.getByLabel(`Minecraft permission for ${name}`, { exact: true }),
+    ).toHaveValue("allow");
   await page.getByRole("button", { name: "Stop game action" }).click();
   await expect(page.getByText("follow · cancelled")).toBeVisible();
   await page.getByText("World landmarks", { exact: true }).click();
@@ -208,4 +238,15 @@ test("Minecraft jobs, stop control and world landmarks stay separate from chat",
     path: "test-results/settings-minecraft.png",
     fullPage: true,
   });
+  await page.goto("/?window=companion");
+  await expect(
+    page.getByRole("status").filter({ hasText: "Minecraft:" }),
+  ).toContainText("Following Player");
+  await expect(
+    page.getByRole("status").filter({ hasText: "Minecraft:" }),
+  ).not.toContainText("in progress");
+  await page.getByRole("button", { name: "Stop game action" }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Minecraft:" }),
+  ).toHaveCount(0);
 });

@@ -3,6 +3,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { Vec3 } from "vec3";
 import { Movements, goals } from "mineflayer-pathfinder";
 import type { Bot } from "mineflayer";
+import { MinecraftLocator } from "./minecraft-locator";
 import { z } from "zod";
 import {
   pointSchema,
@@ -32,14 +33,20 @@ export function inRadius(
     radius
   );
 }
-export function safeMovements(bot: Bot, anchor: Vec3, radius: number) {
+export function safeMovements(
+  bot: Bot,
+  anchor: Vec3,
+  radius: number,
+  terrainChanges = false,
+  editArea?: { center: { x: number; y: number; z: number }; radius: number },
+) {
   const movement = new Movements(bot);
-  movement.canDig = false;
-  movement.allow1by1towers = false;
+  movement.canDig = terrainChanges;
+  movement.allow1by1towers = terrainChanges;
   movement.allowParkour = true;
   movement.allowSprinting = true;
-  movement.canOpenDoors = false;
-  movement.scafoldingBlocks = [];
+  movement.canOpenDoors = terrainChanges;
+  if (!terrainChanges) movement.scafoldingBlocks = [];
   movement.maxDropDown = 4;
   movement.infiniteLiquidDropdownDistance = false;
   for (const name of [
@@ -57,6 +64,12 @@ export function safeMovements(bot: Bot, anchor: Vec3, radius: number) {
   movement.exclusionAreasStep = [
     (block) => (!radius || inRadius(block.position, anchor, radius) ? 0 : 100),
   ];
+  if (terrainChanges && editArea?.radius) {
+    const allowed = (block: { position: Vec3 }) =>
+      inRadius(block.position, editArea.center, editArea.radius) ? 0 : 100;
+    movement.exclusionAreasBreak = [allowed];
+    movement.exclusionAreasPlace = [allowed];
+  }
   return movement;
 }
 
@@ -66,16 +79,28 @@ export class MinecraftEngine {
   private action?: AbortController;
   private anchor?: Vec3;
   private sequence = 0;
+  private locator: MinecraftLocator;
   constructor(
     readonly config: MinecraftConfig,
     private bot: Bot,
     private publish: () => void,
-  ) {}
+  ) {
+    this.locator = new MinecraftLocator(bot, config.operatorLookup);
+  }
   ready() {
+    this.locator.setOperatorEnabled(this.config.operatorLookup);
     const p = this.bot.entity.position;
-    this.anchor = new Vec3(p.x, p.y, p.z);
+    this.anchor ??= new Vec3(p.x, p.y, p.z);
     this.bot.pathfinder.setMovements(
-      safeMovements(this.bot, this.anchor, this.config.radius),
+      safeMovements(
+        this.bot,
+        this.anchor,
+        this.config.radius,
+        this.config.freePlay &&
+          this.config.modifyBlocks &&
+          this.config.navigationBlocks,
+        { center: this.config.buildCenter, radius: this.config.buildRadius },
+      ),
     );
     this.bot.pathfinder.thinkTimeout = 5000;
   }
@@ -102,9 +127,12 @@ export class MinecraftEngine {
       health: bot.health,
       food: bot.food,
       players: Object.keys(bot.players).slice(0, 100),
+      playerLocations: this.locator.locations(),
       blocks,
       limits: {
         movement: this.config.movement,
+        freePlay: this.config.freePlay,
+        operatorLookup: this.config.operatorLookup,
         chat: this.config.chat,
         modifyBlocks: this.config.modifyBlocks,
         radius: this.config.radius,
@@ -136,7 +164,8 @@ export class MinecraftEngine {
     if (
       !this.anchor ||
       !this.bot.entity ||
-      this.bot.game.dimension !== this.config.dimension
+      (!this.config.freePlay &&
+        this.bot.game.dimension !== this.config.dimension)
     )
       throw new MinecraftActionError(
         "Unexpected dimension or world is not ready.",
@@ -146,10 +175,11 @@ export class MinecraftEngine {
       !inRadius(this.bot.entity.position, this.anchor, this.config.radius)
     )
       throw new MinecraftActionError("Movement boundary reached.");
-    if (this.bot.health <= 4)
+    if (!this.config.freePlay && this.bot.health <= 4)
       throw new MinecraftActionError("Health is low; action stopped.");
   }
   stop(reason = "Stopped by user.") {
+    this.locator.cancel();
     ++this.sequence;
     this.action?.abort();
     this.action = undefined;
@@ -211,7 +241,10 @@ export class MinecraftEngine {
       throw new MinecraftActionError("Destination was not reached.");
   }
   private area(point: { x: number; y: number; z: number }) {
-    if (!inRadius(point, this.config.buildCenter, this.config.buildRadius))
+    if (
+      this.config.buildRadius &&
+      !inRadius(point, this.config.buildCenter, this.config.buildRadius)
+    )
       throw new MinecraftActionError(
         "Block is outside the approved build area.",
       );
@@ -230,9 +263,11 @@ export class MinecraftEngine {
     if (!this.config.movement)
       throw new MinecraftActionError("Movement permission is off.");
     if (this.action)
-      throw new MinecraftActionError(
-        "Another game job owns movement. Stop it before starting a new job.",
-      );
+      if (this.config.freePlay) this.stop("Replaced by a new game action.");
+      else
+        throw new MinecraftActionError(
+          "Another game job owns movement. Stop it before starting a new job.",
+        );
     const controller = new AbortController(),
       sequence = ++this.sequence;
     this.action = controller;
@@ -280,10 +315,21 @@ export class MinecraftEngine {
       jobId: this.job.id,
       status: "running",
       instruction:
-        "A job has started, not completed. Use job_status for verified outcome.",
+        "Action accepted in the background, not completed. Internal bookkeeping only: do not narrate job/status details in chat. Check status when the user asks or a meaningful outcome is needed.",
     };
   }
   async call(name: string, raw: unknown) {
+    if (name === "locate_player") {
+      const { player } = z
+        .object({ player: z.string().regex(/^[a-zA-Z0-9_]{1,16}$/) })
+        .strict()
+        .parse(raw);
+      const selected =
+        Object.keys(this.bot.players).find(
+          (p) => p.toLowerCase() === player.toLowerCase(),
+        ) ?? player;
+      return this.locator.locate(selected);
+    }
     if (name === "stop_action") {
       this.stop();
       return { stopped: true };
@@ -346,6 +392,7 @@ export class MinecraftEngine {
       return this.begin("follow", 0, async (signal) => {
         let tracked: Bot["entity"] | undefined;
         let followGoal: goals.GoalFollow | undefined;
+        let waypoint: Vec3 | undefined;
         let missingSince: number | undefined;
         let lastMotion = Date.now(),
           lastPosition = this.bot.entity.position.clone();
@@ -361,13 +408,72 @@ export class MinecraftEngine {
             if (!target) {
               if (tracked) this.bot.pathfinder.setGoal(null);
               tracked = undefined;
+              const location = await this.locator.locate(
+                selected,
+                signal,
+                this.config.backgroundLookup,
+              );
+              this.check(signal);
+              if (
+                location.position &&
+                location.dimension === this.bot.game.dimension
+              ) {
+                const point = new Vec3(
+                  location.position.x,
+                  location.position.y,
+                  location.position.z,
+                );
+                if (
+                  this.config.radius &&
+                  !inRadius(point, this.anchor!, this.config.radius)
+                )
+                  throw new MinecraftActionError(
+                    "Player coordinates are outside the configured movement leash. Set radius to 0 to roam freely.",
+                  );
+                if (!waypoint || waypoint.distanceTo(point) > 3) {
+                  waypoint = point;
+                  this.bot.pathfinder.setGoal(
+                    new goals.GoalNear(point.x, point.y, point.z, 3),
+                  );
+                  lastMotion = Date.now();
+                  lastPosition = this.bot.entity.position.clone();
+                }
+                const distance = point.distanceTo(this.bot.entity.position);
+                this.job!.detail = `Approaching ${selected}: ${Math.round(distance)} blocks to ${location.source === "last_seen" ? "last-seen (possibly stale)" : "server-reported"} coordinates.`;
+                if (this.bot.entity.position.distanceTo(lastPosition) >= 0.5) {
+                  lastMotion = Date.now();
+                  lastPosition = this.bot.entity.position.clone();
+                }
+                if (distance > 4) {
+                  if (Date.now() - lastMotion >= 20000)
+                    throw new MinecraftActionError(
+                      "No progress toward the player's known coordinates for 20 seconds. Route may be obstructed or chunks unavailable.",
+                    );
+                  missingSince = undefined;
+                  this.publish();
+                  await delay(1000, undefined, { signal });
+                  continue;
+                }
+              }
               missingSince ??= Date.now();
-              this.job!.detail = `Waiting for ${selected} to become visible. Move into the bot's tracking range and dimension.`;
+              this.job!.detail =
+                location.position &&
+                location.dimension !== this.bot.game.dimension
+                  ? `${selected} is in ${location.dimension}; Eva is in ${this.bot.game.dimension}. Reach that dimension first.`
+                  : `Waiting for ${selected}. ${location.reason ?? "Reached known coordinates; waiting for entity tracking."}`.slice(
+                      0,
+                      300,
+                    );
               if (Date.now() - missingSince >= 30000)
                 throw new MinecraftActionError(
-                  `Cannot see ${selected} after 30 seconds. Check the player name, dimension and distance; Minecraft does not send positions of untracked players.`,
+                  `Cannot track ${selected}. ${location.reason ?? "Known coordinates were reached but the player is still absent; they may have moved or changed dimension."}`.slice(
+                    0,
+                    300,
+                  ),
                 );
             } else {
+              this.locator.tracked(selected);
+              waypoint = undefined;
               missingSince = undefined;
               if (
                 this.config.radius &&
@@ -421,46 +527,57 @@ export class MinecraftEngine {
     if (name === "collect_blocks") {
       const { block, count } = z
         .object({
-          block: z.enum([
-            "dirt",
-            "cobblestone",
-            "stone",
-            "oak_log",
-            "birch_log",
-            "spruce_log",
-          ]),
+          block: z.string().regex(/^[a-z0-9_]{1,100}$/),
           count: z.number().int().min(1).max(this.config.maxBlocks),
         })
         .strict()
         .parse(raw);
       if (!this.config.modifyBlocks)
         throw new MinecraftActionError("Block modification permission is off.");
+      if (!this.bot.registry.blocksByName[block])
+        throw new MinecraftActionError("Unknown block ID.");
+      if (
+        !this.config.freePlay &&
+        ![
+          "dirt",
+          "cobblestone",
+          "stone",
+          "oak_log",
+          "birch_log",
+          "spruce_log",
+        ].includes(block)
+      )
+        throw new MinecraftActionError(
+          "Enable Free play to collect this material.",
+        );
       return this.begin("collect", count, async (signal) => {
         const type = this.bot.registry.blocksByName[block];
         const drop = block === "stone" ? "cobblestone" : block;
         const inventoryCount = () =>
           this.bot.inventory
             .items()
-            .filter((i) => i.name === drop)
+            .filter((i) => this.config.freePlay || i.name === drop)
             .reduce((n, i) => n + i.count, 0);
         for (let i = 0; i < count; i++) {
           this.check(signal);
           const target = this.bot
             .findBlocks({
               matching: type.id,
-              maxDistance: this.config.radius || 128,
+              maxDistance: Math.min(this.config.radius || 128, 128),
               count: 64,
             })
             .map((p) => this.bot.blockAt(p))
             .find(
               (b) =>
                 b &&
-                inRadius(
-                  b.position,
-                  this.config.buildCenter,
-                  this.config.buildRadius,
-                ) &&
-                b.position.y >= this.bot.entity.position.y &&
+                (!this.config.buildRadius ||
+                  inRadius(
+                    b.position,
+                    this.config.buildCenter,
+                    this.config.buildRadius,
+                  )) &&
+                (this.config.freePlay ||
+                  b.position.y >= this.bot.entity.position.y) &&
                 b.position.distanceTo(this.bot.entity.position) > 1,
             );
           if (!target)
@@ -479,6 +596,7 @@ export class MinecraftEngine {
             throw new MinecraftActionError("Block changed or cannot be dug.");
           const above = this.bot.blockAt(target.position.offset(0, 1, 0));
           if (
+            !this.config.freePlay &&
             above &&
             ["sand", "gravel", "water", "lava"].some((n) =>
               above.name.includes(n),
@@ -510,27 +628,41 @@ export class MinecraftEngine {
     }
     if (name === "build_blocks") {
       const itemSchema = pointSchema.extend({
-        x: z.number().int(),
-        y: z.number().int(),
-        z: z.number().int(),
-        block: z.enum([
-          "dirt",
-          "cobblestone",
-          "stone",
-          "oak_planks",
-          "birch_planks",
-          "spruce_planks",
-          "glass",
-        ]),
+        x: pointSchema.shape.x.int(),
+        y: pointSchema.shape.y.int(),
+        z: pointSchema.shape.z.int(),
+        block: z.string().regex(/^[a-z0-9_]{1,100}$/),
       });
       const { blocks } = z
         .object({
-          blocks: z.array(itemSchema).min(1).max(this.config.maxBlocks),
+          blocks: z
+            .array(itemSchema)
+            .min(1)
+            .max(Math.min(128, this.config.maxBlocks)),
         })
         .strict()
         .parse(raw);
       if (!this.config.modifyBlocks)
         throw new MinecraftActionError("Block modification permission is off.");
+      for (const b of blocks) {
+        if (
+          !this.config.freePlay &&
+          ![
+            "dirt",
+            "cobblestone",
+            "stone",
+            "oak_planks",
+            "birch_planks",
+            "spruce_planks",
+            "glass",
+          ].includes(b.block)
+        )
+          throw new MinecraftActionError(
+            "Enable Free play to build with this material.",
+          );
+        if (this.config.freePlay && !this.bot.registry.blocksByName[b.block])
+          throw new MinecraftActionError("Unknown block ID.");
+      }
       if (
         new Set(blocks.map((b) => `${b.x},${b.y},${b.z}`)).size !==
         blocks.length
@@ -572,16 +704,17 @@ export class MinecraftEngine {
             .find(
               (r) =>
                 r.block?.boundingBox === "block" &&
-                [
-                  "dirt",
-                  "grass_block",
-                  "stone",
-                  "cobblestone",
-                  "oak_planks",
-                  "birch_planks",
-                  "spruce_planks",
-                  "glass",
-                ].includes(r.block.name),
+                (this.config.freePlay ||
+                  [
+                    "dirt",
+                    "grass_block",
+                    "stone",
+                    "cobblestone",
+                    "oak_planks",
+                    "birch_planks",
+                    "spruce_planks",
+                    "glass",
+                  ].includes(r.block.name)),
             );
           if (!reference?.block)
             throw new MinecraftActionError("No safe supporting block.");
@@ -593,7 +726,12 @@ export class MinecraftEngine {
             )
           )
             throw new MinecraftActionError("Build location changed.");
-          await this.bot.placeBlock(reference.block, reference.face);
+          if (this.config.freePlay) this.bot.setControlState("sneak", true);
+          try {
+            await this.bot.placeBlock(reference.block, reference.face);
+          } finally {
+            if (this.config.freePlay) this.bot.setControlState("sneak", false);
+          }
           await this.until(
             () => this.bot.blockAt(pos)?.name === b.block,
             signal,

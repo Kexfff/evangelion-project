@@ -22,6 +22,10 @@ import {
   type McpToolView,
 } from "../src/shared/mcp";
 import type { ManagedPlugin } from "./plugin-lifecycle";
+import {
+  effectiveToolPolicy,
+  isBundledMinecraft,
+} from "../src/shared/minecraft-permissions";
 
 interface Tool extends McpToolView {
   alias: string;
@@ -92,11 +96,7 @@ export class McpPlugin implements ManagedPlugin, ToolProvider {
           tools: (connection?.tools ?? []).map(
             ({ alias: _alias, validate: _validate, ...tool }) => ({
               ...tool,
-              policy:
-                grants.find(
-                  (g) =>
-                    g.tool === tool.name && g.fingerprint === tool.fingerprint,
-                )?.policy ?? "deny",
+              policy: effectiveToolPolicy(config, grants, tool),
             }),
           ),
         };
@@ -179,7 +179,10 @@ export class McpPlugin implements ManagedPlugin, ToolProvider {
         if (saved)
           saved.grants = saved.grants.filter((g) =>
             entry.tools.some(
-              (t) => t.name === g.tool && t.fingerprint === g.fingerprint,
+              (t) =>
+                t.name === g.tool &&
+                (isBundledMinecraft(saved.config) ||
+                  t.fingerprint === g.fingerprint),
             ),
           );
       });
@@ -216,10 +219,20 @@ export class McpPlugin implements ManagedPlugin, ToolProvider {
     if (!previous && this.store.data.mcp.servers.length >= 12)
       throw new Error("At most 12 MCP servers.");
     await this.disconnect(config.id);
-    // Editing a connection always disables it and revokes grants, even if only credentials changed.
+    // External edits revoke grants. Bundled Minecraft keeps explicit named
+    // blocks/choices so a connection save cannot silently re-enable an action.
     this.store.update((d) => {
       d.mcp.servers = d.mcp.servers.filter((s) => s.config.id !== config.id);
-      d.mcp.servers.push({ config: { ...config, enabled: false }, grants: [] });
+      d.mcp.servers.push({
+        config: { ...config, enabled: false },
+        grants:
+          previous &&
+          isBundledMinecraft(previous.config) &&
+          isBundledMinecraft(config) &&
+          previous.config.characterId === config.characterId
+            ? previous.grants
+            : [],
+      });
     });
     if (secrets !== undefined)
       this.vault.save({
@@ -297,10 +310,7 @@ export class McpPlugin implements ManagedPlugin, ToolProvider {
       const entry = this.connections.get(s.config.id);
       if (entry?.status !== "Connected") continue;
       for (const tool of entry.tools) {
-        const grant = s.grants.find(
-          (g) => g.tool === tool.name && g.fingerprint === tool.fingerprint,
-        );
-        if (!grant || grant.policy === "deny") continue;
+        if (effectiveToolPolicy(s.config, s.grants, tool) === "deny") continue;
         const definition = {
           type: "function",
           function: {
@@ -366,11 +376,7 @@ export class McpPlugin implements ManagedPlugin, ToolProvider {
         this.connections.get(serverId) !== entry
       )
         return "deny";
-      return (
-        s.grants.find(
-          (g) => g.tool === tool.name && g.fingerprint === tool.fingerprint,
-        )?.policy ?? "deny"
-      );
+      return effectiveToolPolicy(s.config, s.grants, tool);
     };
     const policy = permitted();
     if (

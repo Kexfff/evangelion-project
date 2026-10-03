@@ -113,10 +113,12 @@ export function MinecraftSettings({
         </p>
       )}
       <details open={!connection}>
-        <summary>World connection and safety limits</summary>
+        <summary>World connection and optional limits</summary>
         <p>
-          Normal companion movement has no leash or timer. Block changes and
-          public chat remain separate choices.
+          Minecraft actions are allowed by default. Block an action below if you
+          don’t want Eva to do it. There is no separate block-edit or chat
+          switch. By default, she can roam and change terrain without a leash or
+          timer.
         </p>
         <button
           className="button secondary"
@@ -129,7 +131,7 @@ export function MinecraftSettings({
               jobSeconds: 0,
             }));
             setNotice(
-              "Companion movement selected. Save Minecraft configuration, then reconnect. Block/chat permissions were not changed.",
+              "Movement limits cleared. Save and reconnect. Explicit tool blocks are unchanged.",
             );
           }}
         >
@@ -143,7 +145,7 @@ export function MinecraftSettings({
                 bridge.configureMinecraft(
                   minecraftConfigSchema.parse({ ...config, characterId }),
                 ),
-              "Saved disabled. Join world, then grant tools below. Existing grants were reset.",
+              "Saved. Join world to play. Minecraft actions default to Allow; your explicit tool choices were preserved.",
             );
           }}
         >
@@ -229,11 +231,9 @@ export function MinecraftSettings({
             {(
               [
                 [
-                  "movement",
-                  "Allow movement (never digs or places while navigating)",
+                  "operatorLookup",
+                  "Operator coordinate lookup (requires cheats / operator permission)",
                 ],
-                ["chat", "Allow public Minecraft chat"],
-                ["modifyBlocks", "Allow block changes inside the build area"],
               ] as const
             ).map(([key, label]) => (
               <label className="toggle-row" key={key}>
@@ -245,12 +245,19 @@ export function MinecraftSettings({
                 />
               </label>
             ))}
-            {config.modifyBlocks && (
+            <p>
+              Operator lookup uses only read-only /data queries for player
+              position and dimension, even beyond tracking range. It cannot
+              grant itself operator permission. This is not an autonomous game
+              planner or arbitrary command execution.
+            </p>
+            {
               <>
                 <p>
-                  Block changes can permanently alter your world. Back it up and
-                  designate a disposable area first. Tool grants are still
-                  required.
+                  Block changes can permanently alter your world. Optional
+                  limits below apply only if you set them; radius 0 means
+                  anywhere. Block collect_blocks and build_blocks below to
+                  disable terrain edits, including edits while navigating.
                 </p>
                 <div className="form-grid">
                   {(["x", "y", "z"] as const).map((axis) => (
@@ -269,11 +276,11 @@ export function MinecraftSettings({
                     </label>
                   ))}
                   <label className="field">
-                    <span>Build radius</span>
+                    <span>Build radius (0 = anywhere)</span>
                     <input
                       type="number"
-                      min={1}
-                      max={16}
+                      min={0}
+                      max={30000000}
                       value={config.buildRadius}
                       onChange={(e) =>
                         set("buildRadius", Number(e.target.value))
@@ -285,18 +292,18 @@ export function MinecraftSettings({
                     <input
                       type="number"
                       min={1}
-                      max={64}
+                      max={1024}
                       value={config.maxBlocks}
                       onChange={(e) => set("maxBlocks", Number(e.target.value))}
                     />
                   </label>
                 </div>
               </>
-            )}
+            }
             <p>
-              This save disconnects the bot and resets grants; it does not join
-              the world. Assigned character: {characterId}. Use this button, not
-              the page’s Save changes.
+              This save disconnects the bot but preserves tool choices; it does
+              not join the world. Assigned character: {characterId}. Use this
+              button, not the page’s Save changes.
             </p>
             <button className="button primary" type="submit">
               Save Minecraft configuration
@@ -308,9 +315,10 @@ export function MinecraftSettings({
         <>
           <h3>Minecraft tool permissions</h3>
           <p>
-            Enable everyday controls once to let her look around, walk and
-            follow without approval popups. Block changes and public chat keep
-            their separate permissions. Optional per-tool controls are below.
+            Allowed unless blocked. These are the only Minecraft action
+            permissions; changes apply immediately. Blocking either block-edit
+            tool also disables automatic digging and scaffolding while
+            navigating. Other MCP servers still default to Blocked.
           </p>
           <button
             className="button secondary"
@@ -320,6 +328,7 @@ export function MinecraftSettings({
                 for (const t of connection.tools.filter((t) =>
                   [
                     "observe",
+                    "locate_player",
                     "move_to",
                     "follow_player",
                     "job_status",
@@ -337,6 +346,29 @@ export function MinecraftSettings({
           >
             Enable everyday controls
           </button>
+          <button
+            className="button secondary"
+            disabled={busy}
+            onClick={() => {
+              if (
+                !window.confirm(
+                  "Clear explicit blocks and allow all supported Minecraft actions, including terrain changes and requested public game chat?",
+                )
+              )
+                return;
+              void run(async () => {
+                for (const t of connection.tools)
+                  await bridge.mcpGrant(
+                    MINECRAFT_ID,
+                    t.name,
+                    t.fingerprint,
+                    "allow",
+                  );
+              }, "All Minecraft actions allowed. No separate block/chat switches are needed. Operator lookup remains a server-permission-dependent option.");
+            }}
+          >
+            Enable all game tools
+          </button>
           <details>
             <summary>Individual tool permissions</summary>
             {connection.tools.map((t) => (
@@ -348,16 +380,6 @@ export function MinecraftSettings({
                   disabled={busy}
                   onChange={(e) => {
                     const policy = e.target.value as ToolPolicy;
-                    if (
-                      policy === "allow" &&
-                      !["observe", "job_status", "stop_action"].includes(
-                        t.name,
-                      ) &&
-                      !window.confirm(
-                        `Allow ${t.name} without confirmation? It can act in your Minecraft world within the configured limits.`,
-                      )
-                    )
-                      return;
                     void run(() =>
                       bridge.mcpGrant(
                         MINECRAFT_ID,
@@ -392,6 +414,26 @@ export function MinecraftSettings({
                 .join(", ")}
           </p>
           <p>Players: {data.live.players.join(", ") || "None nearby"}</p>
+          <details>
+            <summary>Player coordinates</summary>
+            <p>
+              Tracking range is controlled by Minecraft. Last-seen positions are
+              stale, not live coordinates. Ask Eva to locate a player to query
+              the server when operator lookup is enabled.
+            </p>
+            <ul>
+              {data.live.playerLocations?.map((p) => (
+                <li key={p.name}>
+                  {p.name} · {p.source}{" "}
+                  {p.position &&
+                    `· ${p.position.x.toFixed(1)}, ${p.position.y.toFixed(1)}, ${p.position.z.toFixed(1)} · ${p.dimension}`}{" "}
+                  {p.observedAt &&
+                    `· observed ${new Date(p.observedAt).toLocaleTimeString()}`}{" "}
+                  {p.reason}
+                </li>
+              ))}
+            </ul>
+          </details>
           <details>
             <summary>Inventory · {data.live.inventory.length} stacks</summary>
             <ul>
