@@ -433,6 +433,14 @@ Acceptance: in a disposable/designated world, Eva uses a reachable door without 
 
 Deferred from this mini-sprint: automatic fishing, enchanting/anvils, full villager trading, vehicle steering, persistent Microsoft authentication, MCP OAuth/resources/prompts UI and a general-purpose autonomous PC agent. Continue incremental live testing of the existing tools alongside development when the user is available.
 
+### OpenRouter provider selection — v0.4.10
+
+- [x] Fetch the selected model's public OpenRouter endpoint catalog through desktop IPC without credentials or chat content. Show names, exact routing tags/variants, advertised tools and input/output prices, with search and clear loading/error/empty states.
+- [x] Save per-model provider selections; Automatic remains the default. Apply `provider.only` to streaming/plain chat, every tool-call round, memory extraction, consciousness and game planning. Allow fallback within the selection only; do not add OpenRouter fields to other compatible APIs or audio/embedding requests.
+- [x] Reject empty restricted lists instead of silently restoring unrestricted routing. Keep saved unavailable selections visible; refresh failures and late responses after model changes cannot overwrite choices. Keep provider selection separate from saved credentials and avoid autosaving unrelated draft settings.
+- [x] Validation: **271 core tests, 34 browser tests, production/package build and isolated desktop smoke pass**. Refreshed `release/linux-unpacked/` as v0.4.10. Coverage includes exact endpoint discovery, per-request routing, empty-list validation, restart persistence, other-provider isolation, stale responses, search and narrow layout; desktop smoke exercises real discovery IPC with fixture HTTP and saved selections across restart. Public OpenRouter catalog shape/docs were checked; no paid generation or normal-profile edits were made.
+- [ ] Deferred at the user's request: detecting/recovering raw DSML tool-call markup returned as ordinary chat text. Provider selection does not itself guarantee a fix.
+
 ## Later refinements
 
 - Memory consolidation/summarization, richer retrieval evaluation and scalable vector storage.

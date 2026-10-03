@@ -1,4 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { OpenRouterProviders } from "./OpenRouterProviders";
+import { isOpenRouter } from "../shared/openrouter";
 import {
   Activity,
   ArrowUpFromLine,
@@ -301,7 +303,7 @@ export function Settings() {
             <ExternalLink size={14} />
           </button>
           <div className="version">
-            evangelion_project <span>v0.4.9</span>
+            evangelion_project <span>v0.4.10</span>
           </div>
         </div>
       </aside>
@@ -701,6 +703,14 @@ export function Settings() {
                           onChange={(e) =>
                             update((d) => {
                               d.providers[kind].baseUrl = e.target.value;
+                              if (
+                                d.providers[kind].openrouterProviders?.[
+                                  provider.model
+                                ]?.length === 0
+                              )
+                                delete d.providers[kind].openrouterProviders![
+                                  provider.model
+                                ];
                             })
                           }
                           placeholder="https://provider.example/v1"
@@ -713,6 +723,14 @@ export function Settings() {
                           onChange={(e) =>
                             update((d) => {
                               d.providers[kind].model = e.target.value;
+                              if (
+                                d.providers[kind].openrouterProviders?.[
+                                  provider.model
+                                ]?.length === 0
+                              )
+                                delete d.providers[kind].openrouterProviders![
+                                  provider.model
+                                ];
                             })
                           }
                         />
@@ -774,6 +792,24 @@ export function Settings() {
                         </Field>
                       )}
                     </div>
+                    {kind === "llm" && isOpenRouter(provider.baseUrl) && (
+                      <OpenRouterProviders
+                        key={`${provider.baseUrl}/${provider.model}`}
+                        model={provider.model}
+                        selected={
+                          provider.openrouterProviders?.[provider.model]
+                        }
+                        onChange={(ids) =>
+                          update((d) => {
+                            const choices =
+                              (d.providers.llm.openrouterProviders ??= {});
+                            if (ids === undefined)
+                              delete choices[provider.model];
+                            else choices[provider.model] = ids;
+                          })
+                        }
+                      />
+                    )}
                     <div className="provider-actions">
                       <button
                         className="button secondary"

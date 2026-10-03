@@ -44,6 +44,8 @@ const api: Bridge = {
   readSpeech: (id) => ipcRenderer.invoke("eva:speech:read", id),
   closeSpeech: (id) => ipcRenderer.invoke("eva:speech:close", id),
   listModels: (kind) => ipcRenderer.invoke("eva:models", kind),
+  listOpenRouterProviders: (model) =>
+    ipcRenderer.invoke("eva:openrouter:providers", model),
   reindexMemory: () => ipcRenderer.invoke("eva:memory:reindex"),
   testProvider: (kind) => ipcRenderer.invoke("eva:test", kind),
   saveFact: (fact) => ipcRenderer.invoke("eva:fact:save", fact),

@@ -759,6 +759,45 @@ try {
   assert.equal(mcpState.audit.at(-1).outcome, "succeeded");
   assert.ok(!JSON.stringify(mcpState).includes("fixture-secret"));
   assert.ok(!JSON.stringify(mcpState.audit).includes("desktop MCP works"));
+  // Public catalog discovery through real IPC, with the HTTP response stubbed locally.
+  await desktop.evaluate(() => {
+    globalThis.routingSmokeFetch = globalThis.fetch;
+    globalThis.fetch = (url, init) =>
+      String(url) ===
+      "https://openrouter.ai/api/v1/models/fixture/model/endpoints"
+        ? Promise.resolve(
+            Response.json({
+              data: {
+                endpoints: [
+                  {
+                    tag: "fixture-provider",
+                    provider_name: "Fixture",
+                    supported_parameters: ["tools"],
+                  },
+                ],
+              },
+            }),
+          )
+        : globalThis.routingSmokeFetch(url, init);
+  });
+  try {
+    const routes = await scheduledWindow.evaluate(() =>
+      window.eva.listOpenRouterProviders("fixture/model"),
+    );
+    assert.equal(routes[0].id, "fixture-provider");
+    await scheduledWindow.evaluate(async () => {
+      const data = await window.eva.snapshot();
+      data.settings.providers.llm.openrouterProviders = {
+        "fixture/model": ["fixture-provider"],
+      };
+      await window.eva.saveSettings(data.settings, {});
+    });
+  } finally {
+    await desktop.evaluate(() => {
+      globalThis.fetch = globalThis.routingSmokeFetch;
+      delete globalThis.routingSmokeFetch;
+    });
+  }
   // Exercise goal settings and validation through real IPC without joining Minecraft.
   await scheduledWindow.evaluate(async () => {
     const data = await window.eva.snapshot();
@@ -796,6 +835,11 @@ try {
     .toBe("Connected");
   mcpState = (await mcpReopened.evaluate(() => window.eva.snapshot())).mcp;
   assert.equal(mcpState.servers[0].hasSecrets, true);
+  assert.deepEqual(
+    (await mcpReopened.evaluate(() => window.eva.snapshot())).settings.providers
+      .llm.openrouterProviders,
+    { "fixture/model": ["fixture-provider"] },
+  );
   assert.equal(
     (await mcpReopened.evaluate(() => window.eva.snapshot())).minecraft
       .goalConfig.maxSteps,

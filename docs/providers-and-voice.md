@@ -25,6 +25,14 @@ Provider adapters and discovery use these OpenAI-compatible HTTP endpoints:
 
 Provider errors show an actionable status without reflecting potentially sensitive upstream response bodies. Requests time out after 90 seconds. Chat replies and transport/auth/quota failures are not automatically retried. Automatic fact extraction has the bounded format-recovery exception below.
 
+### OpenRouter model providers
+
+In **Providers → Language model**, use an OpenRouter base URL (`https://openrouter.ai/api/v1`), choose a model, then **Fetch providers**. The picker fetches the [public endpoint catalog for that model](https://openrouter.ai/docs/api/api-reference/endpoints/list-all-endpoints-for-a-model), showing provider names, routing IDs, advertised tool support and catalog input/output prices per million tokens. Discovery can use the unsaved model ID; it sends no API key or conversation content. Router aliases/presets may not have a usable endpoint list—choose a concrete model when needed.
+
+Check the providers you want and click **Save changes**. Choices are retained separately for each model across restarts. **Automatic** leaves routing to OpenRouter; **Only selected providers** sends its [`provider.only` restriction](https://openrouter.ai/docs/guides/routing/provider-selection#allowing-only-specific-providers) on every LLM request: streaming/non-streaming chat, tool-call rounds, memory extraction, consciousness and Minecraft planning. Fallback can occur within the selected list, not outside it. Account-level restrictions still apply, so a restricted request may fail when no allowed endpoint can serve it. A base provider tag can match all its variants; a variant/region tag narrows the selection according to OpenRouter's routing rules.
+
+An empty restricted list cannot be saved; switch explicitly to Automatic to remove the restriction. Refresh failures or disappearing providers never clear saved choices automatically. Choices do not affect other models, non-OpenRouter APIs, ASR/TTS or embedding requests. Catalog capability labels do not guarantee that a particular model/provider will produce correct tool calls; the DSML-text issue remains separate.
+
 ### Automatic memory extraction
 
 When enabled in Memory, this is a separate background LLM request after the chat reply is saved. It uses temperature 0.1 and a 2,048-token output cap; OpenRouter requests also ask to disable optional reasoning through its [reasoning parameter](https://openrouter.ai/docs/guides/best-practices/reasoning-tokens). Ordinary chat settings are unchanged. Complete JSON arrays, `{"facts":[...]}` objects and a single JSON code block are accepted; facts remain validated, deduplicated and limited to three short strings. Partial JSON and reasoning text are never stored as facts.

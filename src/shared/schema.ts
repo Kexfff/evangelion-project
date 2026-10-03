@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  openRouterSelectionsSchema,
+  type OpenRouterEndpoint,
+} from "./openrouter";
 import type { PluginAction, PluginSnapshot, TelegramSettings } from "./plugins";
 import { attachmentsSchema, type ImageAttachment } from "./images";
 import {
@@ -32,6 +36,7 @@ export const providerSchema = z.object({
   voice: z.string().max(200).default("alloy"),
   enabled: z.boolean(),
   hasKey: z.boolean().default(false),
+  openrouterProviders: openRouterSelectionsSchema.optional(),
 });
 export const providerKinds = ["llm", "asr", "tts", "embedding"] as const;
 const embeddingDefaults = {
@@ -235,6 +240,7 @@ export interface Bridge {
   readSpeech(id: string): Promise<{ done: boolean; bytes: ArrayBuffer }>;
   closeSpeech(id: string): Promise<void>;
   listModels(kind: ProviderKind): Promise<string[]>;
+  listOpenRouterProviders(model: string): Promise<OpenRouterEndpoint[]>;
   reindexMemory(): Promise<{ indexed: number; total: number }>;
   testProvider(kind: ProviderKind): Promise<string>;
   saveFact(fact: { id?: string; text: string }): Promise<void>;

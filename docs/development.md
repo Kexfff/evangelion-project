@@ -26,6 +26,8 @@ v0.4.8 integration UI verification: **213 core tests, 31 browser tests**, produc
 
 v0.4.9 adds door-aware navigation and persistent game goals. **262 core tests, 32 browser tests, production/package build and isolated desktop smoke pass**, including actual installed pathfinder/26.1 block data, door interaction fixtures, verified gather→craft sequencing, real MCP permission/audit integration, queue/replace/pause/resume, persistence, budgets, late provider cancellation, dimension changes, scheduled gates, survival reactions and notification failures. The new goal UI is covered at desktop and 390px widths. The desktop smoke additionally verifies planning-settings IPC/persistence and rejection of a disconnected goal. Live house entry, resource/crafting plans, survival reactions and real-provider planning quality remain pending; tests do not join a Minecraft world.
 
+OpenRouter routing coverage (v0.4.10): **271 core tests, 34 browser tests, production/package build and isolated desktop smoke pass**. Core fixtures verify model endpoint discovery, exact routing tags, redacted errors, strict selections on streaming/plain/tool-loop requests, other-provider isolation, empty-list rejection and restart persistence. Browser fixtures cover draft-model discovery, per-model choices, refresh failure, stale response isolation, search and narrow layout. The desktop smoke stubs only the public catalog HTTP response, then exercises real discovery IPC and settings persistence across an Electron restart. No paid OpenRouter generation is used for these tests.
+
 ## Optional live Minecraft smoke
 
 Only run against a world whose owner permits joining and movement. Build the app first, open a Java 26.1 LAN world, then explicitly opt in:

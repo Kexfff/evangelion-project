@@ -1108,6 +1108,80 @@ nav button.active:before {
   color: #a294ae;
   font-size: 10px;
 }
+.openrouter-routing {
+  margin: 22px 0;
+  padding: 20px;
+  border: 1px solid #51405d;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #35273d66, #1b182355);
+}
+.openrouter-routing-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.openrouter-routing h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+}
+.openrouter-routing p {
+  font-size: 12px;
+  line-height: 1.7;
+}
+.openrouter-routing-note,
+.openrouter-routing-heading p {
+  color: #b2a5be;
+}
+.openrouter-endpoints {
+  max-height: 320px;
+  overflow-y: auto;
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+.openrouter-endpoint {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px;
+  border: 1px solid #413449;
+  border-radius: 9px;
+  cursor: pointer;
+}
+.openrouter-endpoint[data-selected] {
+  border-color: #b087b9;
+  background: #664d7033;
+}
+.openrouter-endpoint > input {
+  flex: 0 0 auto;
+  width: 16px;
+  margin-top: 4px;
+}
+.openrouter-endpoint > div {
+  min-width: 0;
+}
+.openrouter-endpoint strong,
+.openrouter-endpoint code,
+.openrouter-endpoint small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.openrouter-endpoint code {
+  font-size: 11px;
+  margin: 5px 0;
+  color: #d0b5db;
+}
+.openrouter-endpoint small {
+  font-size: 11px;
+  color: #b2a5be;
+  line-height: 1.6;
+}
 .game-goals > p {
   color: #b2a5be;
   font-size: 12px;

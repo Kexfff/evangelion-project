@@ -507,6 +507,9 @@ else {
           kind === "embedding",
         );
       });
+      handle("openrouter:providers", (model) =>
+        runtime.provider.openRouterProviders(z.string().max(200).parse(model)),
+      );
       handle("memory:reindex", () => runtime.reindexMemory());
       handle("test", async (raw) => {
         const kind = providerKind.parse(raw);

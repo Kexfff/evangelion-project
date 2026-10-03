@@ -81,6 +81,7 @@ const preview: Bridge = {
   readSpeech: desktopOnly,
   closeSpeech: desktopOnly,
   listModels: desktopOnly,
+  listOpenRouterProviders: desktopOnly,
   reindexMemory: desktopOnly,
   testProvider: desktopOnly,
   saveFact: async (fact) => {

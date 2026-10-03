@@ -1,4 +1,10 @@
 import type { Provider } from "../src/shared/schema";
+import {
+  isOpenRouter,
+  openRouterModelSchema,
+  openRouterTagSchema,
+  type OpenRouterEndpoint,
+} from "../src/shared/openrouter";
 import type { ChatMessage } from "./memory";
 export type Usage = { tokens?: number; cost?: number };
 export class ProviderChatError extends Error {
@@ -28,6 +34,21 @@ function usageOf(raw: any): Usage {
 
 export function endpoint(base: string, route: string) {
   return `${base.replace(/\/+$/, "")}/${route}`;
+}
+export function openRouterRouting(provider: Provider) {
+  if (!isOpenRouter(provider.baseUrl)) return {};
+  const only = provider.openrouterProviders?.[provider.model];
+  if (only === undefined) return {};
+  // Fail closed if a draft/invalid caller reaches the adapter without storage validation.
+  if (
+    !Array.isArray(only) ||
+    !only.length ||
+    only.some((id) => !openRouterTagSchema.safeParse(id).success)
+  )
+    throw new Error(
+      "Choose at least one OpenRouter provider, or use automatic routing.",
+    );
+  return { provider: { only: [...new Set(only)] } };
 }
 export function providerSignal(signal?: AbortSignal) {
   return signal
@@ -108,6 +129,56 @@ export async function consumeSSE(
   return result;
 }
 export class OpenAICompatibleProvider {
+  async openRouterProviders(model: string): Promise<OpenRouterEndpoint[]> {
+    const id = openRouterModelSchema.parse(model);
+    // Public catalog request: no credentials, prompts, or profile edits are needed.
+    const response = await checked(
+      await fetch(
+        `https://openrouter.ai/api/v1/models/${id.split("/").map(encodeURIComponent).join("/")}/endpoints`,
+        { signal: providerSignal(), redirect: "error" },
+      ),
+    );
+    const data = await response.json();
+    if (
+      !Array.isArray(data?.data?.endpoints) ||
+      data.data.endpoints.length > 500
+    )
+      throw new Error(
+        "OpenRouter returned an invalid provider list. Try refreshing later.",
+      );
+    const endpoints = new Map<string, OpenRouterEndpoint>();
+    const price = (value: unknown) =>
+      typeof value === "string" &&
+      value.length <= 40 &&
+      value.trim() !== "" &&
+      Number.isFinite(Number(value)) &&
+      Number(value) >= 0
+        ? value
+        : undefined;
+    for (const row of data.data.endpoints) {
+      if (!row || !openRouterTagSchema.safeParse(row.tag).success) continue;
+      // Routing uses exact tags, not display names (which can hide endpoint variants).
+      endpoints.set(row.tag, {
+        id: row.tag,
+        name:
+          typeof row.provider_name === "string"
+            ? row.provider_name.slice(0, 120)
+            : row.tag,
+        tools:
+          Array.isArray(row.supported_parameters) &&
+          row.supported_parameters.includes("tools"),
+        inputPrice: price(row.pricing?.prompt),
+        outputPrice: price(row.pricing?.completion),
+      });
+    }
+    if (data.data.endpoints.length && !endpoints.size)
+      throw new Error(
+        "OpenRouter returned no usable provider IDs. Saved choices were not changed.",
+      );
+    return [...endpoints.values()].sort(
+      (a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id),
+    );
+  }
   async models(provider: Provider, key: string, embedding = false) {
     // OpenRouter exposes embedding models separately; other compatible servers use /models.
     const route =
@@ -204,6 +275,7 @@ export class OpenAICompatibleProvider {
         body: JSON.stringify({
           model: provider.model,
           messages,
+          ...openRouterRouting(provider),
           stream,
           temperature: options.temperature ?? 0.8,
           max_tokens: options.maxTokens ?? 700,
@@ -282,6 +354,7 @@ export class OpenAICompatibleProvider {
           body: JSON.stringify({
             model: provider.model,
             messages: history,
+            ...openRouterRouting(provider),
             tools,
             tool_choice: round === 3 ? "none" : "auto",
             parallel_tool_calls: false,
