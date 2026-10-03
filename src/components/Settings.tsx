@@ -303,7 +303,7 @@ export function Settings() {
             <ExternalLink size={14} />
           </button>
           <div className="version">
-            evangelion_project <span>v0.4.6</span>
+            evangelion_project <span>v0.4.7</span>
           </div>
         </div>
       </aside>

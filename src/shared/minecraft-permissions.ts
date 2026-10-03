@@ -4,6 +4,7 @@ import {
   type MinecraftConfig,
 } from "./minecraft";
 import type { McpConfig, ToolPolicy } from "./mcp";
+import { minecraftMovementTools } from "./minecraft-gameplay";
 
 type Grant = { tool: string; fingerprint: string; policy: ToolPolicy };
 export function isBundledMinecraft(config: McpConfig) {
@@ -40,18 +41,19 @@ export function minecraftRuntimeConfig(
   return {
     ...config,
     freePlay: true,
-    movement: [
-      "move_to",
-      "follow_player",
-      "collect_blocks",
-      "build_blocks",
-    ].some(permitted),
+    movement: minecraftMovementTools.some(permitted),
     chat: permitted("say_in_game"),
     backgroundLookup: minecraftToolPolicy("locate_player", grants) === "allow",
-    modifyBlocks: permitted("collect_blocks") || permitted("build_blocks"),
+    modifyBlocks:
+      permitted("collect_blocks") ||
+      permitted("build_blocks") ||
+      permitted("dig_block"),
     // A move/follow approval must not bypass a blocked/ask block-edit tool.
-    navigationBlocks: ["collect_blocks", "build_blocks"].every(
-      (name) => minecraftToolPolicy(name, grants) === "allow",
-    ),
+    navigationBlocks: [
+      "collect_blocks",
+      "build_blocks",
+      "dig_block",
+      "interact_block",
+    ].every((name) => minecraftToolPolicy(name, grants) === "allow"),
   };
 }

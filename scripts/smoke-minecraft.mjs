@@ -147,8 +147,19 @@ try {
     );
     // Minecraft is now allow-by-default. Explicitly block edits/chat BEFORE
     // requesting any movement, including pathfinder's terrain modifications.
-    for (const tool of server.tools.filter((t) =>
-      ["collect_blocks", "build_blocks", "say_in_game"].includes(t.name),
+    for (const tool of server.tools.filter(
+      (t) =>
+        ![
+          "observe",
+          "inspect_inventory",
+          "find_blocks",
+          "get_recipes",
+          "locate_player",
+          "move_to",
+          "follow_player",
+          "job_status",
+          "stop_action",
+        ].includes(t.name),
     ))
       await window.eva.mcpGrant(
         server.config.id,

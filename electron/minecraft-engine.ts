@@ -4,6 +4,8 @@ import { Vec3 } from "vec3";
 import { Movements, goals } from "mineflayer-pathfinder";
 import type { Bot } from "mineflayer";
 import { MinecraftLocator } from "./minecraft-locator";
+import { MinecraftActions } from "./minecraft-actions";
+import { MinecraftActionError } from "./minecraft-action-error";
 import { z } from "zod";
 import {
   pointSchema,
@@ -11,8 +13,6 @@ import {
   type MinecraftJob,
   type MinecraftLive,
 } from "../src/shared/minecraft";
-
-class MinecraftActionError extends Error {}
 
 export function gameFailureDetail(error: unknown) {
   if (error instanceof MinecraftActionError) return error.message.slice(0, 300);
@@ -80,12 +80,29 @@ export class MinecraftEngine {
   private anchor?: Vec3;
   private sequence = 0;
   private locator: MinecraftLocator;
+  private gameplay: MinecraftActions;
+  private workTail: Promise<unknown> = Promise.resolve();
   constructor(
     readonly config: MinecraftConfig,
     private bot: Bot,
     private publish: () => void,
   ) {
     this.locator = new MinecraftLocator(bot, config.operatorLookup);
+    this.gameplay = new MinecraftActions(bot, {
+      start: (kind, work, movement) => this.begin(kind, 0, work, movement),
+      check: (signal) => this.check(signal),
+      navigate: (point, signal, distance) =>
+        this.navigate(point, signal, distance),
+      area: (point) => this.area(point),
+      until: (check, signal, milliseconds) =>
+        this.until(check, signal, milliseconds),
+      progress: (detail, count) => {
+        if (this.job?.status !== "running") return;
+        this.job.detail = detail.slice(0, 300);
+        if (count !== undefined) this.job.progress = count;
+        this.publish();
+      },
+    });
   }
   ready() {
     this.locator.setOperatorEnabled(this.config.operatorLookup);
@@ -126,6 +143,10 @@ export class MinecraftEngine {
       dimension: bot.game.dimension,
       health: bot.health,
       food: bot.food,
+      sleeping: bot.isSleeping,
+      riding: !!(bot as Bot & { vehicle?: unknown }).vehicle,
+      timeOfDay: bot.time?.timeOfDay,
+      gameMode: bot.game.gameMode,
       players: Object.keys(bot.players).slice(0, 100),
       playerLocations: this.locator.locations(),
       blocks,
@@ -152,9 +173,17 @@ export class MinecraftEngine {
             e !== bot.entity &&
             e.position.distanceTo(bot.entity.position) <= 16,
         )
+        .sort(
+          (a, b) =>
+            a.position.distanceTo(bot.entity.position) -
+            b.position.distanceTo(bot.entity.position),
+        )
         .slice(0, 24)
         .map((e) => ({
           name: (e.username ?? e.name ?? "entity").slice(0, 100),
+          id: e.id,
+          type: e.type?.slice(0, 100),
+          kind: e.kind?.slice(0, 100),
           position: e.position,
         })),
       job: this.job,
@@ -186,6 +215,7 @@ export class MinecraftEngine {
     this.bot.pathfinder.setGoal(null);
     this.bot.clearControlStates();
     this.bot.stopDigging();
+    this.bot.deactivateItem?.();
     if (this.job?.status === "running") {
       this.job.status = "cancelled";
       this.job.detail = reason;
@@ -257,10 +287,11 @@ export class MinecraftEngine {
   private begin(
     kind: MinecraftJob["kind"],
     total: number,
-    work: (signal: AbortSignal) => Promise<void>,
+    work: (signal: AbortSignal) => Promise<void | Record<string, unknown>>,
+    requiresMovement = true,
   ) {
     this.guard();
-    if (!this.config.movement)
+    if (requiresMovement && !this.config.movement)
       throw new MinecraftActionError("Movement permission is off.");
     if (this.action)
       if (this.config.freePlay) this.stop("Replaced by a new game action.");
@@ -291,11 +322,26 @@ export class MinecraftEngine {
           this.config.jobSeconds * 1000,
         )
       : undefined;
-    void work(controller.signal)
-      .then(() => {
+    // Replacements wait for the previous action's cleanup before touching inventory,
+    // controls or windows. Chat still receives its action ID immediately.
+    const task = this.workTail
+      .catch(() => {})
+      .then(async () => {
+        this.check(controller.signal);
+        await this.gameplay.idle(controller.signal);
+        this.check(controller.signal);
+        return work(controller.signal);
+      });
+    this.workTail = task.catch(() => {});
+    void task
+      .then((result) => {
         if (sequence !== this.sequence || controller.signal.aborted) return;
         this.job!.status = "succeeded";
-        this.job!.detail = "Completion verified.";
+        this.job!.detail =
+          typeof result?.summary === "string"
+            ? result.summary.slice(0, 300)
+            : "Completion verified.";
+        if (result) this.job!.result = result;
       })
       .catch((error: unknown) => {
         if (sequence !== this.sequence) return;
@@ -337,6 +383,7 @@ export class MinecraftEngine {
     if (name === "observe") return this.observe();
     if (name === "job_status") return this.job ?? { status: "idle" };
     this.guard();
+    if (this.gameplay.handles(name)) return this.gameplay.call(name, raw);
     if (name === "say_in_game") {
       const { text } = z
         .object({

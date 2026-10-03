@@ -87,6 +87,43 @@ function fixture() {
 }
 
 describe("Minecraft allow-unless-blocked permissions", () => {
+  it.each([
+    ["drop_items", { item: "stone", count: 1 }],
+    ["sleep", {}],
+    ["attack_entity", { entityId: 2 }],
+    ["container", { action: "inspect", position: { x: 0, y: 64, z: 0 } }],
+    ["dig_block", { position: { x: 0, y: 64, z: 0 } }],
+  ])(
+    "new tool %s is available by default and honors an explicit block",
+    async (name, args) => {
+      const f = fixture();
+      await f.mcp.configure(config());
+      await f.mcp.action(MINECRAFT_ID, "connect");
+      const tool = compileMcpTool(
+        JSON.parse(JSON.stringify(minecraftTools.find((t) => t.name === name))),
+        MINECRAFT_ID,
+      );
+      expect(
+        await f.mcp.execute(
+          tool.alias,
+          args,
+          f.ctx(),
+          new AbortController().signal,
+        ),
+      ).toHaveProperty("untrustedToolResult");
+      f.mcp.grant(MINECRAFT_ID, tool.name, tool.fingerprint, "deny");
+      f.transport.call.mockClear();
+      expect(
+        await f.mcp.execute(
+          tool.alias,
+          args,
+          f.ctx(),
+          new AbortController().signal,
+        ),
+      ).toHaveProperty("error");
+      expect(f.transport.call).not.toHaveBeenCalled();
+    },
+  );
   it("exposes and executes mining without any grant or legacy modifyBlocks switch", async () => {
     const f = fixture();
     await f.mcp.configure(config());
@@ -234,6 +271,10 @@ describe("Minecraft allow-unless-blocked permissions", () => {
       "Do not narrate tool calls, job IDs",
     );
     expect(f.minecraft.context()).toContain("unrelated conversation");
+    expect(f.minecraft.context()).toContain("Sequence dependent actions");
+    expect(f.minecraft.context()).toContain(
+      "check job_status for completion/result",
+    );
     expect(f.minecraft.context()).toContain(
       "Never claim an action finished without verified results",
     );

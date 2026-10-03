@@ -1,6 +1,9 @@
 import { test, expect } from "@playwright/test";
 import { defaultSettings } from "../../src/shared/schema";
-import { minecraftConfigSchema } from "../../src/shared/minecraft";
+import {
+  minecraftConfigSchema,
+  minecraftTools,
+} from "../../src/shared/minecraft";
 
 test("Minecraft preview explains allow-by-default and has no duplicate block/chat gates", async ({
   page,
@@ -69,122 +72,126 @@ test("Minecraft jobs, stop control and world landmarks stay separate from chat",
     trustedPlayer: "Player",
     movement: true,
   });
-  await page.addInitScript((config) => {
-    let listener: (event: unknown) => void = () => {};
-    const job = {
-      id: "job",
-      kind: "follow",
-      status: "running",
-      progress: 0,
-      total: 0,
-      detail: "Following Player",
-      startedAt: "2026-10-03T00:00:00Z",
-      updatedAt: "2026-10-03T00:00:00Z",
-      worldId: config.worldId,
-      characterId: "eva",
-    };
-    const snapshot = {
-      settings: {},
-      facts: [],
-      messages: [],
-      sessionId: "fixture",
-      busy: false,
-      secretStorage: "local-file",
-      minecraft: {
-        config,
-        live: {
-          status: "Connected",
-          connected: true,
-          position: { x: 0, y: 64, z: 0 },
-          dimension: "overworld",
-          health: 20,
-          food: 20,
-          players: ["Player"],
-          inventory: [{ name: "dirt", count: 10 }],
-          nearby: [],
-          job,
-        },
-        jobs: [job],
-        landmarks: [] as any[],
-      },
-      mcp: {
-        stopped: false,
-        pending: [],
-        audit: [],
-        servers: [
-          {
-            config: {
-              id: "builtin-minecraft",
-              name: "Minecraft (bundled)",
-              command: "bundled:minecraft",
-              args: [],
-              transport: "stdio",
-              url: "",
-              enabled: true,
-              characterId: "eva",
-            },
+  await page.addInitScript(
+    ({ config, tools }) => {
+      let listener: (event: unknown) => void = () => {};
+      const job = {
+        id: "job",
+        kind: "follow",
+        status: "running",
+        progress: 0,
+        total: 0,
+        detail: "Following Player",
+        startedAt: "2026-10-03T00:00:00Z",
+        updatedAt: "2026-10-03T00:00:00Z",
+        worldId: config.worldId,
+        characterId: "eva",
+      };
+      const snapshot = {
+        settings: {},
+        facts: [],
+        messages: [],
+        sessionId: "fixture",
+        busy: false,
+        secretStorage: "local-file",
+        minecraft: {
+          config,
+          live: {
             status: "Connected",
-            tools: [
-              "observe",
-              "locate_player",
-              "move_to",
-              "follow_player",
-              "job_status",
-              "stop_action",
-              "collect_blocks",
-              "build_blocks",
-              "say_in_game",
-            ].map((name) => ({
-              name,
-              policy: "deny",
-              fingerprint: "a".repeat(64),
-            })),
-            hasSecrets: false,
-          },
-        ],
-      },
-    };
-    Object.assign(window, {
-      mcFixture: snapshot,
-      eva: {
-        snapshot: async () => structuredClone(snapshot),
-        presence: async () => {},
-        onEvent: (fn: typeof listener) => {
-          listener = fn;
-          return () => {};
-        },
-        mcpGrant: async (
-          _id: string,
-          name: string,
-          _fingerprint: string,
-          policy: string,
-        ) => {
-          snapshot.mcp.servers[0].tools.find((t) => t.name === name)!.policy =
-            policy;
-          listener({ type: "state", state: structuredClone(snapshot) });
-        },
-        assetUrl: (asset: string) =>
-          asset === "builtin:eva"
-            ? "/AvatarSample_B.vrm"
-            : `/animations/${asset.slice(10)}.vrma`,
-        minecraftAction: async () => {
-          job.status = "cancelled";
-          job.detail = "Stopped by user.";
-          listener({ type: "state", state: structuredClone(snapshot) });
-        },
-        saveLandmark: async (name: string) => {
-          snapshot.minecraft.landmarks.push({
-            id: "landmark",
-            name,
-            worldId: config.worldId,
+            connected: true,
+            position: { x: 0, y: 64, z: 0 },
             dimension: "overworld",
-            position: snapshot.minecraft.live.position,
-          });
-          listener({ type: "state", state: structuredClone(snapshot) });
+            health: 20,
+            food: 20,
+            players: ["Player"],
+            inventory: [{ name: "dirt", count: 10 }],
+            nearby: [],
+            job,
+          },
+          jobs: [
+            job,
+            {
+              ...job,
+              id: "crafted",
+              kind: "craft",
+              status: "succeeded",
+              detail: "Crafted oak_planks",
+              result: { operations: 2, outputGain: 8 },
+            },
+          ],
+          landmarks: [] as any[],
         },
-      },
-    });
-  }, config);
+        mcp: {
+          stopped: false,
+          pending: [],
+          audit: [],
+          servers: [
+            {
+              config: {
+                id: "builtin-minecraft",
+                name: "Minecraft (bundled)",
+                command: "bundled:minecraft",
+                args: [],
+                transport: "stdio",
+                url: "",
+                enabled: true,
+                characterId: "eva",
+              },
+              status: "Connected",
+              tools: tools.map((t) => ({
+                name: t.name,
+                description: t.description,
+                policy: "deny",
+                fingerprint: "a".repeat(64),
+              })),
+              hasSecrets: false,
+            },
+          ],
+        },
+      };
+      Object.assign(window, {
+        mcFixture: snapshot,
+        eva: {
+          snapshot: async () => structuredClone(snapshot),
+          presence: async () => {},
+          onEvent: (fn: typeof listener) => {
+            listener = fn;
+            return () => {};
+          },
+          mcpGrant: async (
+            _id: string,
+            name: string,
+            _fingerprint: string,
+            policy: string,
+          ) => {
+            snapshot.mcp.servers[0].tools.find((t) => t.name === name)!.policy =
+              policy;
+            listener({ type: "state", state: structuredClone(snapshot) });
+          },
+          assetUrl: (asset: string) =>
+            asset === "builtin:eva"
+              ? "/AvatarSample_B.vrm"
+              : `/animations/${asset.slice(10)}.vrma`,
+          minecraftAction: async () => {
+            job.status = "cancelled";
+            job.detail = "Stopped by user.";
+            listener({ type: "state", state: structuredClone(snapshot) });
+          },
+          saveLandmark: async (name: string) => {
+            snapshot.minecraft.landmarks.push({
+              id: "landmark",
+              name,
+              worldId: config.worldId,
+              dimension: "overworld",
+              position: snapshot.minecraft.live.position,
+            });
+            listener({ type: "state", state: structuredClone(snapshot) });
+          },
+        },
+      });
+    },
+    { config, tools: minecraftTools },
+  );
   await page.addInitScript((settings) => {
     (window as any).mcFixture.settings = settings;
   }, defaultSettings);
@@ -193,6 +200,10 @@ test("Minecraft jobs, stop control and world landmarks stay separate from chat",
     .getByRole("button", { name: "Plugins & MCP", exact: true })
     .click();
   await expect(page.getByText("follow · running")).toBeVisible();
+  await page.getByText("Action result", { exact: true }).click();
+  await expect(page.locator(".minecraft-jobs pre")).toContainText(
+    '"outputGain": 8',
+  );
   await page.getByRole("button", { name: "Enable everyday controls" }).click();
   await page.getByText("Individual tool permissions", { exact: true }).click();
   for (const name of [
@@ -211,12 +222,7 @@ test("Minecraft jobs, stop control and world landmarks stay separate from chat",
     ).toHaveValue("deny");
   page.once("dialog", (d) => d.accept());
   await page.getByRole("button", { name: "Enable all game tools" }).click();
-  for (const name of [
-    "collect_blocks",
-    "build_blocks",
-    "say_in_game",
-    "locate_player",
-  ])
+  for (const { name } of minecraftTools)
     await expect(
       page.getByLabel(`Minecraft permission for ${name}`, { exact: true }),
     ).toHaveValue("allow");

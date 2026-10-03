@@ -125,6 +125,53 @@ function fixture(patch = {}) {
 }
 
 describe("Minecraft boundaries and jobs", () => {
+  it("stores structured gameplay results and releases item use before replacement", async () => {
+    const h = fixture({ freePlay: true });
+    const activateItem = vi.fn(),
+      deactivateItem = vi.fn(),
+      lookAt = vi.fn(async () => {});
+    Object.assign(h.bot, {
+      heldItem: { name: "bow" },
+      activateItem,
+      deactivateItem,
+      lookAt,
+    });
+    const first = await h.engine.call("use_item", { milliseconds: 5000 });
+    expect(first).toMatchObject({ status: "running" });
+    await vi.waitFor(() => expect(activateItem).toHaveBeenCalledOnce());
+    await h.engine.call("look_at", { position: { x: 1, y: 65, z: 0 } });
+    await vi.waitFor(() => expect(h.engine.job?.status).toBe("succeeded"));
+    expect(deactivateItem).toHaveBeenCalled();
+    expect(deactivateItem.mock.invocationCallOrder.at(-1)).toBeLessThan(
+      lookAt.mock.invocationCallOrder[0],
+    );
+    expect(h.engine.job?.kind).toBe("look");
+    expect(await h.engine.call("job_status", {})).toMatchObject({
+      result: { summary: "Look direction updated." },
+    });
+  });
+  it("waits for an aborted upstream operation to settle before another gameplay action", async () => {
+    const h = fixture({ freePlay: true });
+    let settle!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      settle = resolve;
+    });
+    const lookAt = vi
+      .fn()
+      .mockImplementationOnce(() => pending)
+      .mockResolvedValue(undefined);
+    Object.assign(h.bot, { lookAt });
+    await h.engine.call("look_at", { position: { x: 1, y: 65, z: 0 } });
+    await vi.waitFor(() => expect(lookAt).toHaveBeenCalledOnce());
+    await h.engine.call("stop_action", {});
+    expect(h.engine.job?.status).toBe("cancelled");
+    await h.engine.call("look_at", { position: { x: 2, y: 65, z: 0 } });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(lookAt).toHaveBeenCalledOnce();
+    settle();
+    await vi.waitFor(() => expect(h.engine.job?.status).toBe("succeeded"));
+    expect(lookAt).toHaveBeenCalledTimes(2);
+  });
   it("Free play permits terrain navigation only with explicit block permission", () => {
     const disabled = fixture({ freePlay: true, modifyBlocks: false });
     expect(disabled.bot.pathfinder.setMovements.mock.calls[0][0].canDig).toBe(
@@ -332,7 +379,9 @@ describe("Minecraft boundaries and jobs", () => {
     const target = h.bot.players.Player.entity;
     h.bot.players.Player.entity = undefined as any;
     await h.engine.call("follow_player", {});
-    expect(h.engine.job?.detail).toContain("Waiting for Player");
+    await vi.waitFor(() =>
+      expect(h.engine.job?.detail).toContain("Waiting for Player"),
+    );
     h.bot.players.Player.entity = target;
     await realDelay(1100);
     expect(h.bot.pathfinder.setGoal).toHaveBeenCalledTimes(1);
@@ -349,6 +398,9 @@ describe("Minecraft boundaries and jobs", () => {
     const h = fixture();
     h.bot.players.Player.entity = undefined as any;
     await h.engine.call("follow_player", {});
+    await vi.waitFor(() =>
+      expect(h.engine.job?.detail).toContain("Waiting for Player"),
+    );
     const later = Date.now() + 31000;
     vi.spyOn(Date, "now").mockReturnValue(later);
     await realDelay(1100);
@@ -360,6 +412,9 @@ describe("Minecraft boundaries and jobs", () => {
     h.bot.players.Player.entity.position = new Vec3(20, 64, 0);
     await h.engine.call("follow_player", {});
     h.bot.emit("path_update", { status: "noPath" });
+    await vi.waitFor(() =>
+      expect(h.engine.job?.detail).toContain("Following Player"),
+    );
     const later = Date.now() + 21000;
     vi.spyOn(Date, "now").mockReturnValue(later);
     await realDelay(1100);

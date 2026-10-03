@@ -368,6 +368,17 @@ Validation (2026-10-03): **143 core tests and 30 browser tests pass**, including
 - [x] Regression coverage for default-allowed mining despite legacy flags, explicit denial/restoring Allow, indirect navigation/coordinate-lookup restrictions, reconnect/definition/save persistence, one-time migration, external-MCP isolation and quiet context (including autonomous messages). **183 core tests and 30 UI tests pass.** Update movement-only live smoke to explicitly block terrain edits/public chat before any action under the new defaults.
 - [x] Production/package build and isolated desktop smoke pass; refreshed `release/linux-unpacked/` as v0.4.6. Live mining/building and real-provider conversational phrasing were not exercised in this increment; no world changes were made during development.
 
+### Everyday Minecraft gameplay — v0.4.7
+
+- [x] Add 17 bundled tools (26 total): inventory inspection, loaded-block search, exact-quantity/slot dropping, hand/off-hand/armor equipment, eating/drinking, sleeping/waking, targeted melee hit/fight, entity interaction/mount/dismount, block interaction, held-item use/release, gaze, exact-block digging, recipe discovery/crafting, storage transfers and furnace management.
+- [x] Keep all new tools allowed unless explicitly blocked; preserve existing choices and external MCP isolation. Automatic terrain navigation requires all relevant block-edit/interaction tools set to Allow. No duplicate gameplay permission switches.
+- [x] Enrich observation with entity IDs/types, sleep/riding/time/game-mode state. Store structured action results and expose them in job status and expandable settings details; preserve quiet conversational instructions. Distinguish inputs sent from verified inventory/block/sleep/death outcomes, with no fabricated delivery, projectile-hit or kill claims.
+- [x] Serialize replacements through action cleanup and pending protocol operations; bound inventory/window operations, release held use on cancellation, close storage/furnace windows (including late opens), and avoid implicit item tossing when unequipping a full inventory. Recognize sleeping/riding in the physics monitor.
+- [x] Simulated regressions cover quantities, equipment/food, beds, combat/death/lost targets/cancellation, interactions, recipe output counts, window-local inventory changes, furnace operations, aborted/late windows, operation fencing, engine replacement/results, default grants and permission controls. Movement-only live smoke explicitly blocks every other mutating tool before any action.
+- [x] Validation: **213 core tests, 30 UI tests**, production/package build and isolated desktop smoke pass. Refreshed `release/linux-unpacked/` as v0.4.7. Updated gameplay guide and settings tool descriptions/results. Real-provider action sequencing remains unverified; the prompt explicitly requires completion checks between dependent actions and does not promise an autonomous continuation after the tool turn ends.
+- [ ] Live gameplay acceptance in a disposable/designated world: dropping, sleep, combat, crafting, storage and smelting. No live world changes or real-provider gameplay tests were performed in this increment.
+- [ ] Further gameplay: automatic fishing, enchanting/anvils, full villager trade selection, vehicle steering, recursive resource/crafting plans, reactive combat and resumable autonomous game goals.
+
 ## Later refinements
 
 - Memory consolidation/summarization, richer retrieval evaluation and scalable vector storage.

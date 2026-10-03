@@ -27,6 +27,28 @@ function fixture(version = "26.1") {
 }
 
 describe("Minecraft 26.1 physics compatibility", () => {
+  it("does not mistake sleeping/riding for frozen walking physics", () => {
+    const bot = fixture();
+    let now = 0;
+    const health = new MinecraftPhysicsHealth(bot, () => now);
+    bot.isSleeping = true;
+    now = 30000;
+    expect(health.problem()).toBeUndefined();
+    bot.isSleeping = false;
+    bot.emit("wake");
+    now += 100;
+    expect(health.problem()).toBeUndefined();
+    Object.assign(bot, { vehicle: bot.entity });
+    now += 30000;
+    expect(health.problem()).toBeUndefined();
+    Object.assign(bot, { vehicle: null });
+    bot.emit("dismount", bot.entity);
+    now += 8100;
+    expect(health.problem()).toContain("stopped updating");
+    health.dispose();
+    for (const event of ["sleep", "wake", "mount", "dismount"] as const)
+      expect(bot.listenerCount(event)).toBe(0);
+  });
   it("preserves decoded lpVec3 knockback through the real upstream entity handler", () => {
     const bot = fixture();
     const [

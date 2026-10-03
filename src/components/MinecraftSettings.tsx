@@ -256,8 +256,9 @@ export function MinecraftSettings({
                 <p>
                   Block changes can permanently alter your world. Optional
                   limits below apply only if you set them; radius 0 means
-                  anywhere. Block collect_blocks and build_blocks below to
-                  disable terrain edits, including edits while navigating.
+                  anywhere. Block collect_blocks, build_blocks, dig_block and
+                  interact_block below to disable direct terrain edits and block
+                  activation, as well as edits while navigating.
                 </p>
                 <div className="form-grid">
                   {(["x", "y", "z"] as const).map((axis) => (
@@ -316,9 +317,10 @@ export function MinecraftSettings({
           <h3>Minecraft tool permissions</h3>
           <p>
             Allowed unless blocked. These are the only Minecraft action
-            permissions; changes apply immediately. Blocking either block-edit
-            tool also disables automatic digging and scaffolding while
-            navigating. Other MCP servers still default to Blocked.
+            permissions; changes apply immediately. Blocking a block-edit or
+            block-interaction tool also disables automatic digging and
+            scaffolding while navigating. Other MCP servers still default to
+            Blocked.
           </p>
           <button
             className="button secondary"
@@ -374,6 +376,7 @@ export function MinecraftSettings({
             {connection.tools.map((t) => (
               <label className="field" key={t.name}>
                 <span>{t.name}</span>
+                <small>{t.description}</small>
                 <select
                   aria-label={`Minecraft permission for ${t.name}`}
                   value={t.policy}
@@ -448,8 +451,8 @@ export function MinecraftSettings({
       )}
       <h3>Game jobs</h3>
       <p>
-        Jobs continue locally while you chat. Only one job owns movement; stop
-        it before giving a conflicting instruction. Disconnect,
+        Actions continue locally while you chat. A new action replaces the
+        previous one after its cleanup finishes; Stop cancels it. Disconnect,
         character/settings changes and restart never replay a job.
       </p>
       {data?.jobs.length ? (
@@ -468,6 +471,19 @@ export function MinecraftSettings({
                   </>
                 )}
                 <p>{j.detail}</p>
+                {j.result && (
+                  <details>
+                    <summary>Action result</summary>
+                    <pre
+                      style={{
+                        whiteSpace: "pre-wrap",
+                        overflowWrap: "anywhere",
+                      }}
+                    >
+                      {JSON.stringify(j.result, null, 2)}
+                    </pre>
+                  </details>
+                )}
                 <small>
                   {j.worldId} · {new Date(j.updatedAt).toLocaleString()}
                 </small>

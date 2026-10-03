@@ -34,6 +34,10 @@ export class MinecraftPhysicsHealth {
   ) {
     this.lastTick = now();
     bot.on("physicsTick", this.onTick);
+    bot.on("mount", this.onTick);
+    bot.on("dismount", this.onTick);
+    bot.on("sleep", this.onTick);
+    bot.on("wake", this.onTick);
   }
   problem(): string | undefined {
     const entity = this.bot.entity;
@@ -49,10 +53,22 @@ export class MinecraftPhysicsHealth {
       ].every(Number.isFinite)
     )
       return "Minecraft physics produced invalid coordinates or velocity. Reconnect Eva.";
+    // Mounted/sleeping clients can legitimately suspend walking physics.
+    if (
+      this.bot.isSleeping ||
+      (this.bot as Bot & { vehicle?: unknown }).vehicle
+    ) {
+      this.lastTick = this.now();
+      return;
+    }
     if (this.now() - this.lastTick > 8000)
       return "Minecraft physics stopped updating for 8 seconds (world/chunks may be paused or unavailable). Reconnect Eva.";
   }
   dispose() {
     this.bot.removeListener("physicsTick", this.onTick);
+    this.bot.removeListener("mount", this.onTick);
+    this.bot.removeListener("dismount", this.onTick);
+    this.bot.removeListener("sleep", this.onTick);
+    this.bot.removeListener("wake", this.onTick);
   }
 }

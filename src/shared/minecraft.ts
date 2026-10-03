@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { minecraftGameplayTools } from "./minecraft-gameplay";
 export const MINECRAFT_ID = "builtin-minecraft";
 export const pointSchema = z
   .object({
@@ -50,7 +51,26 @@ export const minecraftConfigSchema = z
 export type MinecraftConfig = z.infer<typeof minecraftConfigSchema>;
 export const minecraftJobSchema = z.object({
   id: z.string().max(100),
-  kind: z.enum(["move", "follow", "collect", "build"]),
+  kind: z.enum([
+    "move",
+    "follow",
+    "collect",
+    "build",
+    "drop",
+    "equip",
+    "eat",
+    "sleep",
+    "wake",
+    "combat",
+    "interact",
+    "use",
+    "look",
+    "dig",
+    "craft",
+    "container",
+    "furnace",
+  ]),
+  result: z.record(z.string(), z.unknown()).optional(),
   status: z.enum([
     "running",
     "succeeded",
@@ -91,6 +111,10 @@ export const minecraftLiveSchema = z
     dimension: z.string().max(40).optional(),
     health: z.number().optional(),
     food: z.number().optional(),
+    sleeping: z.boolean().optional(),
+    riding: z.boolean().optional(),
+    timeOfDay: z.number().optional(),
+    gameMode: z.string().max(40).optional(),
     players: z.array(z.string().max(100)).max(100).default([]),
     playerLocations: z
       .array(
@@ -110,7 +134,15 @@ export const minecraftLiveSchema = z
       .max(50)
       .default([]),
     nearby: z
-      .array(z.object({ name: z.string().max(100), position: pointSchema }))
+      .array(
+        z.object({
+          name: z.string().max(100),
+          position: pointSchema,
+          id: z.number().int().optional(),
+          type: z.string().max(100).optional(),
+          kind: z.string().max(100).optional(),
+        }),
+      )
       .max(24)
       .default([]),
     blocks: z
@@ -144,6 +176,7 @@ export interface MinecraftSnapshot {
   landmarks: z.infer<typeof landmarkSchema>[];
 }
 export const minecraftTools = [
+  ...minecraftGameplayTools,
   {
     name: "locate_player",
     description:
@@ -254,7 +287,7 @@ export const minecraftTools = [
   {
     name: "job_status",
     description:
-      "Read the latest Minecraft job and verified progress. Running means NOT finished.",
+      "Read the latest background action and its result (including container contents, recipes/output and combat outcome). Running means NOT finished. Read result.summary: a sent interaction/attack is not proof of its intended world effect. Keep routine polling/bookkeeping out of chat.",
     inputSchema: {
       type: "object",
       properties: {},
