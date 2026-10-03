@@ -44,6 +44,7 @@ export function minecraftRuntimeConfig(
     movement: minecraftMovementTools.some(permitted),
     chat: permitted("say_in_game"),
     backgroundLookup: minecraftToolPolicy("locate_player", grants) === "allow",
+    navigationDoors: minecraftToolPolicy("interact_block", grants) === "allow",
     modifyBlocks:
       permitted("collect_blocks") ||
       permitted("build_blocks") ||

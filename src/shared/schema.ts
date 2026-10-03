@@ -176,6 +176,14 @@ export type RuntimeEvent =
   | { type: "phase"; phase: Phase }
   | { type: "warning"; message: string };
 export interface Bridge {
+  submitGameGoal(input: unknown): Promise<unknown>;
+  controlGameGoal(
+    id: string,
+    action: "pause" | "resume" | "cancel",
+  ): Promise<unknown>;
+  configureGameGoals(
+    config: import("./game-goals").GameGoalConfig,
+  ): Promise<void>;
   configureMinecraft(
     config: import("./minecraft").MinecraftConfig,
   ): Promise<void>;

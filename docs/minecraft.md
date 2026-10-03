@@ -82,7 +82,35 @@ Use **World landmarks** to save the bot's current location under a short name. L
 
 The adapter is a bundled MCP server inside an Electron utility process. `minecraft-transport.ts` manages its lifetime, `minecraft-worker.ts` owns the connection, `minecraft-engine.ts` owns background actions, `minecraft-actions.ts` implements gameplay operations, and `minecraft-plugin.ts` coordinates state and persistence through the existing MCP permissions/audit layer. It receives no provider credentials. Personal conversation and semantic memory remain in the shared runtime, not in the bot process.
 
-This increment supports user-requested actions, not autonomous LLM gameplay. Proactive/scheduled game planning, resumable multi-step goals, fishing automation, enchanting, selecting/completing villager trades, vehicle steering, richer world memory and a disposable-server gameplay acceptance test remain on the [plan](../PLAN.MD). Entity interaction can open a trading interaction, but does not select or complete a trade.
+v0.4.9 adds a main-process goal coordinator and door-aware navigation, described below. Fishing automation, enchanting, selecting/completing villager trades, vehicle steering, richer world memory and live gameplay acceptance remain on the [plan](../PLAN.MD). Entity interaction can open a trading interaction, but does not select or complete a trade.
+
+## Doors and entrances
+
+Navigation now recognizes ordinary doors and fence gates, including both halves of a door. Eva opens a nearby closed entrance on her planned route once, verifies its open state and leaves it open. Already-open entrances need no interaction; closed iron doors cannot be right-clicked open. Use their actual button/lever/redstone mechanism explicitly—automatic mechanism discovery is not implemented.
+
+Digging and scaffolding have higher route costs so reachable entrances are preferred. **This is a preference, not a house-protection guarantee:** permitted terrain edits remain available when pathfinding considers them necessary. Block the digging/building tools if a particular world must not be changed. Automatic door opening requires `interact_block` set to Allow, honors an optional build area, and does not bypass Ask or Blocked. Failed opening stops the action instead of toggling repeatedly.
+
+## Goals that continue while you chat
+
+Ask “Make a stone pickaxe” or “Gather 16 oak logs.” The LLM can create a `game_goal` with concrete inventory, location, hunger or exact-block completion criteria. **Settings → Plugins & MCP → Minecraft → Game goals** also provides a simple inventory-goal form.
+
+The coordinator observes the world, asks the configured LLM for one structured next step, executes it through the existing Minecraft MCP permissions, waits for the action's outcome, and observes again. This permits gathering and crafting prerequisites across many chat turns. Completion is checked by application code against observed state, not the model's claim. Recipe counts remain crafting operations; the target goal count is the total desired inventory quantity. Planning quality still depends on the chosen LLM and reachable resources.
+
+- Goals queue by default. Replace cancels existing goals; direct game commands pause goals, while ordinary chat and read-only observations leave them running. Desktop, voice and paired Telegram share the same coordinator.
+- Pause, resume, cancel and step history are available beside the goal. Stop cancels active/queued/paused goals; emergency stop also disconnects tools. Effects already sent to Minecraft cannot be rolled back.
+- Goals persist by character, session, endpoint, world label, account and dimension. Restart/disconnect pauses them. Resume requires the same world and inspects current state before planning; it never replays the last action blindly. A reused LAN endpoint cannot prove which save is loaded—keep world labels accurate.
+- Defaults: 24 steps, 32 planning requests, 15 minutes, 90 seconds per action and $0.50 provider-reported cost per goal. Change these in **Planning budgets & reactions**. Cost may be unavailable and is reported after a request, so this is not a guaranteed billing cap. Saving pauses existing goals.
+- Up to two failed movement routes can be replanned with different waypoints. Failed/uncertain building, combat or inventory effects end the goal for inspection; no blind destructive retries. An indefinite follow is a direct action, not a finite goal step.
+
+Only the bundled Minecraft tool set is available to this planner. Provider credentials stay in the main process; neither the worker nor game world receives private conversation memory. Goals/outcomes remain in game history and current-session chat context. Optional outcome announcements create a shared conversation message, including Telegram delivery when that channel is available; routine step/status narration stays out of chat.
+
+## Scheduled goals and survival reactions
+
+These are **opt-in** under Planning budgets & reactions and also require Consciousness enabled. Scheduled goals accept a start within seven days. They share consciousness availability, pause, quiet hours, cooldown and daily action budget; ordinary reminders still cannot execute external tools. One autonomous goal activation consumes one daily action, not one action per physics tick.
+
+Survival reactions run locally at idle/verified action boundaries: eat available suitable food when hunger is low, or retreat toward a tracked preferred player after taking damage. A reaction takes priority over the next planned step, then the queued goal can continue. There is no automatic guessed-attacker targeting or LLM call per physics tick. In-flight inventory operations are not interrupted to eat. Reactions honor explicit tool blocks, cooldowns and Stop/pause. Outcome announcements are off by default and are only delivered when the consciousness notification gate is ready.
+
+Door planning/interaction, goal sequencing, permissions, interruptions, persistence and these reactions are fixture-tested. **Live house entry, autonomous gathering/crafting and real-provider planning quality are still pending acceptance in a designated test world.** No live world was joined or changed while implementing v0.4.9.
 
 The v0.4.7 gameplay additions are covered by simulated-game tests, not live-world acceptance. No world-changing actions were performed in the user's LAN world while developing these tools.
 

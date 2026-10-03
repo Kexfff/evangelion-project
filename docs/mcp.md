@@ -2,7 +2,7 @@
 
 [← Documentation](README.md) · [Project home](../README.md)
 
-Sprint 4's MCP foundation landed in v0.4.0. Telegram remains a bundled chat channel; MCP adds separately configured tool providers to the same companion. v0.4.1 adds a [bundled Minecraft adapter](minecraft.md) for Java Edition LAN worlds, with persistent job history and bounded background actions. Proactive/autonomous game planning remains future work.
+Sprint 4's MCP foundation landed in v0.4.0. Telegram remains a bundled chat channel; MCP adds separately configured tool providers to the same companion. v0.4.1 adds a [bundled Minecraft adapter](minecraft.md) for Java Edition LAN worlds. v0.4.9 adds persistent, verified game goals and opt-in scheduled/survival actions through a Minecraft-only coordinator.
 
 ## Connect a server
 
@@ -32,7 +32,7 @@ Grants bind to the connection, character, tool name and a fingerprint of the dis
 
 Pending approvals appear in **Plugins & MCP**; banners in other settings tabs and the companion point to them. An approval is not a standing grant. Arguments may contain private information, so inspect them before sending them to an external service.
 
-Only ordinary user-initiated conversations receive external tools. Proactive messages and scheduled reminders still cannot call external tools. Tool-capable LLM support is required. While tools are available, the existing bounded, non-streaming tool loop speaks only the final answer, not intermediate planning or tool JSON. Normal chat remains streaming when no tools are available.
+Only ordinary user-initiated conversations receive general external tools. Proactive messages and ordinary scheduled reminders still cannot call external tools. The separate game coordinator can continue authorized Minecraft goals, including explicitly enabled schedules/survival reactions; it cannot access arbitrary external MCP servers or PC tools. Its steps pass through the same schema validation, grants, approvals and audit. Tool-capable LLM support is required. While tools are available, the existing bounded, non-streaming chat tool loop speaks only the final answer, not intermediate planning or tool JSON. Normal chat remains streaming when no tools are available.
 
 ## Stop and failure behavior
 

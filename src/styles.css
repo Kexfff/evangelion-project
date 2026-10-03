@@ -1093,6 +1093,7 @@ nav button.active:before {
   border-radius: 10px;
 }
 .integration-hub .minecraft-jobs > li[data-status="running"],
+.integration-hub .minecraft-jobs > li[data-status="completed"],
 .integration-hub .minecraft-jobs > li[data-status="succeeded"] {
   border-left-color: #8cb79b;
 }
@@ -1106,6 +1107,15 @@ nav button.active:before {
 .integration-hub .minecraft-jobs small {
   color: #a294ae;
   font-size: 10px;
+}
+.game-goals > p {
+  color: #b2a5be;
+  font-size: 12px;
+  line-height: 1.8;
+  margin: 12px 0;
+}
+.game-goals .minecraft-jobs > li > .connection-badge {
+  margin-left: 10px;
 }
 @media (max-width: 1100px) {
   .integration-choice {

@@ -111,6 +111,22 @@ export class Autonomy {
     this.suspended = value;
     this.heartbeat = 0;
   }
+  get gameSuspended() {
+    return this.suspended;
+  }
+  reserveGameAction() {
+    if (this.gate() !== "Ready")
+      throw new Error("Autonomous game action is not ready.");
+    this.store.update((d) => {
+      const state = { ...this.state },
+        day = localClock(this.now(), this.config.timeZone).day;
+      state.dailyUsed = state.day === day ? state.dailyUsed + 1 : 1;
+      state.day = day;
+      state.lastAction = this.now();
+      d.automation.states[this.store.characterId] = state;
+    });
+    this.log("game-wake", "Authorized game goal claimed an autonomy action.");
+  }
   log(
     kind: string,
     detail: string,

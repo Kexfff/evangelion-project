@@ -1,6 +1,11 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { Bridge, RuntimeEvent } from "../src/shared/schema";
 const api: Bridge = {
+  submitGameGoal: (input) => ipcRenderer.invoke("eva:game:submit", input),
+  controlGameGoal: (id, action) =>
+    ipcRenderer.invoke("eva:game:control", { id, action }),
+  configureGameGoals: (config) =>
+    ipcRenderer.invoke("eva:game:configure", config),
   configureMinecraft: (config) =>
     ipcRenderer.invoke("eva:minecraft:configure", config),
   minecraftAction: (action) =>

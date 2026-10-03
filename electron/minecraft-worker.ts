@@ -73,6 +73,7 @@ bot.on("spawn", () => {
   physicsHealth?.dispose();
   physicsHealth = new MinecraftPhysicsHealth(bot);
   engine?.stop("Respawned or changed dimension; previous job stopped.");
+  engine?.dispose();
   if (!config.freePlay && bot.game.dimension !== config.dimension) {
     live.status =
       "Unexpected dimension. Disconnect and configure the correct world.";
@@ -146,6 +147,7 @@ async function shutdown() {
   clearInterval(timer);
   physicsHealth?.dispose();
   engine?.stop("Adapter stopped.");
+  engine?.dispose();
   bot.quit();
   await server?.close();
   setTimeout(() => process.exit(0), 100).unref();
@@ -164,6 +166,7 @@ const transport: Transport = parent
               chat: updated.chat,
               modifyBlocks: updated.modifyBlocks,
               navigationBlocks: updated.navigationBlocks,
+              navigationDoors: updated.navigationDoors,
               operatorLookup: updated.operatorLookup,
               backgroundLookup: updated.backgroundLookup,
             });
@@ -195,7 +198,7 @@ const transport: Transport = parent
     }
   : new StdioServerTransport();
 server = new Server(
-  { name: "evangelion-minecraft", version: "0.4.8" },
+  { name: "evangelion-minecraft", version: "0.4.9" },
   { capabilities: { tools: {} } },
 );
 server.setRequestHandler(ListToolsRequestSchema, async () => ({

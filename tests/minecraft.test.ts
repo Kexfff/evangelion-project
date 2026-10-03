@@ -25,6 +25,9 @@ import type { MinecraftFactory } from "../electron/minecraft-transport";
 vi.mock("mineflayer-pathfinder", () => ({
   Movements: class {
     blocksToAvoid = new Set();
+    getBlock() {
+      return null;
+    }
   },
   goals: {
     GoalNear: class {
@@ -182,7 +185,7 @@ describe("Minecraft boundaries and jobs", () => {
     expect([m.canDig, m.allow1by1towers, m.canOpenDoors]).toEqual([
       true,
       true,
-      true,
+      false,
     ]);
     expect(m.exclusionAreasBreak[0]({ position: new Vec3(100, 64, 0) })).toBe(
       100,

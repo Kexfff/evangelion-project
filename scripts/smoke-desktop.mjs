@@ -759,6 +759,24 @@ try {
   assert.equal(mcpState.audit.at(-1).outcome, "succeeded");
   assert.ok(!JSON.stringify(mcpState).includes("fixture-secret"));
   assert.ok(!JSON.stringify(mcpState.audit).includes("desktop MCP works"));
+  // Exercise goal settings and validation through real IPC without joining Minecraft.
+  await scheduledWindow.evaluate(async () => {
+    const data = await window.eva.snapshot();
+    await window.eva.configureGameGoals({
+      ...data.minecraft.goalConfig,
+      maxSteps: 17,
+    });
+    try {
+      await window.eva.submitGameGoal({
+        objective: "Offline smoke",
+        completion: [{ kind: "inventory", item: "stone", count: 1 }],
+      });
+    } catch (error) {
+      if (String(error).includes("Join the active character")) return;
+      throw error;
+    }
+    throw new Error("Disconnected goal must be rejected");
+  });
   await desktop.close();
   desktop = null;
   assert.ok(
@@ -778,6 +796,11 @@ try {
     .toBe("Connected");
   mcpState = (await mcpReopened.evaluate(() => window.eva.snapshot())).mcp;
   assert.equal(mcpState.servers[0].hasSecrets, true);
+  assert.equal(
+    (await mcpReopened.evaluate(() => window.eva.snapshot())).minecraft
+      .goalConfig.maxSteps,
+    17,
+  );
   assert.equal(
     mcpState.servers[0].tools.find((t) => t.name === "echo").policy,
     "ask",

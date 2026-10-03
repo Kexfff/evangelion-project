@@ -387,6 +387,52 @@ Validation (2026-10-03): **143 core tests and 30 browser tests pass**, including
 - [x] Collapse optional Minecraft limits, refine live health/food and action-history cards, improve connection empty states, and fold Telegram diagnostics. Preserve independent save semantics, credentials handling and public/private chat boundaries.
 - [x] Validation: **213 core tests, 31 browser tests**, production/package build and isolated desktop smoke pass. Added search/category/filter, draft-preservation, keyboard, emergency-stop-across-views and 390px layout coverage; reviewed desktop/narrow screenshots. Refreshed `release/linux-unpacked/` as v0.4.8. No live Minecraft/server connections or user-profile changes during testing.
 
+### User playtest feedback — 2026-10-03
+
+- The user reports that some newer gameplay tools work well in their own testing and that freezing appears to have stopped. Tool-by-tool coverage and a controlled knockback/follow trial were not supplied; this is encouraging user-reported evidence, not full live acceptance of every tool. Further testing remains open when the user has time.
+- New navigation issue: Eva breaks a house wall instead of using its door. Inspection of the installed `mineflayer-pathfinder` 2.4.5 shows that `openable` includes interactable non-iron **gates**, not ordinary doors, even when `canOpenDoors` is true. Its forward-move calculation also evaluates the head-height block for breaking before its gate interaction branch. Our `safeMovements` enables terrain changes and leaves default digging/placement costs, so wall-breaking remains a valid route. This explains a concrete gap, but the exact route in the user's house was not reproduced.
+
+### Coordinated, goal-driven Minecraft play — v0.4.9
+
+Scope: implement goals 2–4 from the sprint review: a shared game-task coordinator, multi-step planning with verified outcomes, and integration with consciousness. Include door-aware navigation as a focused prerequisite. Keep the bundled bot app-managed and Minecraft actions allowed unless blocked; this work must not reintroduce duplicate permission gates or routine job narration.
+
+#### Navigation prerequisite — entrances before walls
+
+- [x] Implement a door-specific path projection and verified interaction controller, separate from pathfinder's gate/scaffolding queue. Handle lower/upper halves, manually openable doors/gates, open-state collision projection, reach/visibility, permission/optional area, single-click verification and cancellation. Leave doors open; opening failure stops the action rather than repeatedly toggling it.
+- [x] Raise digging/placement route costs to prefer reachable entrances while preserving permitted terrain edits. Actual installed A* tests choose the doorway in both travel directions without breaking or scaffolding. This is a preference, not a blanket no-damage guarantee; alternate routes and house layouts need live testing.
+- [x] Closed iron doors are not projected as right-click-openable. Already-open iron doors can be traversed; use the real button/lever mechanism explicitly. Automatic redstone-mechanism discovery remains outside this implementation. Blocked/Ask interaction choices disable implicit door opening without adding a duplicate permission switch.
+- [x] Add installed-26.1 block/pathfinder and simulated interaction regressions: eight facing/hinge combinations, both halves, closed/open/double entrances, gates, no scaffold inventory, visibility/reach, optional area, bounded opening failure and Stop during a pending interaction.
+- [ ] Designated live house-entry acceptance: approach from both sides, pass the door without altering surrounding walls, verify path recalculation around real obstructions and pending-interaction behavior. No live world was joined during this mini-sprint.
+
+#### Goal 2 — shared game-task coordinator
+
+- [x] Add a main-process `GameCoordinator` with queued/running/paused/completed/failed/cancelled goals, one active goal, bounded history and the existing worker's exclusive physical-action owner.
+- [x] Queue by default, explicit replace/cancel, direct action pauses, and dependent next steps after verified job completion. Ordinary conversation/read-only tools do not cancel gameplay. Desktop/voice/Telegram share the coordinator and MCP checks; survival reactions yield at verified step boundaries, not during inventory I/O.
+- [x] Persist goals/progress scoped to character, session, endpoint, world label, account and dimension. Restart/disconnect pauses instead of replaying; explicit Resume reconciles observed state. Abort pending plans on context/dimension changes, Stop, emergency stop, consciousness pause and system lock. World labels are user-maintained, not server-proven save identity.
+- [x] Add Game goals UI with inventory-goal creation, queue/replace, scheduled time, state/detail/history, pause/resume/cancel and independent planning settings. Resume asks to confirm the world. Keep ordinary chat responsive and bookkeeping out of routine replies.
+
+#### Goal 3 — multi-step planning and verification
+
+- [x] Add `game_goal`/`game_goal_control` chat tools and a bounded incremental structured planner (one next step/wait/blocker decision, not a speculative full script). Supply live observation, registered tool schemas and recent outcomes; instruct ingredient/prerequisite acquisition and recipe-operation counts. Host verifies inventory totals, position radius, hunger or exact loaded-block conditions; the model cannot declare completion.
+- [x] Continue from worker events/timer independently of the short chat loop; wait while an action runs, then re-observe before requesting the next step. Accepted input is not successful completion. Manual chat activity defers new planning requests without stopping current movement.
+- [x] Replan from current state, with up to two alternative movement-route recoveries and rejection of identical failed routes. Uncertain/destructive, missing-target and inventory failures stop for inspection rather than blind retry. Structured missing-resource blockers remain visible in goal details.
+- [x] Configurable defaults: 24 steps, 32 requests, 15 minutes, 90 seconds/action, $0.50 provider-reported cost. Bounded waits avoid LLM polling; existing MCP validation/grants/Ask/audit apply. Cost is reported after requests and may be absent—not a guaranteed billing cap. Only bundled Minecraft tools enter the planner, not arbitrary MCP/PC access or private conversation memory.
+- [x] Coordinator regressions cover gather→craft, observed inventory completion, missing-resource blockers, partial build/combat failures, alternative routes, source ownership, queue/replace, budgets/timeouts, cancellation/late provider replies, restart reconciliation, dimension/disconnect changes and failed notifications. Existing gameplay regressions cover recipe output counts and disappearing targets. Real MCP integration verifies action validation/grants/audit.
+- [ ] Real-provider resource/crafting evaluation: complete a stone pickaxe from missing prerequisites in a designated world, including multi-output recipes, table placement and inventory changes. Fixture sequencing does not establish model planning quality.
+
+#### Goal 4 — consciousness and event-driven gameplay
+
+- [x] Add opt-in scheduled game wake-ups (within seven days), event-driven next-step decisions and shared consciousness availability/pause/quiet-hours/cooldown/daily-budget checks. One autonomous activation reserves one daily action. Ordinary proactive messages/reminders still cannot execute general external tools.
+- [x] Add opt-in deterministic hunger and damage reactions: select suitable available food or retreat toward a tracked preferred player after damage. Reactions have priority at idle/verified step boundaries and configurable cooldown; they do not interrupt inventory operations or call an LLM each tick. Automatic guessed-attacker retaliation is not implemented.
+- [x] Route reactions/schedules through the same goal owner, tool grants and step budgets. Pause/Stop interrupts them; gated scheduled goals do not starve ordinary user goals. Defaults keep both features off until explicitly enabled.
+- [x] Keep goals/outcomes in local game history and current-session chat context shared across channels. Optional concise outcome notifications create a shared conversation message and use available Telegram/desktop delivery only when the consciousness gate permits. Notification failure never rewrites verified completion. Routine steps do not enter conversation/semantic facts automatically.
+
+Verification: **262 core tests, 32 browser tests, production/package build and isolated desktop smoke pass**. Refreshed `release/linux-unpacked/` as v0.4.9. All new gameplay tests use fixtures; no normal profile or real world was modified. UI coverage includes queue/pause/resume/cancel, planning configuration and narrow layouts; desktop smoke verifies planning-settings IPC, disconnected-goal rejection and settings persistence across restart.
+
+Acceptance: in a disposable/designated world, Eva uses a reachable door without breaking the house wall, completes a multi-step survival task while normal chat remains responsive, handles a user interruption predictably, and reports a verified outcome. A scoped autonomous trigger can continue an authorized goal; Stop/pause prevents further actions. Do not mark broad live gameplay or Microsoft authentication acceptance complete merely because these coordinator tests pass.
+
+Deferred from this mini-sprint: automatic fishing, enchanting/anvils, full villager trading, vehicle steering, persistent Microsoft authentication, MCP OAuth/resources/prompts UI and a general-purpose autonomous PC agent. Continue incremental live testing of the existing tools alongside development when the user is available.
+
 ## Later refinements
 
 - Memory consolidation/summarization, richer retrieval evaluation and scalable vector storage.

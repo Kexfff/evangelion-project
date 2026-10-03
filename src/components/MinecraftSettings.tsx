@@ -8,6 +8,7 @@ import {
   Activity,
 } from "lucide-react";
 import { ToolPermissions } from "./ToolPermissions";
+import { GameGoals } from "./GameGoals";
 import { bridge } from "../bridge";
 import {
   minecraftConfigSchema,
@@ -131,6 +132,7 @@ export function MinecraftSettings({
           This code is temporary; sign-in is session-only.
         </p>
       )}
+      <GameGoals data={data} />
       <details className="integration-disclosure" open={!connection}>
         <summary>World connection and optional limits</summary>
         <p>

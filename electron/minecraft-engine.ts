@@ -5,6 +5,7 @@ import { Movements, goals } from "mineflayer-pathfinder";
 import type { Bot } from "mineflayer";
 import { MinecraftLocator } from "./minecraft-locator";
 import { MinecraftActions } from "./minecraft-actions";
+import { DoorNavigation, doorMovements } from "./minecraft-doors";
 import { MinecraftActionError } from "./minecraft-action-error";
 import { z } from "zod";
 import {
@@ -17,7 +18,7 @@ import {
 export function gameFailureDetail(error: unknown) {
   if (error instanceof MinecraftActionError) return error.message.slice(0, 300);
   if (error instanceof Error && error.name === "NoPath")
-    return "No walkable route. Try reachable ground; navigation does not dig or place blocks.";
+    return "No walkable route with the current terrain, inventory and tool permissions. Try a closer waypoint or another entrance.";
   if (error instanceof Error && error.name === "Timeout")
     return "Path search timed out. Try a closer waypoint or a less obstructed route.";
   return "Game action failed unexpectedly. Check the connection and try a new action; nothing was replayed.";
@@ -39,13 +40,18 @@ export function safeMovements(
   radius: number,
   terrainChanges = false,
   editArea?: { center: { x: number; y: number; z: number }; radius: number },
+  doors = terrainChanges,
 ) {
   const movement = new Movements(bot);
   movement.canDig = terrainChanges;
   movement.allow1by1towers = terrainChanges;
   movement.allowParkour = true;
   movement.allowSprinting = true;
-  movement.canOpenDoors = terrainChanges;
+  doorMovements(
+    movement,
+    doors,
+    (p) => !editArea?.radius || inRadius(p, editArea.center, editArea.radius),
+  );
   if (!terrainChanges) movement.scafoldingBlocks = [];
   movement.maxDropDown = 4;
   movement.infiniteLiquidDropdownDistance = false;
@@ -81,6 +87,7 @@ export class MinecraftEngine {
   private sequence = 0;
   private locator: MinecraftLocator;
   private gameplay: MinecraftActions;
+  private doors: DoorNavigation;
   private workTail: Promise<unknown> = Promise.resolve();
   constructor(
     readonly config: MinecraftConfig,
@@ -88,6 +95,16 @@ export class MinecraftEngine {
     private publish: () => void,
   ) {
     this.locator = new MinecraftLocator(bot, config.operatorLookup);
+    this.doors = new DoorNavigation(
+      bot,
+      (p) =>
+        !!this.action &&
+        this.config.navigationDoors &&
+        (!p ||
+          !this.config.buildRadius ||
+          inRadius(p, this.config.buildCenter, this.config.buildRadius)),
+      (reason) => this.stop(reason),
+    );
     this.gameplay = new MinecraftActions(bot, {
       start: (kind, work, movement) => this.begin(kind, 0, work, movement),
       check: (signal) => this.check(signal),
@@ -117,6 +134,7 @@ export class MinecraftEngine {
           this.config.modifyBlocks &&
           this.config.navigationBlocks,
         { center: this.config.buildCenter, radius: this.config.buildRadius },
+        this.config.navigationDoors,
       ),
     );
     this.bot.pathfinder.thinkTimeout = 5000;
@@ -208,6 +226,7 @@ export class MinecraftEngine {
       throw new MinecraftActionError("Health is low; action stopped.");
   }
   stop(reason = "Stopped by user.") {
+    this.doors.stop();
     this.locator.cancel();
     ++this.sequence;
     this.action?.abort();
@@ -227,6 +246,7 @@ export class MinecraftEngine {
     if (!this.action) return;
     try {
       this.guard();
+      this.doors.tick();
     } catch (e) {
       this.stop(e instanceof Error ? e.message : "World changed.");
     }
@@ -234,6 +254,10 @@ export class MinecraftEngine {
   private check(signal: AbortSignal) {
     signal.throwIfAborted();
     this.guard();
+  }
+  dispose() {
+    this.stop();
+    this.doors.dispose();
   }
   private async until(
     check: () => boolean,
@@ -329,6 +353,7 @@ export class MinecraftEngine {
       .then(async () => {
         this.check(controller.signal);
         await this.gameplay.idle(controller.signal);
+        await this.doors.idle(controller.signal);
         this.check(controller.signal);
         return work(controller.signal);
       });
@@ -380,7 +405,19 @@ export class MinecraftEngine {
       this.stop();
       return { stopped: true };
     }
-    if (name === "observe") return this.observe();
+    if (name === "observe") {
+      const { positions } = z
+        .object({ positions: z.array(pointSchema).max(8).default([]) })
+        .strict()
+        .parse(raw);
+      return {
+        ...this.observe(),
+        inspectedBlocks: positions.map((p) => {
+          const block = this.bot.blockAt(new Vec3(p.x, p.y, p.z));
+          return { position: p, name: block?.name ?? null };
+        }),
+      };
+    }
     if (name === "job_status") return this.job ?? { status: "idle" };
     this.guard();
     if (this.gameplay.handles(name)) return this.gameplay.call(name, raw);

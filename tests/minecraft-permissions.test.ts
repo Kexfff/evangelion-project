@@ -17,6 +17,7 @@ import { Store } from "../electron/store";
 import { CredentialVault } from "../electron/credentials";
 import { MinecraftPlugin } from "../electron/minecraft-plugin";
 import { McpPlugin, compileMcpTool } from "../electron/mcp-plugin";
+import { GameCoordinator } from "../electron/game-coordinator";
 
 const dirs: string[] = [];
 const active: McpPlugin[] = [];
@@ -87,6 +88,85 @@ function fixture() {
 }
 
 describe("Minecraft allow-unless-blocked permissions", () => {
+  it("routes coordinator steps through real MCP validation, grants and audit", async () => {
+    const f = fixture();
+    await f.mcp.configure(config());
+    await f.mcp.action(MINECRAFT_ID, "connect");
+    const live: MinecraftLive = {
+      connected: true,
+      status: "Connected",
+      dimension: "overworld",
+      inventory: [],
+      players: [],
+      nearby: [],
+    };
+    f.publish(live);
+    const runtime: any = {
+      store: f.store,
+      busy: false,
+      broadcast: () => {},
+      autonomy: {
+        config: { paused: false },
+        log: () => {},
+        gate: () => "Ready",
+      },
+      planGame: vi.fn(async () =>
+        JSON.stringify({
+          decision: "step",
+          tool: "collect_blocks",
+          args: { block: "stone", count: 3 },
+          reason: "Gather cobblestone",
+        }),
+      ),
+    };
+    const game = new GameCoordinator(runtime, f.minecraft, f.mcp);
+    f.transport.call.mockImplementation(async (...args: any[]) => ({
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            args[0] === "observe" ? live : { jobId: "gather" },
+          ),
+        },
+      ],
+    }));
+    const submit = () =>
+      game.submit(
+        {
+          objective: "Get cobblestone",
+          completion: [{ kind: "inventory", item: "cobblestone", count: 3 }],
+        },
+        f.ctx(),
+      );
+    try {
+      submit();
+      await game.tick();
+      expect(f.store.data.minecraft.goals.at(-1)).toMatchObject({
+        status: "running",
+        jobId: "gather",
+      });
+      expect(f.mcp.snapshot().audit.at(-1)).toMatchObject({
+        tool: "collect_blocks",
+        outcome: "succeeded",
+      });
+      game.cancelAll();
+      const tool = f.mcp
+        .snapshot()
+        .servers[0].tools.find((t) => t.name === "collect_blocks")!;
+      f.mcp.grant(MINECRAFT_ID, tool.name, tool.fingerprint, "deny");
+      f.transport.call.mockClear();
+      submit();
+      await game.tick();
+      expect(f.store.data.minecraft.goals.at(-1)?.status).toBe("failed");
+      expect(
+        f.transport.call.mock.calls.every(
+          (call: unknown[]) => call[0] === "observe",
+        ),
+      ).toBe(true);
+    } finally {
+      game.stop();
+    }
+  });
   it.each([
     ["drop_items", { item: "stone", count: 1 }],
     ["sleep", {}],

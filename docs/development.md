@@ -24,6 +24,8 @@ The extended MCP desktop smoke configures and launches the local fixture through
 
 v0.4.8 integration UI verification: **213 core tests, 31 browser tests**, production/package build and isolated desktop smoke pass. The new integration hub has coverage for preserving drafts across views, tool search/category/permission filters, keyboard navigation, narrow layouts, global emergency stop and auto-opening approvals. Desktop and narrow screenshots were reviewed. Tests use fixture servers and disposable profiles, not live Minecraft or Telegram connections.
 
+v0.4.9 adds door-aware navigation and persistent game goals. **262 core tests, 32 browser tests, production/package build and isolated desktop smoke pass**, including actual installed pathfinder/26.1 block data, door interaction fixtures, verified gather→craft sequencing, real MCP permission/audit integration, queue/replace/pause/resume, persistence, budgets, late provider cancellation, dimension changes, scheduled gates, survival reactions and notification failures. The new goal UI is covered at desktop and 390px widths. The desktop smoke additionally verifies planning-settings IPC/persistence and rejection of a disconnected goal. Live house entry, resource/crafting plans, survival reactions and real-provider planning quality remain pending; tests do not join a Minecraft world.
+
 ## Optional live Minecraft smoke
 
 Only run against a world whose owner permits joining and movement. Build the app first, open a Java 26.1 LAN world, then explicitly opt in:

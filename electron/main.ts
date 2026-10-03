@@ -31,6 +31,11 @@ import { CredentialVault } from "./credentials";
 import { PluginHost } from "./plugin-host";
 import { minecraftFactory } from "./minecraft-transport";
 import { MINECRAFT_ID, minecraftConfigSchema } from "../src/shared/minecraft";
+import {
+  gameGoalConfigSchema,
+  goalInputSchema,
+  goalControlSchema,
+} from "../src/shared/game-goals";
 import { telegramSettingsSchema } from "../src/shared/plugins";
 import {
   mcpConfigSchema,
@@ -248,6 +253,26 @@ else {
           return fn(...args);
         });
       handle("snapshot", () => runtime.snapshot());
+      handle("game:submit", (raw) =>
+        plugins.game.submit(goalInputSchema.parse(raw), {
+          characterId: store.characterId,
+          sessionId: store.sessionId,
+          channel: "desktop",
+        }),
+      );
+      handle("game:control", (raw) =>
+        plugins.game.control(goalControlSchema.parse(raw)),
+      );
+      handle("game:configure", (raw) => {
+        const config = gameGoalConfigSchema.parse(raw);
+        plugins.game.pauseAll(
+          "Game goal settings changed. Resume explicitly to continue.",
+        );
+        store.update((d) => {
+          d.minecraft.goalConfig = config;
+        });
+        runtime.broadcast();
+      });
       handle("minecraft:configure", (raw) =>
         plugins.exclusive(() =>
           plugins.minecraft.configure(
@@ -344,6 +369,7 @@ else {
         ),
       );
       handle("mcp:stop", async () => {
+        plugins.game.cancelAll();
         await Promise.all([plugins.mcp.emergencyStop(), runtime.cancel()]);
       });
       handle("history:list", (raw) => {
@@ -714,7 +740,10 @@ else {
       scheduler.unref();
       const suspend = () => {
         runtime.autonomy.suspend(true);
-        plugins.minecraft.stopAction();
+        plugins.game.pauseAll(
+          "System suspended or locked. Resume explicitly when ready.",
+        );
+        plugins.minecraft.stopAction(false);
         void runtime.cancel();
       };
       const resume = () => {
