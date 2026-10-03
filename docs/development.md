@@ -22,6 +22,8 @@ The desktop smoke also checks the conversation archive through real IPC: old ses
 
 The extended MCP desktop smoke configures and launches the local fixture through real IPC (with its native trust dialog stubbed), grants an ask-each-time tool, approves it in Settings, and verifies the tool result reaches the fixture LLM. It then restarts Electron, checks connection/secret/grant persistence, exercises emergency stop and removes the fixture configuration. App shutdown waits for managed subprocess cleanup. The ESM main-process build includes a `createRequire` shim for bundled CommonJS dependencies used by the SDK's subprocess transport.
 
+v0.4.8 integration UI verification: **213 core tests, 31 browser tests**, production/package build and isolated desktop smoke pass. The new integration hub has coverage for preserving drafts across views, tool search/category/permission filters, keyboard navigation, narrow layouts, global emergency stop and auto-opening approvals. Desktop and narrow screenshots were reviewed. Tests use fixture servers and disposable profiles, not live Minecraft or Telegram connections.
+
 ## Optional live Minecraft smoke
 
 Only run against a world whose owner permits joining and movement. Build the app first, open a Java 26.1 LAN world, then explicitly opt in:

@@ -9,6 +9,7 @@ test("plugin preview explains desktop installation and trust boundaries", async 
   await page
     .getByRole("button", { name: "Plugins & MCP", exact: true })
     .click();
+  await page.getByRole("button", { name: "Telegram", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Telegram plugin" }),
   ).toBeVisible();
@@ -79,6 +80,7 @@ test("installed plugin UI defaults off, scopes optional permissions and validate
   await expect(
     page.getByLabel("Enable Telegram", { exact: true }),
   ).not.toBeChecked();
+  await page.getByRole("button", { name: "Telegram", exact: true }).click();
   await expect(
     page.getByLabel("Send voice replies in addition to text"),
   ).toBeDisabled();

@@ -6,7 +6,7 @@ Sprint 4's MCP foundation landed in v0.4.0. Telegram remains a bundled chat chan
 
 ## Connect a server
 
-1. Open **Settings → Plugins & MCP → Add MCP connection**.
+1. Open **Settings → Plugins & MCP → MCP connections → Add MCP connection**.
 2. Give it a unique ID and a name. The connection is bound to the currently selected character.
 3. Choose **Local program (stdio)** or **Remote endpoint (Streamable HTTP)**.
 4. For a local server, supply its executable and arguments as a JSON array. Prefer an absolute executable path. Arguments are passed directly without shell expansion. For HTTP, supply an HTTPS MCP endpoint; plain HTTP is allowed only on loopback (`localhost`, `127.0.0.1`, or `::1`). Redirects, URL credentials, query strings and fragments are rejected.
@@ -14,7 +14,9 @@ Sprint 4's MCP foundation landed in v0.4.0. Telegram remains a bundled chat chan
 6. Save, then **Connect / reconnect**. Review the native trust confirmation. Saving alone never runs a program or contacts a server.
 7. Review the discovered tools and choose their permissions. All tools start **Blocked**. Ask the companion to use an enabled tool from desktop or your paired Telegram account.
 
-External MCP servers must already be installed or hosted: the app does not install packages, runtimes or servers for you. Once configured and trusted, the app launches a local server itself. The bundled Minecraft adapter includes its runtime dependencies and has its own controls above the generic MCP connections; no separate bot process or executable configuration is needed.
+External MCP servers must already be installed or hosted: the app does not install packages, runtimes or servers for you. Once configured and trusted, the app launches a local server itself. The bundled Minecraft adapter includes its runtime dependencies and has its own **Minecraft** view; no separate bot process or executable configuration is needed.
+
+The integration cards switch between Minecraft, MCP connections and Telegram without discarding unfinished forms. Search discovered tools by name or description, filter by permission, and expand a tool to inspect its full description and schema. Minecraft also groups tools by gameplay activity. Permissions apply immediately; connection forms have their own Save buttons. Emergency stop is available from every integration view, and a new approval request opens the MCP view automatically.
 
 The application must remain running. Enabled connections for the active character start when the app starts and reconnect after ordinary settings changes. Disconnect disables startup. Failed connections and changed tool lists require explicit reconnect; there is no automatic retry of tool execution or replay of ambiguous effects. The client negotiates protocol versions through the official SDK. Unsupported protocol versions fail closed.
 

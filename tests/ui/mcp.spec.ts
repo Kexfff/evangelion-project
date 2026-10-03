@@ -11,6 +11,12 @@ test("MCP preview explains trust and cannot start external programs", async ({
     .click();
   await expect(
     page.getByRole("heading", { name: "MCP connections" }),
+  ).toBeHidden();
+  await page
+    .getByRole("button", { name: "MCP connections", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "MCP connections" }),
   ).toBeVisible();
   await expect(
     page.getByText("No connections yet.", { exact: false }),
@@ -155,6 +161,9 @@ test("MCP grants default blocked, allow needs confirmation, and editing retains 
     .getByRole("button", { name: "Plugins & MCP", exact: true })
     .click();
   const permission = page.getByLabel("Permission for fixture/echo");
+  await page
+    .getByRole("button", { name: "MCP connections", exact: true })
+    .click();
   await expect(permission).toHaveValue("deny");
   await permission.selectOption("ask");
   await expect(permission).toHaveValue("ask");
@@ -214,6 +223,7 @@ test("emergency stop remains available and clears pending approval", async ({
   await fixture(page, true);
   await page.setViewportSize({ width: 900, height: 1000 });
   await page.getByRole("button", { name: "Review tool request" }).click();
+  await page.getByRole("button", { name: "Minecraft", exact: true }).click();
   await page.getByRole("button", { name: "Emergency stop tools" }).click();
   await expect(
     page.getByText("Emergency stop is active.", { exact: false }),
@@ -226,4 +236,69 @@ test("emergency stop remains available and clears pending approval", async ({
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true);
+});
+
+test("integration views preserve drafts, filter tools and fit narrow windows", async ({
+  page,
+}) => {
+  await fixture(page);
+  await page
+    .getByRole("button", { name: "Plugins & MCP", exact: true })
+    .click();
+  await expect(page.locator(".savebar")).toBeHidden();
+  await page
+    .getByRole("button", { name: "MCP connections", exact: true })
+    .click();
+  await page.getByLabel("Search fixture tools").fill("not-a-tool");
+  await expect(
+    page.getByRole("heading", { name: "No matching tools" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Reset filters", exact: true })
+    .click();
+  await page
+    .getByLabel("Filter fixture tools by permission")
+    .selectOption("ask");
+  await expect(
+    page.getByRole("heading", { name: "No matching tools" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Reset filters", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Edit connection", exact: true })
+    .click();
+  await page.getByLabel("Connection name", { exact: true }).fill("Draft name");
+  await page.getByRole("button", { name: "Telegram", exact: true }).click();
+  await expect(
+    page.getByLabel("Connection name", { exact: true }),
+  ).toBeHidden();
+  await page
+    .getByRole("button", { name: "MCP connections", exact: true })
+    .click();
+  await expect(page.getByLabel("Connection name", { exact: true })).toHaveValue(
+    "Draft name",
+  );
+  await page
+    .getByRole("button", { name: "Cancel editing", exact: true })
+    .click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByLabel("Permission for fixture/echo")).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page.getByRole("button", { name: "Telegram", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByRole("heading", { name: "Telegram plugin" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "MCP connections", exact: true })
+    .click();
+  await page.screenshot({
+    path: "test-results/settings-integrations-narrow.png",
+    fullPage: true,
+  });
 });

@@ -379,6 +379,14 @@ Validation (2026-10-03): **143 core tests and 30 browser tests pass**, including
 - [ ] Live gameplay acceptance in a disposable/designated world: dropping, sleep, combat, crafting, storage and smelting. No live world changes or real-provider gameplay tests were performed in this increment.
 - [ ] Further gameplay: automatic fishing, enchanting/anvils, full villager trade selection, vehicle steering, recursive resource/crafting plans, reactive combat and resumable autonomous game goals.
 
+### Integration settings redesign — v0.4.8
+
+- [x] Replace the stacked Plugins & MCP page with a focused integration hub: separate Minecraft, MCP connections and Telegram views, live status cards, consistent headers and colored state badges. Keep unfinished forms mounted while switching integration views.
+- [x] Shared searchable tool-permission browser with readable names, exact tool IDs, Allowed/Ask/Blocked counts, permission filters, Minecraft gameplay categories, bounded scrolling, empty states and expandable technical details. Preserve every existing grant/confirmation behavior; this is a UI change, not a permission reset.
+- [x] Global emergency stop remains available in every integration view. New approval requests select the MCP view; request arguments and one-call approval remain explicit. Use connection-specific save actions and hide the unrelated global save bar when there are no general-settings changes.
+- [x] Collapse optional Minecraft limits, refine live health/food and action-history cards, improve connection empty states, and fold Telegram diagnostics. Preserve independent save semantics, credentials handling and public/private chat boundaries.
+- [x] Validation: **213 core tests, 31 browser tests**, production/package build and isolated desktop smoke pass. Added search/category/filter, draft-preservation, keyboard, emergency-stop-across-views and 390px layout coverage; reviewed desktop/narrow screenshots. Refreshed `release/linux-unpacked/` as v0.4.8. No live Minecraft/server connections or user-profile changes during testing.
+
 ## Later refinements
 
 - Memory consolidation/summarization, richer retrieval evaluation and scalable vector storage.

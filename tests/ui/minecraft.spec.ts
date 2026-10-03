@@ -26,6 +26,7 @@ test("Minecraft preview explains allow-by-default and has no duplicate block/cha
       exact: false,
     }),
   ).toBeVisible();
+  await page.getByText("Optional gameplay limits", { exact: true }).click();
   await page.getByLabel("Movement radius (0 = no leash)").fill("32");
   await page.getByLabel("Job timeout seconds (0 = until stopped)").fill("30");
   await page
@@ -206,6 +207,24 @@ test("Minecraft jobs, stop control and world landmarks stay separate from chat",
   );
   await page.getByRole("button", { name: "Enable everyday controls" }).click();
   await page.getByText("Individual tool permissions", { exact: true }).click();
+  await page.getByRole("button", { name: "Survive", exact: true }).click();
+  await expect(page.locator(".tool-result-count").first()).toHaveText(
+    "6 of 26 tools",
+  );
+  await page.getByLabel("Search Minecraft tools").fill("sleep");
+  await expect(
+    page.getByLabel("Minecraft permission for sleep", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("Minecraft permission for attack_entity", { exact: true }),
+  ).toHaveCount(0);
+  await page.getByLabel("Search Minecraft tools").fill("nothing-matches");
+  await expect(
+    page.getByRole("heading", { name: "No matching tools" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Reset filters", exact: true })
+    .click();
   for (const name of [
     "observe",
     "move_to",
@@ -226,6 +245,15 @@ test("Minecraft jobs, stop control and world landmarks stay separate from chat",
     await expect(
       page.getByLabel(`Minecraft permission for ${name}`, { exact: true }),
     ).toHaveValue("allow");
+  await page
+    .getByLabel("Filter Minecraft tools by permission")
+    .selectOption("deny");
+  await expect(
+    page.getByRole("heading", { name: "No matching tools" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Reset filters", exact: true })
+    .click();
   await page.getByRole("button", { name: "Stop game action" }).click();
   await expect(page.getByText("follow · cancelled")).toBeVisible();
   await page.getByText("World landmarks", { exact: true }).click();

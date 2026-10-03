@@ -1,4 +1,13 @@
 import { useEffect, useState } from "react";
+import {
+  Gamepad2,
+  Heart,
+  MapPin,
+  Wheat,
+  ShieldCheck,
+  Activity,
+} from "lucide-react";
+import { ToolPermissions } from "./ToolPermissions";
 import { bridge } from "../bridge";
 import {
   minecraftConfigSchema,
@@ -6,7 +15,7 @@ import {
   type MinecraftConfig,
   type MinecraftSnapshot,
 } from "../shared/minecraft";
-import type { McpSnapshot, ToolPolicy } from "../shared/mcp";
+import type { McpSnapshot } from "../shared/mcp";
 
 export function MinecraftSettings({
   data,
@@ -51,14 +60,24 @@ export function MinecraftSettings({
   }
   return (
     <section className="card plugin-settings minecraft-settings">
-      <div className="section-heading">
-        <h2>Minecraft companion</h2>
-        <p>
-          Java 26.1 · bundled Mineflayer adapter · no separate bot or Node
-          installation needed.
-        </p>
+      <div className="section-heading integration-panel-heading">
+        <span className="integration-icon minecraft">
+          <Gamepad2 size={22} />
+        </span>
+        <div>
+          <h2>Minecraft companion</h2>
+          <p>
+            Java 26.1 · bundled Mineflayer adapter · no separate bot or Node
+            installation needed.
+          </p>
+        </div>
+        <span
+          className={`connection-badge ${data?.live.connected ? "online" : ""}`}
+        >
+          {data?.live.connected ? "Connected" : "Offline"}
+        </span>
       </div>
-      <p>
+      <p className="connection-status-line">
         {data?.live.status ?? "Not connected"} ·{" "}
         {connection?.status ?? "Save a connection to begin"}
       </p>
@@ -112,7 +131,7 @@ export function MinecraftSettings({
           This code is temporary; sign-in is session-only.
         </p>
       )}
-      <details open={!connection}>
+      <details className="integration-disclosure" open={!connection}>
         <summary>World connection and optional limits</summary>
         <p>
           Minecraft actions are allowed by default. Block an action below if you
@@ -120,23 +139,6 @@ export function MinecraftSettings({
           switch. By default, she can roam and change terrain without a leash or
           timer.
         </p>
-        <button
-          className="button secondary"
-          disabled={busy}
-          onClick={() => {
-            setConfig((c) => ({
-              ...c,
-              movement: true,
-              radius: 0,
-              jobSeconds: 0,
-            }));
-            setNotice(
-              "Movement limits cleared. Save and reconnect. Explicit tool blocks are unchanged.",
-            );
-          }}
-        >
-          Use companion movement defaults
-        </button>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -198,29 +200,20 @@ export function MinecraftSettings({
                   <option value="the_end">End</option>
                 </select>
               </label>
-              {(
-                [
-                  ["port", "Minecraft port", 1, 65535],
-                  ["radius", "Movement radius (0 = no leash)", 0, 30000000],
-                  [
-                    "jobSeconds",
-                    "Job timeout seconds (0 = until stopped)",
-                    0,
-                    86400,
-                  ],
-                ] as const
-              ).map(([key, label, min, max]) => (
-                <label className="field" key={key}>
-                  <span>{label}</span>
-                  <input
-                    type="number"
-                    min={min}
-                    max={max}
-                    value={config[key]}
-                    onChange={(e) => set(key, Number(e.target.value))}
-                  />
-                </label>
-              ))}
+              {([["port", "Minecraft port", 1, 65535]] as const).map(
+                ([key, label, min, max]) => (
+                  <label className="field" key={key}>
+                    <span>{label}</span>
+                    <input
+                      type="number"
+                      min={min}
+                      max={max}
+                      value={config[key]}
+                      onChange={(e) => set(key, Number(e.target.value))}
+                    />
+                  </label>
+                ),
+              )}
             </div>
             <p>
               LAN ports may change when reopening a world. Use a distinct world
@@ -251,56 +244,93 @@ export function MinecraftSettings({
               grant itself operator permission. This is not an autonomous game
               planner or arbitrary command execution.
             </p>
-            {
-              <>
-                <p>
-                  Block changes can permanently alter your world. Optional
-                  limits below apply only if you set them; radius 0 means
-                  anywhere. Block collect_blocks, build_blocks, dig_block and
-                  interact_block below to disable direct terrain edits and block
-                  activation, as well as edits while navigating.
-                </p>
-                <div className="form-grid">
-                  {(["x", "y", "z"] as const).map((axis) => (
-                    <label className="field" key={axis}>
-                      <span>Build center {axis.toUpperCase()}</span>
-                      <input
-                        type="number"
-                        value={config.buildCenter[axis]}
-                        onChange={(e) =>
-                          set("buildCenter", {
-                            ...config.buildCenter,
-                            [axis]: Number(e.target.value),
-                          })
-                        }
-                      />
-                    </label>
-                  ))}
-                  <label className="field">
-                    <span>Build radius (0 = anywhere)</span>
+            <details className="integration-disclosure">
+              <summary>Optional gameplay limits</summary>
+              <button
+                type="button"
+                className="button secondary"
+                disabled={busy}
+                onClick={() => {
+                  setConfig((c) => ({
+                    ...c,
+                    movement: true,
+                    radius: 0,
+                    jobSeconds: 0,
+                  }));
+                  setNotice(
+                    "Movement limits cleared. Save and reconnect. Explicit tool blocks are unchanged.",
+                  );
+                }}
+              >
+                Use companion movement defaults
+              </button>
+              <p>
+                Block changes can permanently alter your world. Optional limits
+                below apply only if you set them; radius 0 means anywhere. Block
+                collect_blocks, build_blocks, dig_block and interact_block below
+                to disable direct terrain edits and block activation, as well as
+                edits while navigating.
+              </p>
+              <div className="form-grid">
+                {(
+                  [
+                    ["radius", "Movement radius (0 = no leash)", 0, 30000000],
+                    [
+                      "jobSeconds",
+                      "Job timeout seconds (0 = until stopped)",
+                      0,
+                      86400,
+                    ],
+                  ] as const
+                ).map(([key, label, min, max]) => (
+                  <label className="field" key={key}>
+                    <span>{label}</span>
                     <input
                       type="number"
-                      min={0}
-                      max={30000000}
-                      value={config.buildRadius}
+                      min={min}
+                      max={max}
+                      value={config[key]}
+                      onChange={(e) => set(key, Number(e.target.value))}
+                    />
+                  </label>
+                ))}
+                {(["x", "y", "z"] as const).map((axis) => (
+                  <label className="field" key={axis}>
+                    <span>Build center {axis.toUpperCase()}</span>
+                    <input
+                      type="number"
+                      value={config.buildCenter[axis]}
                       onChange={(e) =>
-                        set("buildRadius", Number(e.target.value))
+                        set("buildCenter", {
+                          ...config.buildCenter,
+                          [axis]: Number(e.target.value),
+                        })
                       }
                     />
                   </label>
-                  <label className="field">
-                    <span>Maximum blocks per job</span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={1024}
-                      value={config.maxBlocks}
-                      onChange={(e) => set("maxBlocks", Number(e.target.value))}
-                    />
-                  </label>
-                </div>
-              </>
-            }
+                ))}
+                <label className="field">
+                  <span>Build radius (0 = anywhere)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={30000000}
+                    value={config.buildRadius}
+                    onChange={(e) => set("buildRadius", Number(e.target.value))}
+                  />
+                </label>
+                <label className="field">
+                  <span>Maximum blocks per job</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={1024}
+                    value={config.maxBlocks}
+                    onChange={(e) => set("maxBlocks", Number(e.target.value))}
+                  />
+                </label>
+              </div>
+            </details>
             <p>
               This save disconnects the bot but preserves tool choices; it does
               not join the world. Assigned character: {characterId}. Use this
@@ -314,7 +344,11 @@ export function MinecraftSettings({
       </details>
       {!!connection?.tools.length && (
         <>
-          <h3>Minecraft tool permissions</h3>
+          <div className="integration-section-title">
+            <ShieldCheck size={17} />
+            <h3>Minecraft tool permissions</h3>
+            <span className="connection-badge online">Allow by default</span>
+          </div>
           <p>
             Allowed unless blocked. These are the only Minecraft action
             permissions; changes apply immediately. Blocking a block-edit or
@@ -322,93 +356,89 @@ export function MinecraftSettings({
             scaffolding while navigating. Other MCP servers still default to
             Blocked.
           </p>
-          <button
-            className="button secondary"
-            disabled={busy}
-            onClick={() =>
-              void run(async () => {
-                for (const t of connection.tools.filter((t) =>
-                  [
-                    "observe",
-                    "locate_player",
-                    "move_to",
-                    "follow_player",
-                    "job_status",
-                    "stop_action",
-                  ].includes(t.name),
-                ))
-                  await bridge.mcpGrant(
-                    MINECRAFT_ID,
-                    t.name,
-                    t.fingerprint,
-                    "allow",
-                  );
-              }, "Everyday controls enabled. Block changes and public chat permissions are unchanged.")
-            }
-          >
-            Enable everyday controls
-          </button>
-          <button
-            className="button secondary"
-            disabled={busy}
-            onClick={() => {
-              if (
-                !window.confirm(
-                  "Clear explicit blocks and allow all supported Minecraft actions, including terrain changes and requested public game chat?",
-                )
-              )
-                return;
-              void run(async () => {
-                for (const t of connection.tools)
-                  await bridge.mcpGrant(
-                    MINECRAFT_ID,
-                    t.name,
-                    t.fingerprint,
-                    "allow",
-                  );
-              }, "All Minecraft actions allowed. No separate block/chat switches are needed. Operator lookup remains a server-permission-dependent option.");
-            }}
-          >
-            Enable all game tools
-          </button>
-          <details>
-            <summary>Individual tool permissions</summary>
-            {connection.tools.map((t) => (
-              <label className="field" key={t.name}>
-                <span>{t.name}</span>
-                <small>{t.description}</small>
-                <select
-                  aria-label={`Minecraft permission for ${t.name}`}
-                  value={t.policy}
-                  disabled={busy}
-                  onChange={(e) => {
-                    const policy = e.target.value as ToolPolicy;
-                    void run(() =>
-                      bridge.mcpGrant(
-                        MINECRAFT_ID,
-                        t.name,
-                        t.fingerprint,
-                        policy,
-                      ),
+          <div className="button-row">
+            <button
+              className="button secondary"
+              disabled={busy}
+              onClick={() =>
+                void run(async () => {
+                  for (const t of connection.tools.filter((t) =>
+                    [
+                      "observe",
+                      "locate_player",
+                      "move_to",
+                      "follow_player",
+                      "job_status",
+                      "stop_action",
+                    ].includes(t.name),
+                  ))
+                    await bridge.mcpGrant(
+                      MINECRAFT_ID,
+                      t.name,
+                      t.fingerprint,
+                      "allow",
                     );
-                  }}
-                >
-                  <option value="deny">Blocked</option>
-                  <option value="ask">Ask every time</option>
-                  <option value="allow">Allow without asking</option>
-                </select>
-              </label>
-            ))}
+                }, "Everyday controls enabled. Block changes and public chat permissions are unchanged.")
+              }
+            >
+              Enable everyday controls
+            </button>
+            <button
+              className="button secondary"
+              disabled={busy}
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    "Clear explicit blocks and allow all supported Minecraft actions, including terrain changes and requested public game chat?",
+                  )
+                )
+                  return;
+                void run(async () => {
+                  for (const t of connection.tools)
+                    await bridge.mcpGrant(
+                      MINECRAFT_ID,
+                      t.name,
+                      t.fingerprint,
+                      "allow",
+                    );
+                }, "All Minecraft actions allowed. No separate block/chat switches are needed. Operator lookup remains a server-permission-dependent option.");
+              }}
+            >
+              Enable all game tools
+            </button>
+          </div>
+          <details className="integration-disclosure">
+            <summary>Individual tool permissions</summary>
+            <ToolPermissions
+              tools={connection.tools}
+              scope="Minecraft"
+              minecraft
+              disabled={busy}
+              onChange={(t, policy) =>
+                void run(() =>
+                  bridge.mcpGrant(MINECRAFT_ID, t.name, t.fingerprint, policy),
+                )
+              }
+            />
           </details>
         </>
       )}
       {data?.live.connected && (
-        <div className="mcp-connection">
-          <h3>In the world</h3>
-          <p>
-            Health {data.live.health} · Food {data.live.food} ·{" "}
-            {data.live.dimension}
-          </p>
+        <div className="minecraft-world-card">
+          <div className="integration-section-title">
+            <MapPin size={17} />
+            <h3>In the world</h3>
+            <span className="connection-badge">{data.live.dimension}</span>
+          </div>
+          <div className="minecraft-vitals">
+            <span>
+              <Heart size={16} /> Health{" "}
+              <strong>{data.live.health} / 20</strong>
+            </span>
+            <span>
+              <Wheat size={16} /> Food <strong>{data.live.food} / 20</strong>
+            </span>
+          </div>
           <p>
             Position:{" "}
             {data.live.position &&
@@ -449,7 +479,10 @@ export function MinecraftSettings({
           </details>
         </div>
       )}
-      <h3>Game jobs</h3>
+      <div className="integration-section-title">
+        <Activity size={17} />
+        <h3>Game jobs</h3>
+      </div>
       <p>
         Actions continue locally while you chat. A new action replaces the
         previous one after its cleanup finishes; Stop cancels it. Disconnect,
@@ -461,7 +494,7 @@ export function MinecraftSettings({
             const j =
               data.live.job?.id === savedJob.id ? data.live.job : savedJob;
             return (
-              <li key={j.id}>
+              <li key={j.id} data-status={j.status}>
                 <strong>
                   {j.kind} · {j.status}
                 </strong>{" "}
@@ -492,9 +525,15 @@ export function MinecraftSettings({
           })}
         </ol>
       ) : (
-        <p>No game jobs yet.</p>
+        <div className="integration-empty compact">
+          <Activity size={20} />
+          <div>
+            <h4>No game jobs yet.</h4>
+            <p>Ask Eva to follow you, craft something or explore together.</p>
+          </div>
+        </div>
       )}
-      <details>
+      <details className="integration-disclosure">
         <summary>World landmarks</summary>
         <p>
           Scoped to character, world label, endpoint and dimension—not mixed

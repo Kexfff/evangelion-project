@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Send } from "lucide-react";
 import { bridge } from "../bridge";
 import {
   capabilities,
@@ -61,13 +62,23 @@ export function PluginSettings({ data }: { data?: PluginSnapshot }) {
     });
   }
   return (
-    <section className="card plugin-settings">
-      <div className="section-heading">
-        <h2>Telegram plugin</h2>
-        <p>
-          One companion, shared conversation and memory. Plugin changes apply
-          immediately and do not use Save changes.
-        </p>
+    <section className="card plugin-settings telegram-settings">
+      <div className="section-heading integration-panel-heading">
+        <span className="integration-icon telegram">
+          <Send size={22} />
+        </span>
+        <div>
+          <h2>Telegram plugin</h2>
+          <p>
+            One companion, shared conversation and memory. Plugin changes apply
+            immediately and do not use Save changes.
+          </p>
+        </div>
+        <span
+          className={`connection-badge ${data?.status === "Connected" ? "online" : ""}`}
+        >
+          {data?.status ?? "Not installed"}
+        </span>
       </div>
       <p>
         Bundled version {data?.availableVersion ?? "1.0.0"} · API 1 ·{" "}
@@ -272,23 +283,25 @@ export function PluginSettings({ data }: { data?: PluginSnapshot }) {
             conversations also become Telegram’s current conversation; older
             memories remain shared.
           </p>
-          <h3>Diagnostics</h3>
-          <p>
-            Inbound messages: 12/minute. Images: 2 MB each. Voice: 60 seconds/10
-            MB. Albums are processed as separate image messages. Failed or
-            interrupted updates are not automatically replayed.
-          </p>
-          {data.diagnostics.length ? (
-            <ul>
-              {[...data.diagnostics].reverse().map((entry, i) => (
-                <li key={`${entry.at}-${i}`}>
-                  <time>{entry.at}</time> — {entry.message}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p>No plugin activity yet.</p>
-          )}
+          <details className="integration-disclosure">
+            <summary>Diagnostics</summary>
+            <p>
+              Inbound messages: 12/minute. Images: 2 MB each. Voice: 60
+              seconds/10 MB. Albums are processed as separate image messages.
+              Failed or interrupted updates are not automatically replayed.
+            </p>
+            {data.diagnostics.length ? (
+              <ul>
+                {[...data.diagnostics].reverse().map((entry, i) => (
+                  <li key={`${entry.at}-${i}`}>
+                    <time>{entry.at}</time> — {entry.message}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>No plugin activity yet.</p>
+            )}
+          </details>
         </>
       )}
     </section>

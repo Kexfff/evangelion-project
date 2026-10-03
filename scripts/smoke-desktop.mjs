@@ -544,6 +544,9 @@ try {
     .getByRole("button", { name: "Plugins & MCP", exact: true })
     .click();
   await pluginWindow
+    .getByRole("button", { name: "Telegram", exact: true })
+    .click();
+  await pluginWindow
     .getByRole("button", { name: "Install bundled Telegram" })
     .click();
   await pluginWindow

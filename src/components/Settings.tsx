@@ -29,9 +29,7 @@ import { bridge } from "../bridge";
 import { ConsciousnessSettings } from "./ConsciousnessSettings";
 import { MemorySettings } from "./MemorySettings";
 import { OverviewStatistics } from "./OverviewStatistics";
-import { PluginSettings } from "./PluginSettings";
-import { McpSettings } from "./McpSettings";
-import { MinecraftSettings } from "./MinecraftSettings";
+import { IntegrationSettings } from "./IntegrationSettings";
 import {
   defaultSettings,
   settingsSchema,
@@ -303,7 +301,7 @@ export function Settings() {
             <ExternalLink size={14} />
           </button>
           <div className="version">
-            evangelion_project <span>v0.4.7</span>
+            evangelion_project <span>v0.4.8</span>
           </div>
         </div>
       </aside>
@@ -1134,16 +1132,7 @@ export function Settings() {
           )}
           {tab === "plugins" && (
             <>
-              <MinecraftSettings
-                data={snapshot.minecraft}
-                mcp={snapshot.mcp}
-                characterId={snapshot.settings.activeCharacterId}
-              />
-              <McpSettings
-                data={snapshot.mcp}
-                characterId={snapshot.settings.activeCharacterId}
-              />
-              <PluginSettings data={snapshot.plugins} />
+              <IntegrationSettings snapshot={snapshot} />
             </>
           )}
           <footer className="page-footer">
@@ -1151,7 +1140,7 @@ export function Settings() {
             <span>EVANGELION / FOUNDATION</span>
           </footer>
         </main>
-        <div className="savebar">
+        <div className="savebar" hidden={tab === "plugins" && !dirty}>
           <span>
             {dirty ? (
               "You have unsaved changes"

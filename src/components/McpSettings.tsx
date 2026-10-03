@@ -1,4 +1,13 @@
 import { useState } from "react";
+import {
+  Cable,
+  Plus,
+  ShieldCheck,
+  Server,
+  Globe,
+  KeyRound,
+} from "lucide-react";
+import { ToolPermissions } from "./ToolPermissions";
 import { bridge } from "../bridge";
 import { MINECRAFT_ID } from "../shared/minecraft";
 import {
@@ -6,7 +15,6 @@ import {
   mcpSecretsSchema,
   type McpConfig,
   type McpSnapshot,
-  type ToolPolicy,
 } from "../shared/mcp";
 
 export function McpSettings({
@@ -67,44 +75,38 @@ export function McpSettings({
   }
   return (
     <section className="card plugin-settings mcp-settings">
-      <div className="section-heading">
-        <h2>MCP connections</h2>
+      <div className="section-heading integration-panel-heading">
+        <span className="integration-icon mcp">
+          <Cable size={22} />
+        </span>
+        <div>
+          <h2>MCP connections</h2>
+          <p>
+            Give your companion new tools, one permission at a time. Changes
+            apply immediately.
+          </p>
+        </div>
+        <span className="connection-badge">
+          {data?.servers.length ?? 0} configured
+        </span>
+      </div>
+      <div className="integration-trust-note">
+        <ShieldCheck size={17} />
         <p>
-          Give your companion new tools, one permission at a time. Changes apply
-          immediately.
+          Local servers run with your OS account’s access, not in a sandbox.
+          Remote servers receive tool arguments. Only connect servers you trust.
         </p>
       </div>
-      <p>
-        Local servers run as trusted programs with your OS account’s access, not
-        in a sandbox. Remote servers receive tool arguments. Only connect
-        servers you trust. The bundled Minecraft adapter has its own controls
-        above.
-      </p>
       <div className="button-row">
         <button
           className="button primary"
           disabled={busy}
           onClick={() => edit()}
         >
+          <Plus size={15} />
           Add MCP connection
         </button>
-        <button
-          className="button secondary"
-          onClick={() =>
-            void run(
-              () => bridge.stopTools(),
-              "Tools stopped. Reconnect explicitly to resume.",
-            )
-          }
-        >
-          Emergency stop tools
-        </button>
       </div>
-      {data?.stopped && (
-        <p role="status">
-          Emergency stop is active. All MCP connections are disabled.
-        </p>
-      )}
       {error && (
         <p className="error-notice" role="alert">
           {error}
@@ -116,7 +118,7 @@ export function McpSettings({
         </p>
       )}
       {!!data?.pending.length && (
-        <div className="mcp-approvals">
+        <div className="mcp-approvals integration-approval-panel">
           <h3>Waiting for your approval</h3>
           <p>
             Review the exact arguments below. Approval is for this call only and
@@ -206,6 +208,7 @@ export function McpSettings({
               <label className="field">
                 <span>Connection name</span>
                 <input
+                  autoFocus
                   value={draft.name}
                   maxLength={60}
                   required
@@ -332,23 +335,52 @@ export function McpSettings({
         </form>
       )}
       {!data?.servers.length && !draft && (
-        <p className="mcp-empty">
-          No connections yet. Add a trusted MCP server, then choose which tools
-          your companion may use.
-        </p>
+        <div className="integration-empty">
+          <Cable size={30} />
+          <h3>Your next connection starts here</h3>
+          <p>
+            No connections yet. Add a trusted MCP server, then choose which
+            tools your companion may use.
+          </p>
+          <span className="connection-badge">
+            Local programs · Remote services
+          </span>
+        </div>
       )}
       {data?.servers.map((s) => (
         <article key={s.config.id} className="mcp-connection">
-          <div className="section-heading">
-            <h3>{s.config.name}</h3>
-            <p>
-              {s.status} ·{" "}
-              {s.config.transport === "stdio"
-                ? "Local program"
-                : "Streamable HTTP"}{" "}
-              · character {s.config.characterId} ·{" "}
+          <div className="section-heading integration-panel-heading">
+            <span className="integration-icon mcp">
+              {s.config.transport === "stdio" ? (
+                <Server size={20} />
+              ) : (
+                <Globe size={20} />
+              )}
+            </span>
+            <div>
+              <h3>{s.config.name}</h3>
+              <p>
+                {s.status} ·{" "}
+                {s.config.transport === "stdio"
+                  ? "Local program"
+                  : "Streamable HTTP"}{" "}
+                · character {s.config.characterId}
+              </p>
+            </div>
+            <span
+              className={`connection-badge ${s.status === "Connected" ? "online" : ""}`}
+            >
+              {s.status}
+            </span>
+          </div>
+          <div className="connection-meta">
+            <span>
+              {s.tools.length} tool{s.tools.length === 1 ? "" : "s"} discovered
+            </span>
+            <span>
+              <KeyRound size={12} />
               {s.hasSecrets ? "Credentials saved" : "No saved credentials"}
-            </p>
+            </span>
           </div>
           <div className="button-row">
             <button
@@ -380,7 +412,7 @@ export function McpSettings({
               Edit connection
             </button>
             <button
-              className="button secondary"
+              className="button secondary danger-subtle"
               disabled={busy}
               onClick={() => {
                 if (
@@ -396,56 +428,38 @@ export function McpSettings({
           </div>
           {!!s.tools.length && (
             <p>
-              Tools are blocked by default. “Ask every time” makes a tool
-              available to the LLM but waits for desktop approval. “Allow”
-              permits calls without further confirmation, including requests
-              from your paired Telegram account.
+              Tools start blocked. Choose “Ask every time” for desktop approval,
+              or “Allow” for calls without confirmation from desktop and your
+              paired Telegram account.
             </p>
           )}
-          {s.tools.map((t) => (
-            <div className="mcp-tool" key={t.name}>
-              <label className="field">
-                <span>{t.name}</span>
-                <select
-                  aria-label={`Permission for ${s.config.id}/${t.name}`}
-                  value={t.policy}
-                  disabled={busy}
-                  onChange={(e) => {
-                    const policy = e.target.value as ToolPolicy;
-                    if (
-                      policy === "allow" &&
-                      !window.confirm(
-                        `Allow ${t.name} without asking? This may modify external data. Server safety annotations are not guarantees.`,
-                      )
-                    )
-                      return;
-                    void run(() =>
-                      bridge.mcpGrant(
-                        s.config.id,
-                        t.name,
-                        t.fingerprint,
-                        policy,
-                      ),
-                    );
-                  }}
-                >
-                  <option value="deny">Blocked</option>
-                  <option value="ask">Ask every time</option>
-                  <option value="allow">Allow without asking</option>
-                </select>
-              </label>
-              <details>
-                <summary>
-                  Description and input schema (untrusted server data)
-                </summary>
-                <p>{t.description || "No description provided."}</p>
-                <pre>{JSON.stringify(t.inputSchema, null, 2)}</pre>
-              </details>
-            </div>
-          ))}
+          {!!s.tools.length && (
+            <ToolPermissions
+              tools={s.tools}
+              scope={s.config.id}
+              disabled={busy}
+              onChange={(t, policy) => {
+                if (
+                  policy === "allow" &&
+                  !window.confirm(
+                    `Allow ${t.name} without asking? This may modify external data. Server safety annotations are not guarantees.`,
+                  )
+                )
+                  return;
+                void run(() =>
+                  bridge.mcpGrant(s.config.id, t.name, t.fingerprint, policy),
+                );
+              }}
+            />
+          )}
+          {!s.tools.length && (
+            <p className="connection-next-step">
+              Connect to discover the tools available from this server.
+            </p>
+          )}
         </article>
       ))}
-      <details className="mcp-audit">
+      <details className="mcp-audit integration-disclosure">
         <summary>Tool activity · {data?.audit.length ?? 0} entries</summary>
         <p>
           Last 200 events. Arguments, results, tokens and raw server errors are
