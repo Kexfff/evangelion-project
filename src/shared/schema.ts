@@ -181,6 +181,10 @@ export type RuntimeEvent =
   | { type: "phase"; phase: Phase }
   | { type: "warning"; message: string };
 export interface Bridge {
+  configureGameAutonomy(
+    config: import("./game-autonomy").GameAutonomyConfig,
+  ): Promise<void>;
+  pauseGameAutonomy(paused: boolean): Promise<void>;
   submitGameGoal(input: unknown): Promise<unknown>;
   controlGameGoal(
     id: string,

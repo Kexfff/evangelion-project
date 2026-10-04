@@ -155,6 +155,21 @@ export class MinecraftPlugin {
         (g) => g.characterId === this.store.characterId,
       ),
       goalConfig: this.store.data.minecraft.goalConfig,
+      autonomy: {
+        ...this.store.data.minecraft.autonomy,
+        memories: this.store.data.minecraft.autonomy.memories.filter(
+          (m) =>
+            m.characterId === this.store.characterId &&
+            m.world ===
+              JSON.stringify([
+                this.store.data.minecraft.config.host,
+                this.store.data.minecraft.config.port,
+                this.store.data.minecraft.config.worldId,
+                this.store.data.minecraft.config.username,
+                this.live.dimension,
+              ]),
+        ),
+      },
       jobs: this.store.data.minecraft.jobs.filter(
         (j) => j.characterId === this.store.characterId,
       ),

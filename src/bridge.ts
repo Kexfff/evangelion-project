@@ -41,6 +41,8 @@ const desktopOnly = async (): Promise<never> => {
   );
 };
 const preview: Bridge = {
+  configureGameAutonomy: desktopOnly,
+  pauseGameAutonomy: desktopOnly,
   submitGameGoal: desktopOnly,
   controlGameGoal: desktopOnly,
   configureGameGoals: desktopOnly,

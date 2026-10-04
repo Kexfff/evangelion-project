@@ -253,6 +253,12 @@ else {
           return fn(...args);
         });
       handle("snapshot", () => runtime.snapshot());
+      handle("game:autonomy:configure", (raw) =>
+        plugins.game.configureAutonomy(raw),
+      );
+      handle("game:autonomy:pause", (raw) =>
+        plugins.game.pauseAutonomy(z.boolean().parse(raw)),
+      );
       handle("game:submit", (raw) =>
         plugins.game.submit(goalInputSchema.parse(raw), {
           characterId: store.characterId,
@@ -752,14 +758,13 @@ else {
       scheduler.unref();
       const suspend = () => {
         runtime.autonomy.suspend(true);
-        plugins.game.pauseAll(
-          "System suspended or locked. Resume explicitly when ready.",
-        );
+        plugins.game.suspend(true);
         plugins.minecraft.stopAction(false);
         void runtime.cancel();
       };
       const resume = () => {
         runtime.autonomy.suspend(false);
+        plugins.game.suspend(false);
       };
       powerMonitor.on("suspend", suspend);
       powerMonitor.on("lock-screen", suspend);

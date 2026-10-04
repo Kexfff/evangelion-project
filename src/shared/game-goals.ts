@@ -70,7 +70,7 @@ export const gameGoalSchema = z.object({
     "failed",
     "cancelled",
   ]),
-  source: z.enum(["desktop", "telegram", "survival"]),
+  source: z.enum(["desktop", "telegram", "survival", "autonomous"]),
   characterId: z.string(),
   sessionId: z.string(),
   world: z.string(),

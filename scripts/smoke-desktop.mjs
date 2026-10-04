@@ -805,6 +805,14 @@ try {
       ...data.minecraft.goalConfig,
       maxSteps: 17,
     });
+    await window.eva.configureGameAutonomy({
+      ...data.minecraft.autonomy.config,
+      enabled: true,
+      preference: "objective",
+      objective: "Fixture objective; never join a server",
+      hourlyRequests: 70,
+    });
+    await window.eva.pauseGameAutonomy(true);
     try {
       await window.eva.submitGameGoal({
         objective: "Offline smoke",
@@ -850,6 +858,13 @@ try {
     false,
   );
   await mcpReopened.evaluate(() => window.eva.setMinecraftEnabled(true));
+  const gameAutonomy = (await mcpReopened.evaluate(() => window.eva.snapshot()))
+    .minecraft.autonomy;
+  assert.equal(gameAutonomy.config.enabled, true);
+  assert.equal(gameAutonomy.config.paused, true);
+  assert.equal(gameAutonomy.config.hourlyRequests, 70);
+  assert.equal(gameAutonomy.session.requests, 0);
+  await mcpReopened.evaluate(() => window.eva.pauseGameAutonomy(false));
   assert.equal(
     (await mcpReopened.evaluate(() => window.eva.snapshot())).minecraft.live
       .connected,

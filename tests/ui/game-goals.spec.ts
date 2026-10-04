@@ -2,12 +2,13 @@ import { test, expect } from "@playwright/test";
 import { defaultSettings } from "../../src/shared/schema";
 import { minecraftConfigSchema } from "../../src/shared/minecraft";
 import { gameGoalConfigSchema } from "../../src/shared/game-goals";
+import { gameAutonomyStateSchema } from "../../src/shared/game-autonomy";
 
 test("game goals queue, pause, reconcile, cancel and save independent budgets", async ({
   page,
 }) => {
   await page.addInitScript(
-    ({ settings, config, goalConfig }) => {
+    ({ settings, config, goalConfig, autonomy }) => {
       let listener = (_event: unknown) => {};
       const data: any = {
         settings,
@@ -17,6 +18,7 @@ test("game goals queue, pause, reconcile, cancel and save independent budgets", 
         busy: false,
         secretStorage: "local-file",
         minecraft: {
+          autonomy,
           config,
           goalConfig,
           goals: [],
@@ -76,6 +78,14 @@ test("game goals queue, pause, reconcile, cancel and save independent budgets", 
             data.minecraft.goalConfig = cfg;
             emit();
           },
+          configureGameAutonomy: async (cfg: unknown) => {
+            data.minecraft.autonomy.config = cfg;
+            emit();
+          },
+          pauseGameAutonomy: async (paused: boolean) => {
+            data.minecraft.autonomy.config.paused = paused;
+            emit();
+          },
         },
       });
     },
@@ -83,6 +93,7 @@ test("game goals queue, pause, reconcile, cancel and save independent budgets", 
       settings: defaultSettings,
       config: minecraftConfigSchema.parse({}),
       goalConfig: gameGoalConfigSchema.parse({}),
+      autonomy: gameAutonomyStateSchema.parse({}),
     },
   );
   await page.goto("/?window=settings");
@@ -92,6 +103,42 @@ test("game goals queue, pause, reconcile, cancel and save independent budgets", 
   await expect(
     page.getByRole("heading", { name: "Game goals", exact: true }),
   ).toBeVisible();
+  await page.getByLabel("Choose activities autonomously").check();
+  await page
+    .getByRole("combobox", { name: "Play style", exact: true })
+    .selectOption("objective");
+  await page
+    .getByLabel("Standing objective & preferences")
+    .fill("Build us a cozy home");
+  await page.getByText("Shared game budget", { exact: true }).click();
+  await page
+    .getByLabel("Requests per rolling hour", { exact: true })
+    .fill("80");
+  await page.getByRole("button", { name: "Save independent gameplay" }).click();
+  expect(
+    await page.evaluate(
+      () => (window as any).goalFixture.minecraft.autonomy.config,
+    ),
+  ).toMatchObject({
+    enabled: true,
+    preference: "objective",
+    objective: "Build us a cozy home",
+    hourlyRequests: 80,
+  });
+  await page
+    .getByRole("button", { name: "Pause gameplay", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Resume gameplay", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Resume gameplay", exact: true })
+    .click();
+  await page.getByText("Shared game budget", { exact: true }).click();
+  await page.screenshot({
+    path: "/tmp/eva-independent-gameplay.png",
+    fullPage: true,
+  });
   await page.getByText("New inventory goal", { exact: true }).click();
   await expect(page.getByLabel("Scheduled start (optional)")).toBeDisabled();
   await page.getByLabel("Target item ID").fill("oak_log");

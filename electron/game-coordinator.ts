@@ -7,11 +7,12 @@ import {
   type GoalCondition,
 } from "../src/shared/game-goals";
 import { MINECRAFT_ID, type MinecraftLive } from "../src/shared/minecraft";
-import type { ToolContext, McpToolView } from "../src/shared/mcp";
+import type { ToolContext } from "../src/shared/mcp";
 import type { CompanionRuntime } from "./runtime";
 import type { MinecraftPlugin } from "./minecraft-plugin";
 import type { McpPlugin } from "./mcp-plugin";
-import { quietNow } from "./autonomy";
+import { GameDirector } from "./game-director";
+import { directorDecisionSchema } from "../src/shared/game-autonomy";
 
 const reads = new Set([
   "observe",
@@ -81,27 +82,76 @@ export class GameCoordinator {
   private lastHealth?: number;
   private hurt = false;
   private stopping = false;
+  private suspended = false;
+  private scope?: string;
+  private planning = false;
+  private manualActions = 0;
+  private worldSignal = "";
+  private lastEventWake = 0;
+  readonly director: GameDirector;
   constructor(
     private runtime: CompanionRuntime,
     private minecraft: MinecraftPlugin,
     private mcp: McpPlugin,
   ) {
+    this.director = new GameDirector(runtime);
     const store = runtime.store;
     if (
-      store.data.minecraft.goals.some((g) =>
-        ["running", "queued"].includes(g.status),
+      store.data.minecraft.goals.some(
+        (g) =>
+          ["running", "queued"].includes(g.status) ||
+          (g.source === "autonomous" && g.status === "paused"),
       )
     )
       store.update((d) => {
         for (const g of d.minecraft.goals)
-          if (["running", "queued"].includes(g.status)) {
-            g.status = "paused";
+          if (
+            ["running", "queued"].includes(g.status) ||
+            (g.source === "autonomous" && g.status === "paused")
+          ) {
+            g.status = g.source === "autonomous" ? "cancelled" : "paused";
             g.detail =
               "App restarted. Confirm the world and resume to inspect before continuing; partial actions are not replayed.";
             delete g.jobId;
           }
       });
     minecraft.onState = (state) => {
+      this.checkScope(state);
+      const signature = JSON.stringify([
+        state.connected,
+        state.health,
+        state.food,
+        state.inventory,
+        Math.floor((state.timeOfDay ?? 0) / 6000),
+        state.players,
+        state.playerLocations?.map((p) => [
+          p.name,
+          p.source,
+          p.position && [
+            Math.floor(p.position.x / 16),
+            Math.floor(p.position.y / 8),
+            Math.floor(p.position.z / 16),
+          ],
+        ]),
+      ]);
+      if (signature !== this.worldSignal) {
+        this.worldSignal = signature;
+        // Coalesce meaningful changes, never physics ticks. Failed decisions keep their backoff.
+        if (
+          !this.director.state.failures &&
+          Date.now() - this.lastEventWake >=
+            this.director.config.intervalSeconds * 1000
+        ) {
+          this.lastEventWake = Date.now();
+          if (
+            this.director.state.nextDecisionAt >
+            Date.now() + this.director.config.intervalSeconds * 1000
+          )
+            this.director.waiting(
+              "World conditions changed; considering the next activity.",
+            );
+        }
+      }
       if (
         state.connected &&
         this.goals.some(
@@ -109,7 +159,7 @@ export class GameCoordinator {
             ["running", "queued"].includes(g.status) &&
             (g.world !== this.world() ||
               g.characterId !== store.characterId ||
-              g.sessionId !== store.sessionId),
+              (g.source !== "autonomous" && g.sessionId !== store.sessionId)),
         )
       )
         this.pauseAll(
@@ -120,6 +170,15 @@ export class GameCoordinator {
         this.goals.some((g) => ["running", "queued"].includes(g.status))
       )
         this.pauseAll("Connection ended. Confirm the world before resuming.");
+      if (!state.connected)
+        for (const g of this.goals.filter(
+          (g) => g.source === "autonomous" && g.status === "paused",
+        ))
+          this.update(g, {
+            status: "cancelled",
+            detail:
+              "Connection ended; partial effects remain. A manual join starts with fresh observation.",
+          });
       if (!state.connected) {
         this.lastHealth = undefined;
         this.hurt = false;
@@ -147,6 +206,112 @@ export class GameCoordinator {
       c.username,
       this.minecraft.snapshot().live.dimension,
     ]);
+  }
+  private checkScope(live: MinecraftLive) {
+    const scope = JSON.stringify([
+      this.runtime.store.characterId,
+      this.world(),
+    ]);
+    if (!live.connected) {
+      this.controller?.abort();
+      this.scope = undefined;
+    } else if (this.scope && this.scope !== scope) {
+      this.pauseAutonomy(
+        true,
+        "Character, world or account changed. Resume gameplay explicitly.",
+      );
+      this.pauseAll("World ownership changed. Inspect before resuming.");
+      this.scope = scope;
+    } else this.scope = scope;
+  }
+  configureAutonomy(raw: unknown) {
+    const wasEnabled = this.director.config.enabled;
+    const wasPaused = this.director.config.paused;
+    this.director.configure(raw);
+    if (this.planning) this.controller?.abort();
+    if (this.director.config.paused)
+      this.pauseAutomatic("Independent gameplay paused.");
+    else if (wasEnabled && !this.director.config.enabled)
+      this.pauseAutomatic("Self-selected gameplay disabled.", true);
+    else if (wasPaused) this.pauseAutonomy(false);
+  }
+  pauseAutonomy(
+    paused: boolean,
+    reason = "Independent gameplay paused by user.",
+  ) {
+    this.director.change((s) => {
+      s.config.paused = paused;
+      s.detail = paused
+        ? reason
+        : "Resumed. Observing before choosing the next activity.";
+      s.nextDecisionAt = 0;
+    });
+    if (paused) this.pauseAutomatic(reason);
+    else if (this.minecraft.snapshot().live.connected)
+      for (const g of this.goals.filter(
+        (g) =>
+          g.source === "autonomous" &&
+          g.status === "paused" &&
+          g.characterId === this.runtime.store.characterId &&
+          g.world === this.world(),
+      ))
+        this.update(g, {
+          status: "queued",
+          jobId: undefined,
+          wakeAt: undefined,
+          detail: "Gameplay resumed; re-observing before continuing.",
+        });
+  }
+  suspend(value: boolean) {
+    this.suspended = value;
+    if (value) {
+      this.pauseAutonomy(
+        true,
+        "System locked or suspended. Resume gameplay explicitly.",
+      );
+      this.pauseAll("System locked or suspended. Resume explicitly.");
+    }
+  }
+  private pauseAutomatic(reason: string, selfSelectedOnly = false) {
+    if (this.planning) this.controller?.abort();
+    for (const g of this.goals.filter(
+      (g) =>
+        ["running", "queued"].includes(g.status) &&
+        (g.source === "autonomous" ||
+          (!selfSelectedOnly && (g.source === "survival" || !!g.dueAt))),
+    )) {
+      if (g.status === "running") {
+        this.controller?.abort();
+        this.minecraft.stopAction(false);
+      }
+      this.update(g, { status: "paused", detail: reason, jobId: undefined });
+    }
+  }
+  /** Foreground chat wins provider time, but never cancels physical movement. */
+  foreground() {
+    if (this.planning) this.controller?.abort();
+  }
+  private yieldAutonomous() {
+    if (this.planning) this.controller?.abort();
+    for (const g of this.goals.filter(
+      (g) => g.source === "autonomous" && g.status === "running",
+    )) {
+      this.controller?.abort();
+      this.minecraft.stopAction(false);
+      this.update(g, {
+        status: "queued",
+        jobId: undefined,
+        wakeAt: undefined,
+        detail: "Yielding to the user. Will re-observe before continuing.",
+      });
+    }
+  }
+  beginManual(name: string) {
+    this.manualActions++;
+    this.manual(name);
+    return () => {
+      this.manualActions--;
+    };
   }
   private tool(name: string) {
     return this.mcp
@@ -188,7 +353,12 @@ export class GameCoordinator {
       "Connection/lifecycle changed. Confirm the world before resuming.",
     );
   }
-  cancelAll() {
+  cancelAll(pauseDirector = true) {
+    if (pauseDirector)
+      this.pauseAutonomy(
+        true,
+        "Stopped. Resume independent gameplay when ready.",
+      );
     this.controller?.abort();
     this.minecraft.stopAction(false);
     for (const g of this.goals.filter((g) =>
@@ -210,10 +380,20 @@ export class GameCoordinator {
   }
   manual(name: string) {
     if (name === "stop_action") this.cancelAll();
-    else if (!reads.has(name))
+    else if (!reads.has(name)) {
+      const autonomous = this.goals
+        .filter(
+          (g) =>
+            g.source === "autonomous" &&
+            ["running", "queued"].includes(g.status),
+        )
+        .map((g) => g.id);
       this.pauseAll(
         "Paused for a direct game instruction. Resume to re-observe before continuing.",
       );
+      for (const g of this.goals.filter((g) => autonomous.includes(g.id)))
+        this.update(g, { status: "queued", wakeAt: undefined });
+    }
   }
   submit(
     raw: unknown,
@@ -249,7 +429,9 @@ export class GameCoordinator {
       throw new Error(
         "Finish or cancel a goal before adding more (16 active goals maximum).",
       );
-    if (input.mode === "replace") this.cancelAll();
+    if (input.mode === "replace") this.cancelAll(false);
+    else if ((source === "desktop" || source === "telegram") && !input.dueAt)
+      this.yieldAutonomous();
     const now = new Date().toISOString();
     const goal: GameGoal = {
       id: randomUUID(),
@@ -338,19 +520,27 @@ export class GameCoordinator {
     if (
       g.world !== this.world() ||
       g.characterId !== this.runtime.store.characterId ||
-      g.sessionId !== this.runtime.store.sessionId
+      (g.source !== "autonomous" &&
+        g.sessionId !== this.runtime.store.sessionId)
     ) {
       this.pauseAll("World or conversation changed. Confirm before resuming.");
       throw new Error("Goal context changed.");
     }
     const alias = this.alias(name);
     if (!alias) throw new Error("A required Minecraft tool is unavailable.");
+    if (g.source === "autonomous" && this.tool(name)?.policy !== "allow")
+      throw new Error(
+        "This intention needs an allowed tool. Ask/Blocked tools are left for explicit user instructions.",
+      );
     const result = (await this.mcp.execute(
       alias,
       args,
       {
         characterId: g.characterId,
-        sessionId: g.sessionId,
+        sessionId:
+          g.source === "autonomous"
+            ? this.runtime.store.sessionId
+            : g.sessionId,
         channel: g.source === "telegram" ? "telegram" : "desktop",
       },
       signal,
@@ -389,13 +579,18 @@ export class GameCoordinator {
     detail: string,
   ) {
     this.update(g, { status, detail: detail.slice(0, 600), jobId: undefined });
+    this.director.remember(g, this.minecraft.snapshot().live);
     this.runtime.autonomy.log(
       `game-${status}`,
       `${g.objective}: ${detail}`,
       {},
       g.characterId,
     );
-    if (this.config.notify && this.runtime.autonomy.gate() === "Ready") {
+    if (
+      g.source === "autonomous"
+        ? this.director.config.notify
+        : this.config.notify
+    ) {
       try {
         await this.runtime.gameOutcome(g, detail);
       } catch {
@@ -411,7 +606,7 @@ export class GameCoordinator {
   private reaction(live: MinecraftLive) {
     if (
       !this.config.survival ||
-      this.runtime.autonomy.gate() !== "Ready" ||
+      this.director.config.paused ||
       Date.now() - this.lastReaction <
         this.config.reactionCooldownSeconds * 1000
     )
@@ -475,6 +670,10 @@ export class GameCoordinator {
     try {
       await this.advance();
     } catch {
+      this.pauseAutonomy(
+        true,
+        "Coordinator error. Inspect the world before resuming.",
+      );
       this.pauseAll("Coordinator error. Inspect the world before resuming.");
     } finally {
       this.working = false;
@@ -483,36 +682,51 @@ export class GameCoordinator {
   private async advance() {
     let g = this.goals.find((g) => g.status === "running");
     const live = this.minecraft.snapshot().live;
+    this.checkScope(live);
+    if (
+      !this.runtime.store.data.minecraft.enabled ||
+      this.suspended ||
+      this.manualActions
+    )
+      return;
+    // Scope checking can pause the goal synchronously.
+    if (g && this.goals.find((v) => v.id === g!.id)?.status !== "running")
+      return;
     if (
       g &&
       (!live.connected ||
         g.world !== this.world() ||
         g.characterId !== this.runtime.store.characterId ||
-        g.sessionId !== this.runtime.store.sessionId)
+        (g.source !== "autonomous" &&
+          g.sessionId !== this.runtime.store.sessionId))
     ) {
       this.pauseAll(
         "World, connection or conversation changed. Confirm before resuming.",
       );
       return;
     }
-    if (
-      this.runtime.autonomy.config.paused ||
-      this.runtime.autonomy.gameSuspended
-    ) {
-      if (g) this.pauseAll("Gameplay paused by consciousness or system lock.");
-      return;
-    }
     if (!live.connected) return;
     if (
+      this.runtime.store.data.minecraft.config.characterId !==
+      this.runtime.store.characterId
+    ) {
+      this.pauseAutonomy(
+        true,
+        "This world belongs to another character. Join the active character's world.",
+      );
+      this.pauseAll("Character ownership changed.");
+      return;
+    }
+    if (
       g &&
-      (g.dueAt || g.source === "survival") &&
-      (!this.runtime.autonomy.config.enabled ||
-        quietNow(Date.now(), this.runtime.autonomy.config) ||
+      (g.dueAt || g.source === "survival" || g.source === "autonomous") &&
+      (this.director.config.paused ||
+        (g.source === "autonomous" && !this.director.config.enabled) ||
         (g.dueAt && !this.config.scheduled) ||
         (g.source === "survival" && !this.config.survival))
     ) {
       this.pauseAll(
-        "Autonomous gameplay is disabled or in quiet hours. Resume explicitly when ready.",
+        "Independent gameplay is paused or disabled. Resume explicitly when ready.",
       );
       return;
     }
@@ -522,33 +736,38 @@ export class GameCoordinator {
       g = [...this.goals]
         .sort(
           (a, b) =>
-            Number(b.source === "survival") - Number(a.source === "survival"),
+            Number(b.source === "survival") - Number(a.source === "survival") ||
+            Number(a.source === "autonomous") -
+              Number(b.source === "autonomous") ||
+            Number(!!a.dueAt) - Number(!!b.dueAt),
         )
         .find(
           (g) =>
             g.status === "queued" &&
             g.characterId === this.runtime.store.characterId &&
-            g.sessionId === this.runtime.store.sessionId &&
+            (g.source === "autonomous" ||
+              g.sessionId === this.runtime.store.sessionId) &&
             g.world === this.world() &&
             (!g.dueAt ||
               (this.config.scheduled && Date.parse(g.dueAt) <= Date.now())) &&
             (g.source !== "survival" || this.config.survival) &&
-            (!(g.dueAt || g.source === "survival") ||
-              this.runtime.autonomy.gate() === "Ready"),
+            (g.source !== "autonomous" || this.director.config.enabled) &&
+            (!(
+              g.dueAt ||
+              g.source === "survival" ||
+              g.source === "autonomous"
+            ) ||
+              !this.director.config.paused),
         );
-      if (!g) return;
-      if (
-        (g.dueAt || g.source === "survival") &&
-        this.runtime.autonomy.gate() !== "Ready"
-      )
+      if (!g) {
+        await this.chooseActivity(live);
         return;
+      }
       this.update(g, {
         status: "running",
         detail: "Inspecting current world state.",
       });
       this.lastCharge = Date.now();
-      if (g.dueAt || g.source === "survival")
-        this.runtime.autonomy.reserveGameAction();
     }
     const now = Date.now(),
       elapsedMs = g.elapsedMs + now - this.lastCharge;
@@ -567,6 +786,43 @@ export class GameCoordinator {
     if (g.jobId) {
       const job = live.job;
       if (job?.id === g.jobId && job.status === "running") {
+        const urgentFood =
+          (live.food ?? 20) <= 6 &&
+          live.inventory.some((i) => safeFoods.has(i.name)) &&
+          this.tool("eat_food")?.policy === "allow";
+        const friend = live.playerLocations?.find(
+          (p) =>
+            p.source === "tracking" &&
+            p.name === this.runtime.store.data.minecraft.config.trustedPlayer &&
+            p.position,
+        );
+        const urgentRetreat =
+          this.hurt &&
+          friend?.position &&
+          live.position &&
+          Math.hypot(
+            friend.position.x - live.position.x,
+            friend.position.y - live.position.y,
+            friend.position.z - live.position.z,
+          ) > 4 &&
+          this.tool("move_to")?.policy === "allow";
+        if (
+          g.source !== "survival" &&
+          this.config.survival &&
+          !this.director.config.paused &&
+          job.kind === "move" &&
+          (urgentFood || urgentRetreat) &&
+          now - this.lastReaction >= this.config.reactionCooldownSeconds * 1000
+        ) {
+          this.minecraft.stopAction(false);
+          this.update(g, {
+            status: "queued",
+            jobId: undefined,
+            detail:
+              "Yielding navigation for an urgent survival reaction; waiting for the worker to stop.",
+          });
+          return;
+        }
         if (
           Date.now() - Date.parse(job.startedAt) >
           this.config.stepSeconds * 1000
@@ -618,7 +874,28 @@ export class GameCoordinator {
           elapsedMs,
         });
     }
-    if (this.runtime.busy) return;
+    if (this.runtime.busy && g.source !== "survival") return;
+    if (
+      g.source === "autonomous" &&
+      this.goals.some(
+        (v) =>
+          v.source !== "autonomous" &&
+          v.status === "queued" &&
+          v.world === this.world() &&
+          v.characterId === this.runtime.store.characterId &&
+          v.sessionId === this.runtime.store.sessionId &&
+          (!v.dueAt ||
+            (this.config.scheduled &&
+              !this.director.config.paused &&
+              Date.parse(v.dueAt) <= Date.now())),
+      )
+    ) {
+      this.update(g, {
+        status: "queued",
+        detail: "Yielding at a completed action boundary to a user goal.",
+      });
+      return;
+    }
     if (g.source !== "survival" && this.reaction(live)) {
       this.update(g, {
         status: "queued",
@@ -679,26 +956,39 @@ export class GameCoordinator {
                 reason: "Eating to recover hunger.",
               };
       } else {
+        const budget = this.director.budget();
+        if (budget) {
+          this.update(g, { detail: budget, wakeAt: Date.now() + 30000 });
+          this.director.waiting(budget, 30);
+          return;
+        }
         const available =
           this.mcp
             .snapshot()
             .servers.find((s) => s.config.id === MINECRAFT_ID)
             ?.tools.filter(
-              (t) => t.policy !== "deny" && !forbidden.has(t.name),
+              (t) =>
+                (g!.source === "autonomous"
+                  ? t.policy === "allow"
+                  : t.policy !== "deny") && !forbidden.has(t.name),
             ) ?? [];
         this.update(g, { requests: g.requests + 1, elapsedMs });
+        const charge = this.director.reserve();
+        this.planning = true;
         const output = await this.runtime.planGame(
           g,
           observation,
           available,
           signal,
           (usage) => {
+            charge(usage);
             this.update(g!, {
               cost: g!.cost + (usage.cost ?? 0),
               tokens: g!.tokens + (usage.tokens ?? 0),
             });
           },
         );
+        this.planning = false;
         signal.throwIfAborted();
         decision = plannerDecisionSchema.parse(JSON.parse(output));
       }
@@ -729,6 +1019,8 @@ export class GameCoordinator {
         );
       if (g.cost >= this.config.maxCost)
         throw new Error("Provider-reported cost budget reached.");
+      if (g.source !== "survival" && this.director.budget(true))
+        throw new Error(this.director.budget(true));
       this.update(g, {
         steps: g.steps + 1,
         currentTool: decision.tool,
@@ -762,6 +1054,162 @@ export class GameCoordinator {
         );
       }
     } finally {
+      this.planning = false;
+      if (this.controller === c) this.controller = undefined;
+    }
+  }
+
+  private async chooseActivity(live: MinecraftLive) {
+    const d = this.director;
+    if (
+      !d.config.enabled ||
+      d.config.paused ||
+      this.runtime.busy ||
+      Date.now() < d.state.nextDecisionAt
+    )
+      return;
+    // Never invent another project over an explicitly paused intention.
+    if (
+      this.goals.some(
+        (g) =>
+          g.source === "autonomous" &&
+          g.status === "paused" &&
+          g.world === this.world() &&
+          g.characterId === this.runtime.store.characterId,
+      )
+    ) {
+      d.waiting(
+        "An intention is paused. Resume or cancel it in Game goals before choosing another.",
+      );
+      return;
+    }
+    const budget = d.budget();
+    if (budget) {
+      d.waiting(budget, 30);
+      return;
+    }
+    if (this.tool("observe")?.policy !== "allow") {
+      d.waiting(
+        "Allow the observation tool to enable autonomous decisions.",
+        60,
+      );
+      return;
+    }
+    const c = (this.controller = new AbortController());
+    const signal = AbortSignal.any([c.signal, AbortSignal.timeout(60000)]);
+    const world = this.world(),
+      characterId = this.runtime.store.characterId,
+      sessionId = this.runtime.store.sessionId;
+    const context = { characterId, sessionId, channel: "desktop" as const };
+    try {
+      this.planning = true;
+      const result = (await this.mcp.execute(
+        this.alias("observe")!,
+        { positions: [] },
+        context,
+        signal,
+      )) as any;
+      signal.throwIfAborted();
+      if (result.error || result.untrustedToolResult?.isError)
+        throw new Error("Could not observe the world.");
+      const text = result.untrustedToolResult?.content
+        ?.filter((c: any) => c.type === "text")
+        .map((c: any) => c.text)
+        .join("");
+      if (!text || text.length > 24000)
+        throw new Error("Invalid game observation.");
+      const observation = JSON.parse(text) as Observation;
+      if (!observation.connected) throw new Error("World disconnected.");
+      const available =
+        this.mcp
+          .snapshot()
+          .servers.find((s) => s.config.id === MINECRAFT_ID)
+          ?.tools.filter(
+            (t) => t.policy === "allow" && !forbidden.has(t.name),
+          ) ?? [];
+      d.waiting("Choosing the next useful activity.");
+      const charge = d.reserve();
+      const output = await this.runtime.chooseGameActivity(
+        {
+          preference: d.config.preference,
+          objective: d.config.objective,
+          observation,
+          observedAt: new Date().toISOString(),
+          memories: d.state.memories
+            .filter((m) => m.world === world && m.characterId === characterId)
+            .slice(-16),
+          landmarks: (this.minecraft.snapshot().landmarks ?? []).filter(
+            (l) =>
+              l.characterId === characterId &&
+              l.host === this.runtime.store.data.minecraft.config.host &&
+              l.port === this.runtime.store.data.minecraft.config.port &&
+              l.worldId === this.runtime.store.data.minecraft.config.worldId &&
+              l.dimension === live.dimension,
+          ),
+          preferredPlayer:
+            this.runtime.store.data.minecraft.config.trustedPlayer,
+          tools: available.map((t) => ({
+            name: t.name,
+            description: t.description,
+            inputSchema: t.inputSchema,
+          })),
+        },
+        signal,
+        charge,
+      );
+      signal.throwIfAborted();
+      if (
+        world !== this.world() ||
+        characterId !== this.runtime.store.characterId ||
+        sessionId !== this.runtime.store.sessionId ||
+        this.runtime.busy
+      ) {
+        d.waiting("Context changed; observing again before choosing.");
+        return;
+      }
+      const costLimit = d.budget(true);
+      if (costLimit) {
+        d.waiting(costLimit, 30);
+        return;
+      }
+      const decision = directorDecisionSchema.parse(JSON.parse(output));
+      if (decision.decision === "wait") {
+        d.waiting(decision.reason, decision.seconds);
+        return;
+      }
+      if (conditionsMet(decision.completion, observation)) {
+        d.failure(
+          "That target is already satisfied. Waiting before choosing something useful.",
+        );
+        return;
+      }
+      const recentFailure = d.state.memories.some(
+        (m) =>
+          m.world === world &&
+          m.characterId === characterId &&
+          m.status === "failed" &&
+          Date.parse(m.observedAt) > Date.now() - 600000 &&
+          m.objective === decision.objective,
+      );
+      if (recentFailure) {
+        d.failure(
+          "Avoiding a recently failed intention. Resources or permissions may need attention.",
+        );
+        return;
+      }
+      this.submit(
+        { objective: decision.objective, completion: decision.completion },
+        context,
+        "autonomous",
+      );
+      d.waiting(decision.objective);
+    } catch (error) {
+      if (!c.signal.aborted)
+        d.failure(
+          error instanceof Error ? error.message : "Activity selection failed.",
+        );
+    } finally {
+      this.planning = false;
       if (this.controller === c) this.controller = undefined;
     }
   }

@@ -32,6 +32,8 @@ Minecraft lifecycle checks (v0.4.11): **274 core tests, 34 browser tests, produc
 
 ## Optional live Minecraft smoke
 
+Independent gameplay (v0.4.12): **295 core tests and 34 browser tests pass**, plus typecheck, production/package build and isolated desktop smoke. New fixtures verify chained autonomous goals with companion Consciousness disabled, user preemption, world/thread ownership, Stop persistence, no reconnect/replay, shared budgets, reported usage, provider backoff, Ask/Blocked behavior and urgent navigation-only survival interruption. The real provider adapter is exercised with a stubbed OpenRouter response to verify the independent selector preserves per-model routing. Desktop IPC checks persist independent gameplay preferences and pause across restart without joining a server. Practical real-provider survival/gathering/building acceptance is still pending; fixtures do not establish Minecraft competence.
+
 Only run against a world whose owner permits joining and movement. Build the app first, open a Java 26.1 LAN world, then explicitly opt in:
 
 ```sh

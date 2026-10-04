@@ -37,11 +37,21 @@ function fixture() {
       (t.fingerprint = i.toString(16).padStart(2, "0") + "a".repeat(62)),
   );
   const decisions: unknown[] = [];
+  const intentions: unknown[] = [];
   const runtime: any = {
     store,
     busy: false,
     broadcast: vi.fn(),
     gameOutcome: vi.fn(async () => {}),
+    chooseGameActivity: vi.fn(async () =>
+      JSON.stringify(
+        intentions.shift() ?? {
+          decision: "wait",
+          seconds: 60,
+          reason: "Resting",
+        },
+      ),
+    ),
     autonomy: {
       get config() {
         return store.data.settings.autonomy;
@@ -130,6 +140,7 @@ function fixture() {
     live,
     tools,
     decisions,
+    intentions,
     runtime,
     minecraft,
     mcp,
@@ -139,6 +150,380 @@ function fixture() {
     goal,
   };
 }
+
+describe("Independent Minecraft director", () => {
+  const intention = (item = "oak_log", count = 4) => ({
+    decision: "goal",
+    objective: `Keep ${count} ${item}`,
+    completion: [{ kind: "inventory", item, count }],
+  });
+  const enable = (f: ReturnType<typeof fixture>) =>
+    f.game.configureAutonomy({
+      ...f.game.director.config,
+      enabled: true,
+      intervalSeconds: 10,
+    });
+  const ready = (f: ReturnType<typeof fixture>) =>
+    f.store.update((d) => {
+      d.minecraft.autonomy.nextDecisionAt = 0;
+    });
+
+  it("migrates old profiles with free play off, keeping opt-in reactions and schedules", () => {
+    const f = fixture();
+    expect(f.game.director.config.enabled).toBe(false);
+    expect(f.game.director.state.charges).toEqual([]);
+    expect(f.store.data.minecraft.goalConfig).toMatchObject({
+      survival: false,
+      scheduled: false,
+    });
+  });
+  it("chooses and verifies multiple intentions with companion consciousness disabled and paused", async () => {
+    const f = fixture();
+    enable(f);
+    f.store.update((d) => {
+      d.settings.autonomy.enabled = false;
+      d.settings.autonomy.paused = true;
+    });
+    f.runtime.autonomy.gate.mockReturnValue("Quiet hours");
+    f.intentions.push(intention(), intention("cobblestone", 3));
+    await f.game.tick();
+    expect(f.goal()).toMatchObject({ source: "autonomous", status: "queued" });
+    f.step("collect_blocks", { block: "oak_log", count: 4 } as any);
+    await f.game.tick();
+    f.live.job.status = "succeeded";
+    f.live.inventory = [{ name: "oak_log", count: 4 }];
+    await f.game.tick();
+    expect(f.goal().status).toBe("completed");
+    expect(f.game.director.state.memories[0]).toMatchObject({
+      status: "completed",
+      inventory: f.live.inventory,
+    });
+    ready(f);
+    await f.game.tick();
+    f.step("collect_blocks", { block: "stone", count: 3 } as any);
+    await f.game.tick();
+    f.live.job.status = "succeeded";
+    f.live.inventory.push({ name: "cobblestone", count: 3 });
+    await f.game.tick();
+    expect(
+      f.store.data.minecraft.goals.every((g) => g.status === "completed"),
+    ).toBe(true);
+    expect(f.game.director.state.session.requests).toBe(4);
+    expect(f.runtime.autonomy.gate).not.toHaveBeenCalled();
+    expect(f.runtime.gameOutcome).not.toHaveBeenCalled();
+  });
+  it("Stop stays stopped across ticks and restart until explicit Resume", async () => {
+    const f = fixture();
+    enable(f);
+    f.intentions.push(intention());
+    await f.game.tick();
+    f.game.cancelAll();
+    ready(f);
+    await f.game.tick();
+    expect(f.runtime.chooseGameActivity).toHaveBeenCalledOnce();
+    expect(f.goal().status).toBe("cancelled");
+    const restart = new GameCoordinator(f.runtime, f.minecraft, f.mcp);
+    await restart.tick();
+    expect(restart.director.config.paused).toBe(true);
+    restart.pauseAutonomy(false);
+    f.intentions.push(intention());
+    await restart.tick();
+    expect(f.runtime.chooseGameActivity).toHaveBeenCalledTimes(2);
+    restart.stop();
+  });
+  it("yields a physical autonomous action to a user goal, then re-observes the intention", async () => {
+    const f = fixture();
+    enable(f);
+    f.intentions.push(intention());
+    await f.game.tick();
+    const id = f.goal().id;
+    f.step();
+    await f.game.tick();
+    f.submit();
+    expect(f.store.data.minecraft.goals.find((g) => g.id === id)).toMatchObject(
+      { status: "queued", jobId: undefined },
+    );
+    f.live.job = undefined;
+    f.live.inventory = [{ name: "stone_pickaxe", count: 1 }];
+    await f.game.tick();
+    expect(f.goal().status).toBe("completed");
+    f.step();
+    await f.game.tick();
+    expect(f.store.data.minecraft.goals.find((g) => g.id === id)?.status).toBe(
+      "running",
+    );
+  });
+  it("fences direct tool I/O while preserving queued autonomous intent", async () => {
+    const f = fixture();
+    enable(f);
+    f.intentions.push(intention());
+    await f.game.tick();
+    f.step();
+    await f.game.tick();
+    const done = f.game.beginManual("open_container");
+    f.live.job = undefined;
+    await f.game.tick();
+    expect(f.runtime.planGame).toHaveBeenCalledOnce();
+    done();
+    f.step();
+    await f.game.tick();
+    expect(f.runtime.planGame).toHaveBeenCalledTimes(2);
+  });
+  it("foreground chat aborts a pending choice without creating a late goal", async () => {
+    const f = fixture();
+    enable(f);
+    let resolve!: (v: string) => void;
+    f.runtime.chooseGameActivity.mockImplementation(
+      () =>
+        new Promise((r) => {
+          resolve = r;
+        }),
+    );
+    const pending = f.game.tick();
+    await vi.waitFor(() => expect(resolve).toBeTypeOf("function"));
+    f.runtime.busy = true;
+    f.game.foreground();
+    resolve(JSON.stringify(intention()));
+    await pending;
+    expect(f.store.data.minecraft.goals).toHaveLength(0);
+    expect(f.game.director.state.session.requests).toBe(1);
+    ready(f);
+    await f.game.tick();
+    expect(f.runtime.chooseGameActivity).toHaveBeenCalledOnce();
+  });
+  it("normal chat threads do not cancel physical autonomous work or rebind old notifications", async () => {
+    const f = fixture();
+    enable(f);
+    f.intentions.push(intention());
+    await f.game.tick();
+    f.step();
+    await f.game.tick();
+    const originalSession = f.goal().sessionId;
+    vi.spyOn(f.store, "sessionId", "get").mockReturnValue("new-thread");
+    f.game.foreground();
+    await f.game.tick();
+    expect(f.goal().status).toBe("running");
+    expect(f.goal().sessionId).toBe(originalSession);
+    f.live.job.status = "succeeded";
+    f.live.inventory = [{ name: "oak_log", count: 4 }];
+    await f.game.tick();
+    expect(f.goal().status).toBe("completed");
+    expect((f.mcp.execute.mock.calls.at(-1) as unknown[])[2]).toMatchObject({
+      sessionId: "new-thread",
+    });
+  });
+  it("world changes abort in-flight selection and require explicit resume", async () => {
+    const f = fixture();
+    enable(f);
+    let resolve!: (v: string) => void;
+    f.runtime.chooseGameActivity.mockImplementation(
+      () =>
+        new Promise((r) => {
+          resolve = r;
+        }),
+    );
+    const pending = f.game.tick();
+    await vi.waitFor(() => expect(resolve).toBeTypeOf("function"));
+    f.live.dimension = "the_nether";
+    f.minecraft.onState(f.live);
+    resolve(JSON.stringify(intention()));
+    await pending;
+    expect(f.game.director.config.paused).toBe(true);
+    expect(f.store.data.minecraft.goals).toHaveLength(0);
+  });
+  it("disconnect never selects work; manual reconnection starts fresh without replay", async () => {
+    const f = fixture();
+    enable(f);
+    f.intentions.push(intention());
+    await f.game.tick();
+    f.live.connected = false;
+    f.minecraft.onState(f.live);
+    await f.game.tick();
+    expect(f.goal().status).toBe("cancelled");
+    expect(f.runtime.chooseGameActivity).toHaveBeenCalledOnce();
+    f.live.connected = true;
+    ready(f);
+    f.intentions.push(intention("bread", 2));
+    await f.game.tick();
+    expect(f.goal().objective).toBe("Keep 2 bread");
+  });
+  it("system lock pauses gameplay and unlocking does not silently resume", async () => {
+    const f = fixture();
+    enable(f);
+    f.intentions.push(intention());
+    await f.game.tick();
+    f.game.suspend(true);
+    f.game.suspend(false);
+    ready(f);
+    await f.game.tick();
+    expect(f.goal().status).toBe("paused");
+    expect(f.game.director.config.paused).toBe(true);
+    f.game.pauseAutonomy(false);
+    f.step();
+    await f.game.tick();
+    expect(f.goal().status).toBe("running");
+  });
+  it("turning activity selection off stops its work but leaves manual goals usable", async () => {
+    const f = fixture();
+    enable(f);
+    f.intentions.push(intention());
+    await f.game.tick();
+    f.game.configureAutonomy({ ...f.game.director.config, enabled: false });
+    expect(f.goal().status).toBe("paused");
+    f.submit();
+    f.step();
+    await f.game.tick();
+    expect(f.goal().status).toBe("running");
+  });
+  it("counts selection and execution across goals and preserves rolling usage on restart", async () => {
+    const f = fixture();
+    enable(f);
+    f.game.configureAutonomy({ ...f.game.director.config, hourlyRequests: 2 });
+    f.intentions.push(intention());
+    await f.game.tick();
+    f.step();
+    await f.game.tick();
+    f.live.job.status = "succeeded";
+    f.live.inventory = [{ name: "oak_log", count: 4 }];
+    await f.game.tick();
+    ready(f);
+    await f.game.tick();
+    expect(f.runtime.chooseGameActivity).toHaveBeenCalledOnce();
+    expect(f.game.director.state.detail).toContain("Rolling-hour");
+    const restart = new GameCoordinator(f.runtime, f.minecraft, f.mcp);
+    await restart.tick();
+    expect(f.runtime.chooseGameActivity).toHaveBeenCalledOnce();
+    expect(restart.director.state.session.requests).toBe(0);
+    expect(restart.director.state.charges).toHaveLength(2);
+    restart.stop();
+  });
+  it("reported cost/token exhaustion prevents dispatching a selected goal", async () => {
+    for (const usage of [{ cost: 3 }, { tokens: 300000 }]) {
+      const f = fixture();
+      enable(f);
+      f.runtime.chooseGameActivity.mockImplementation(
+        async (
+          _ctx: unknown,
+          _signal: unknown,
+          collect: (u: unknown) => void,
+        ) => {
+          collect(usage);
+          return JSON.stringify(intention());
+        },
+      );
+      await f.game.tick();
+      expect(f.store.data.minecraft.goals).toHaveLength(0);
+      expect(f.game.director.state.detail).toContain("budget reached");
+    }
+  });
+  it("backoffs malformed responses/outages without polling the provider", async () => {
+    const f = fixture();
+    enable(f);
+    f.runtime.chooseGameActivity.mockResolvedValue("not json");
+    await f.game.tick();
+    await f.game.tick();
+    expect(f.runtime.chooseGameActivity).toHaveBeenCalledOnce();
+    expect(f.game.director.state.failures).toBe(1);
+    ready(f);
+    f.runtime.chooseGameActivity.mockRejectedValue(
+      new Error("Provider unavailable"),
+    );
+    await f.game.tick();
+    expect(f.game.director.state.nextDecisionAt).toBeGreaterThan(
+      Date.now() + 59000,
+    );
+  });
+  it("does not repeatedly select already-satisfied goals or request Ask tools", async () => {
+    const f = fixture();
+    enable(f);
+    f.live.inventory = [{ name: "oak_log", count: 4 }];
+    f.intentions.push(intention());
+    await f.game.tick();
+    expect(f.store.data.minecraft.goals).toHaveLength(0);
+    ready(f);
+    f.intentions.push(intention("stone_pickaxe", 1));
+    await f.game.tick();
+    f.tools.find((t) => t.name === "craft_item")!.policy = "ask";
+    f.step();
+    await f.game.tick();
+    expect(f.goal().status).toBe("failed");
+    expect(f.goal().detail).toContain("Ask/Blocked");
+    expect(
+      f.mcp.execute.mock.calls.every(
+        (call: unknown[]) => call[0] === f.game.alias("observe"),
+      ),
+    ).toBe(true);
+  });
+  it("denied observation waits without asking or spending a provider request", async () => {
+    const f = fixture();
+    enable(f);
+    f.tools.find((t) => t.name === "observe")!.policy = "deny";
+    await f.game.tick();
+    expect(f.runtime.chooseGameActivity).not.toHaveBeenCalled();
+    expect(f.game.director.state.detail).toContain("observation");
+  });
+  it("shares budgets with manual goals but leaves deterministic survival available", async () => {
+    const f = fixture();
+    f.game.configureAutonomy({ ...f.game.director.config, hourlyRequests: 0 });
+    f.submit();
+    await f.game.tick();
+    expect(f.runtime.planGame).not.toHaveBeenCalled();
+    f.game.cancelAll();
+    f.game.pauseAutonomy(false);
+    f.store.update((d) => {
+      d.minecraft.goalConfig.survival = true;
+      d.settings.autonomy.paused = true;
+    });
+    f.live.food = 8;
+    f.live.inventory = [{ name: "bread", count: 1 }];
+    await f.game.tick();
+    expect(f.goal().currentTool).toBe("eat_food");
+  });
+  it("retains a paused intention until resumed or cancelled, not a new competing project", async () => {
+    const f = fixture();
+    enable(f);
+    f.intentions.push(intention());
+    await f.game.tick();
+    f.game.control({ id: f.goal().id, action: "pause" });
+    ready(f);
+    await f.game.tick();
+    expect(f.runtime.chooseGameActivity).toHaveBeenCalledOnce();
+    expect(f.game.director.state.detail).toContain("intention is paused");
+  });
+  it("urgent hunger preempts navigation, waiting for worker cancellation before eating", async () => {
+    const f = fixture();
+    f.submit();
+    f.step("move_to", { x: 10, y: 64, z: 0 } as any);
+    await f.game.tick();
+    f.store.update((d) => {
+      d.minecraft.goalConfig.survival = true;
+    });
+    f.live.food = 4;
+    f.live.inventory = [{ name: "bread", count: 2 }];
+    f.live.job.kind = "move";
+    await f.game.tick();
+    expect(f.goal().status).toBe("queued");
+    await f.game.tick();
+    expect(f.store.data.minecraft.goals).toHaveLength(1);
+    f.live.job.status = "cancelled";
+    f.runtime.busy = true;
+    await f.game.tick();
+    expect(f.goal().currentTool).toBe("eat_food");
+    expect(f.runtime.planGame).toHaveBeenCalledOnce();
+  });
+  it("preserves provider backoff during a stream of world updates", async () => {
+    const f = fixture();
+    enable(f);
+    f.runtime.chooseGameActivity.mockRejectedValue(new Error("Offline"));
+    await f.game.tick();
+    const wakeAt = f.game.director.state.nextDecisionAt;
+    f.live.food = 19;
+    f.minecraft.onState(f.live);
+    await f.game.tick();
+    expect(f.game.director.state.nextDecisionAt).toBe(wakeAt);
+    expect(f.runtime.chooseGameActivity).toHaveBeenCalledOnce();
+  });
+});
 
 describe("Minecraft goal coordinator", () => {
   it("aborts a pending plan immediately when a dimension change arrives", async () => {
@@ -528,7 +913,7 @@ describe("Minecraft goal coordinator", () => {
     expect(f.runtime.planGame).toHaveBeenCalledOnce();
     expect(f.goal().detail).toBe("Smelting");
   });
-  it("requires scheduling opt-in and respects the autonomy gate", async () => {
+  it("requires scheduling opt-in but ignores companion quiet hours and daily gate", async () => {
     const f = fixture();
     const dueAt = new Date(Date.now() + 60000).toISOString();
     expect(() => f.submit({ dueAt })).toThrow("scheduling");
@@ -547,21 +932,19 @@ describe("Minecraft goal coordinator", () => {
         ).toISOString()),
     );
     f.runtime.autonomy.gate.mockReturnValue("Quiet hours");
-    await f.game.tick();
-    expect(f.goal().status).toBe("queued");
-    f.runtime.autonomy.gate.mockReturnValue("Ready");
     f.step();
     await f.game.tick();
-    expect(f.runtime.autonomy.reserveGameAction).toHaveBeenCalledOnce();
+    expect(f.goal().status).toBe("running");
+    expect(f.runtime.autonomy.reserveGameAction).not.toHaveBeenCalled();
   });
-  it("pauses gameplay immediately when consciousness is paused", async () => {
+  it("keeps gameplay running when consciousness is paused", async () => {
     const f = fixture();
     f.submit();
     f.step();
     await f.game.tick();
     f.store.update((d) => (d.settings.autonomy.paused = true));
     await f.game.tick();
-    expect(f.goal().status).toBe("paused");
+    expect(f.goal().status).toBe("running");
   });
   it("uses deterministic, opt-in food reactions without asking an LLM", async () => {
     const f = fixture();

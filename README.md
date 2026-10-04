@@ -20,7 +20,7 @@ An animated AI companion with natural conversation, persistent memory, and a wor
 - **Stay connected.** Private Telegram chat shares the same character and memories.
 - **Set her rhythm.** Opt-in conversation openers, mood simulation, and approved reminders.
 - **Extend her abilities.** Trusted MCP connections with per-tool permissions and approvals.
-- **Share your world.** An app-managed Minecraft Java companion with observation, following, and bounded game jobs.
+- **Share your world.** An app-managed Minecraft Java companion with following, verified goals, and independent gameplay.
 
 Use your own OpenAI-compatible LLM, ASR, and TTS services. OpenRouter is the initial LLM provider; audio services are configured separately.
 
@@ -48,7 +48,7 @@ Open **Settings → Providers**, configure your services, and save. No LLM or au
 | [Privacy & storage](docs/storage-and-privacy.md)     | Understand what stays local and what reaches providers. |
 | [Development](docs/development.md)                   | Build, test, and extend the application.                |
 
-Consciousness is a configurable behavior simulation, not actual sentience. Autonomous game planning and desktop control remain on the [roadmap](PLAN.MD).
+Consciousness is a configurable behavior simulation, not actual sentience. Independent Minecraft gameplay is opt-in; desktop control and push-to-talk remain on the [roadmap](PLAN.MD).
 
 ---
 

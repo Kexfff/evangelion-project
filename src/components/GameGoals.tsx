@@ -211,11 +211,11 @@ export function GameGoals({ data }: { data?: MinecraftSnapshot }) {
       <details className="integration-disclosure">
         <summary>Planning budgets & reactions</summary>
         <p>
-          Scheduled goals and survival reactions also require Consciousness
-          enabled and respect its pause, quiet hours and daily budget. Survival
-          reacts at idle action boundaries: eat when hungry, or return to a
-          tracked preferred player after damage. No automatic attack on guessed
-          targets.
+          Scheduled goals and survival reactions are independent of companion
+          Consciousness and work with activity selection off. Gameplay pause,
+          Stop and system lock still apply. Survival reacts at idle action
+          boundaries: eat when hungry, or return to a tracked preferred player
+          after damage. No automatic attack on guessed targets.
         </p>
         <form
           onSubmit={(e) => {

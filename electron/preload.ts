@@ -1,6 +1,10 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { Bridge, RuntimeEvent } from "../src/shared/schema";
 const api: Bridge = {
+  configureGameAutonomy: (config) =>
+    ipcRenderer.invoke("eva:game:autonomy:configure", config),
+  pauseGameAutonomy: (paused) =>
+    ipcRenderer.invoke("eva:game:autonomy:pause", paused),
   submitGameGoal: (input) => ipcRenderer.invoke("eva:game:submit", input),
   controlGameGoal: (id, action) =>
     ipcRenderer.invoke("eva:game:control", { id, action }),

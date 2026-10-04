@@ -9,6 +9,7 @@ import {
 import { defaultSettings, providerSchema } from "../src/shared/schema";
 import { isOpenRouter } from "../src/shared/openrouter";
 import { Store } from "../electron/store";
+import { CompanionRuntime } from "../electron/runtime";
 
 afterEach(() => vi.unstubAllGlobals());
 const adapter = new OpenAICompatibleProvider();
@@ -22,6 +23,61 @@ const provider = () => ({
 const reply = () =>
   Response.json({ choices: [{ message: { content: "OK" } }] });
 describe("OpenRouter model provider selection", () => {
+  it("routes independent Minecraft decisions through the configured provider and reports usage without personal memory", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "eva-director-provider-"));
+    try {
+      const store = new Store(dir);
+      store.update((d) => {
+        d.settings.providers.llm = provider();
+      });
+      const fetch = vi.fn(async () =>
+        Response.json({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  decision: "wait",
+                  seconds: 60,
+                  reason: "Resting",
+                }),
+              },
+            },
+          ],
+          usage: { total_tokens: 120, cost: 0.001 },
+        }),
+      );
+      vi.stubGlobal("fetch", fetch);
+      const runtime = new CompanionRuntime(
+        store,
+        () => "fixture-key",
+        "session-only",
+        () => {},
+      );
+      const usage = vi.fn();
+      await runtime.chooseGameActivity(
+        { observation: { food: 20 } },
+        new AbortController().signal,
+        usage,
+      );
+      const [url, init] = fetch.mock.calls[0] as unknown as [
+        string,
+        RequestInit,
+      ];
+      expect(url).toBe("https://openrouter.ai/api/v1/chat/completions");
+      const body = JSON.parse(String(init.body));
+      expect(body.provider.only).toEqual(["deepinfra/fp4", "streamlake"]);
+      expect(body.messages).toHaveLength(2);
+      expect(JSON.parse(body.messages[1].content)).toEqual({
+        observation: { food: 20 },
+      });
+      expect(body.messages[0].content).toContain(
+        store.data.settings.characters[0].personality,
+      );
+      expect(usage).toHaveBeenCalledWith({ tokens: 120, cost: 0.001 });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
   it("discovers exact endpoint tags with prices/tools, deduplicated and without credentials", async () => {
     const row = {
       tag: "deepinfra/fp4",

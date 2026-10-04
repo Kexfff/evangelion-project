@@ -50,8 +50,7 @@ export class PluginHost {
     this.registry.register(this.telegram);
     this.registry.register(this.mcp);
     this.game = new GameCoordinator(runtime, this.minecraft, this.mcp);
-    runtime.pauseGameGoals = () =>
-      this.game.pauseAll("Consciousness paused by user.");
+    runtime.foregroundGamePlanning = () => this.game.foreground();
     runtime.tools = {
       definitions: () => [
         ...this.mcp.definitions(),
@@ -68,8 +67,10 @@ export class PluginHost {
         if (name === "game_goal_control")
           return Promise.resolve(this.game.control(args));
         const gameName = this.game.name(name);
-        if (gameName) this.game.manual(gameName);
-        return this.mcp.execute(name, args, context, signal);
+        const done = gameName ? this.game.beginManual(gameName) : undefined;
+        return this.mcp
+          .execute(name, args, context, signal)
+          .finally(() => done?.());
       },
     };
     runtime.mcpSnapshot = () => this.mcp.snapshot();

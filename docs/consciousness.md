@@ -1,5 +1,7 @@
 # Consciousness, initiative and reminders
 
+Minecraft's **Independent gameplay** controls are separate: disabling or pausing companion Consciousness, quiet hours and its daily limits do not stop gameplay. Use the Minecraft gameplay Pause/Stop controls when needed. System lock/suspend and global emergency stop still stop game activity; see [Minecraft autonomy](minecraft.md#independent-gameplay-v0412).
+
 [← Documentation](README.md) · [Project home](../README.md)
 
 This is an inspectable **behavior simulation**, not actual sentience. Mood, boredom, energy, trust and affinity persist per character and influence tone and avatar expressions. The state editor explains each update rule and lets you adjust values and bounds. Absence does not lower relationship values. Idle drift is capped at six hours per update; no background LLM call is needed to update state.

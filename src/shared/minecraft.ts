@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  gameAutonomyStateSchema,
+  type GameAutonomyState,
+} from "./game-autonomy";
 import { minecraftGameplayTools } from "./minecraft-gameplay";
 import {
   gameGoalConfigSchema,
@@ -105,6 +109,9 @@ export const landmarkSchema = z.object({
   port: z.number().int(),
 });
 export const minecraftStateSchema = z.object({
+  autonomy: gameAutonomyStateSchema.default(() =>
+    gameAutonomyStateSchema.parse({}),
+  ),
   enabled: z.boolean().default(true),
   goals: z.array(gameGoalSchema).max(100).default([]),
   goalConfig: gameGoalConfigSchema.default(() =>
@@ -182,6 +189,7 @@ export const minecraftLiveSchema = z
   .strict();
 export type MinecraftLive = z.infer<typeof minecraftLiveSchema>;
 export interface MinecraftSnapshot {
+  autonomy?: GameAutonomyState;
   enabled?: boolean;
   goals?: GameGoal[];
   goalConfig?: GameGoalConfig;
