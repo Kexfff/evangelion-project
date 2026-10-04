@@ -88,6 +88,124 @@ function fixture() {
 }
 
 describe("Minecraft allow-unless-blocked permissions", () => {
+  it("never starts Minecraft from a remembered connection flag, including lifecycle restarts", async () => {
+    const f = fixture();
+    await f.mcp.configure(config());
+    await f.mcp.action(MINECRAFT_ID, "connect");
+    expect(f.factory).toHaveBeenCalledOnce();
+    await f.mcp.stop();
+    expect(f.store.data.mcp.servers[0].config.enabled).toBe(true);
+    await f.mcp.start();
+    expect(f.factory).toHaveBeenCalledOnce();
+    const dir = path.dirname(f.store.file),
+      restartedStore = new Store(dir);
+    const restartedMinecraft = new MinecraftPlugin(
+      restartedStore,
+      () => {},
+      f.factory,
+    );
+    const restartedMcp = new McpPlugin(
+      restartedStore,
+      new CredentialVault(dir, null),
+      () => {},
+      (_c, _s, invalidated) => restartedMinecraft.create(invalidated),
+    );
+    active.push(restartedMcp);
+    expect(restartedMinecraft.enabled).toBe(true);
+    expect(restartedStore.data.mcp.servers[0].config.enabled).toBe(false);
+    await restartedMcp.start();
+    expect(f.factory).toHaveBeenCalledOnce();
+    await restartedMcp.action(MINECRAFT_ID, "connect");
+    expect(f.factory).toHaveBeenCalledTimes(2);
+  });
+  it("disabling cancels goals, shuts down the worker, removes tools and preserves configuration/grants", async () => {
+    const f = fixture();
+    await f.mcp.configure(config());
+    await f.mcp.action(MINECRAFT_ID, "connect");
+    const tool = f.mcp
+      .snapshot()
+      .servers[0].tools.find((t) => t.name === "dig_block")!;
+    f.mcp.grant(MINECRAFT_ID, tool.name, tool.fingerprint, "deny");
+    f.publish({
+      connected: true,
+      status: "Connected",
+      dimension: "overworld",
+      inventory: [],
+      players: [],
+      nearby: [],
+    });
+    const game = new GameCoordinator(
+      { store: f.store, broadcast: () => {} } as any,
+      f.minecraft,
+      f.mcp,
+    );
+    game.submit(
+      {
+        objective: "Gather wood",
+        completion: [{ kind: "inventory", item: "oak_log", count: 4 }],
+      },
+      f.ctx(),
+    );
+    const original = structuredClone(f.store.data.minecraft.config);
+    await f.minecraft.setEnabled(false, f.mcp);
+    expect(f.store.data.minecraft.goals[0].status).toBe("cancelled");
+    expect(f.transport.stopAction).toHaveBeenCalled();
+    expect(f.transport.close).toHaveBeenCalled();
+    expect(f.minecraft.snapshot()).toMatchObject({
+      enabled: false,
+      live: { connected: false },
+    });
+    expect(f.minecraft.context()).toBe("");
+    f.publish({
+      connected: true,
+      status: "Late update",
+      dimension: "overworld",
+      inventory: [],
+      players: [],
+      nearby: [],
+    });
+    expect(f.minecraft.snapshot().live.connected).toBe(false);
+    expect(f.mcp.definitions()).toEqual([]);
+    expect(f.store.data.minecraft.config).toEqual(original);
+    expect(f.store.data.mcp.servers[0].grants[0].policy).toBe("deny");
+    await expect(f.mcp.action(MINECRAFT_ID, "connect")).rejects.toThrow(
+      "Enable the Minecraft plugin",
+    );
+    await expect(f.mcp.connect(MINECRAFT_ID)).rejects.toThrow(
+      "Enable the Minecraft plugin",
+    );
+    expect(() => f.minecraft.create(() => {})).toThrow(
+      "Enable the Minecraft plugin",
+    );
+    expect(new Store(path.dirname(f.store.file)).data.minecraft.enabled).toBe(
+      false,
+    );
+    await f.minecraft.configure(original, f.mcp);
+    expect(f.minecraft.enabled).toBe(false);
+    await f.minecraft.setEnabled(true, f.mcp);
+    expect(f.factory).toHaveBeenCalledOnce();
+    expect(f.minecraft.snapshot().live.connected).toBe(false);
+    await f.mcp.action(MINECRAFT_ID, "connect");
+    expect(f.factory).toHaveBeenCalledTimes(2);
+    expect(
+      f.mcp.snapshot().servers[0].tools.find((t) => t.name === "dig_block")
+        ?.policy,
+    ).toBe("deny");
+    game.stop();
+  });
+  it("persists the off state even before a world has been configured", async () => {
+    const f = fixture();
+    await f.minecraft.setEnabled(false, f.mcp);
+    const store = new Store(path.dirname(f.store.file));
+    const restarted = new MinecraftPlugin(store, () => {}, f.factory);
+    expect(restarted.snapshot()).toMatchObject({
+      enabled: false,
+      live: { status: "Minecraft plugin is off", connected: false },
+    });
+    await f.minecraft.setEnabled(true, f.mcp);
+    await f.mcp.start();
+    expect(f.factory).not.toHaveBeenCalled();
+  });
   it("routes coordinator steps through real MCP validation, grants and audit", async () => {
     const f = fixture();
     await f.mcp.configure(config());

@@ -3,6 +3,7 @@ import type { ValidateFunction } from "ajv";
 import { compileBoundedSchema } from "./mcp-schema";
 import { z } from "zod";
 import { Store } from "./store";
+import { MINECRAFT_ID } from "../src/shared/minecraft";
 import { CredentialVault } from "./credentials";
 import {
   createMcpConnection,
@@ -113,7 +114,9 @@ export class McpPlugin implements ManagedPlugin, ToolProvider {
       this.store.data.mcp.servers
         .filter(
           (s) =>
-            s.config.enabled && s.config.characterId === this.store.characterId,
+            s.config.enabled &&
+            s.config.characterId === this.store.characterId &&
+            s.config.id !== MINECRAFT_ID,
         )
         .map((s) => this.connect(s.config.id)),
     );
@@ -133,6 +136,8 @@ export class McpPlugin implements ManagedPlugin, ToolProvider {
     this.changed();
   }
   async connect(id: string) {
+    if (id === MINECRAFT_ID && !this.store.data.minecraft.enabled)
+      throw new Error("Enable the Minecraft plugin before joining a world.");
     const saved = this.store.data.mcp.servers.find((s) => s.config.id === id);
     if (
       !saved?.config.enabled ||
@@ -244,6 +249,12 @@ export class McpPlugin implements ManagedPlugin, ToolProvider {
     this.changed();
   }
   async action(id: string, action: "connect" | "disconnect" | "remove") {
+    if (
+      action === "connect" &&
+      id === MINECRAFT_ID &&
+      !this.store.data.minecraft.enabled
+    )
+      throw new Error("Enable the Minecraft plugin before joining a world.");
     const epoch = this.stopEpoch;
     if (!this.store.data.mcp.servers.some((s) => s.config.id === id))
       throw new Error("Unknown MCP connection.");
@@ -305,6 +316,8 @@ export class McpPlugin implements ManagedPlugin, ToolProvider {
     const result: unknown[] = [];
     let budget = 48000;
     for (const s of this.store.data.mcp.servers) {
+      if (s.config.id === MINECRAFT_ID && !this.store.data.minecraft.enabled)
+        continue;
       if (!s.config.enabled || s.config.characterId !== this.store.characterId)
         continue;
       const entry = this.connections.get(s.config.id);
@@ -368,6 +381,7 @@ export class McpPlugin implements ManagedPlugin, ToolProvider {
       );
       if (
         this.stopped ||
+        (serverId === MINECRAFT_ID && !this.store.data.minecraft.enabled) ||
         !s?.config.enabled ||
         s.config.characterId !== context.characterId ||
         this.store.characterId !== context.characterId ||

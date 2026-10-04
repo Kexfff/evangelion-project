@@ -37,9 +37,12 @@ export function IntegrationSettings({ snapshot }: { snapshot: Snapshot }) {
       title: "Minecraft",
       subtitle: "Play together",
       icon: Gamepad2,
-      status: snapshot.minecraft?.live.connected
-        ? "In the world"
-        : "Not connected",
+      status:
+        snapshot.minecraft?.enabled === false
+          ? "Plugin off"
+          : snapshot.minecraft?.live.connected
+            ? "In the world"
+            : "Not connected",
       active: !!snapshot.minecraft?.live.connected,
     },
     {

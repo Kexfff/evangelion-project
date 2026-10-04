@@ -28,6 +28,8 @@ v0.4.9 adds door-aware navigation and persistent game goals. **262 core tests, 3
 
 OpenRouter routing coverage (v0.4.10): **271 core tests, 34 browser tests, production/package build and isolated desktop smoke pass**. Core fixtures verify model endpoint discovery, exact routing tags, redacted errors, strict selections on streaming/plain/tool-loop requests, other-provider isolation, empty-list rejection and restart persistence. Browser fixtures cover draft-model discovery, per-model choices, refresh failure, stale response isolation, search and narrow layout. The desktop smoke stubs only the public catalog HTTP response, then exercises real discovery IPC and settings persistence across an Electron restart. No paid OpenRouter generation is used for these tests.
 
+Minecraft lifecycle checks (v0.4.11): **274 core tests, 34 browser tests, production/package build and isolated desktop smoke pass**. Fixtures simulate a previously connected profile, a plugin-host restart, disabling during queued gameplay, late worker updates, preserved grants/settings and an explicit rejoin. The desktop smoke toggles the real Minecraft IPC control without joining a server, verifies the off state survives restart, and verifies re-enabling remains disconnected. Minecraft's plugin-enabled setting is separate from its session-only join state; future bundled integrations should likewise make enablement and external connection behavior explicit rather than reuse a connection flag as both.
+
 ## Optional live Minecraft smoke
 
 Only run against a world whose owner permits joining and movement. Build the app first, open a Java 26.1 LAN world, then explicitly opt in:

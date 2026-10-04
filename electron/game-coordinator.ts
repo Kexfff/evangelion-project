@@ -223,6 +223,7 @@ export class GameCoordinator {
     const input = goalInputSchema.parse(raw),
       live = this.minecraft.snapshot().live;
     if (
+      !this.runtime.store.data.minecraft.enabled ||
       context.characterId !== this.runtime.store.characterId ||
       context.sessionId !== this.runtime.store.sessionId ||
       !live.connected

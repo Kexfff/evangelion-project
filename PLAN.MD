@@ -441,6 +441,13 @@ Deferred from this mini-sprint: automatic fishing, enchanting/anvils, full villa
 - [x] Validation: **271 core tests, 34 browser tests, production/package build and isolated desktop smoke pass**. Refreshed `release/linux-unpacked/` as v0.4.10. Coverage includes exact endpoint discovery, per-request routing, empty-list validation, restart persistence, other-provider isolation, stale responses, search and narrow layout; desktop smoke exercises real discovery IPC with fixture HTTP and saved selections across restart. Public OpenRouter catalog shape/docs were checked; no paid generation or normal-profile edits were made.
 - [ ] Deferred at the user's request: detecting/recovering raw DSML tool-call markup returned as ordinary chat text. Provider selection does not itself guarantee a fix.
 
+### Minecraft plugin lifecycle — v0.4.11
+
+- [x] Fix automatic world rejoining: exclude bundled Minecraft from MCP startup/restart reconnection, clear the legacy saved connection flag when constructing the plugin, and retain explicit Join world confirmation. External MCP and Telegram startup behavior stays unchanged.
+- [x] Add a persistent, immediate Enable Minecraft plugin switch independent of connection status. Off cancels goals, stops gameplay, closes the worker and hides/blocks Minecraft tools and context. On leaves the bot offline; configuration, explicit tool choices, history and landmarks survive toggling. Existing profiles default to plugin enabled, with joining still manual.
+- [x] Guard joins through the Minecraft factory and MCP connection/action paths; reject stale tool execution while disabled. Ignore late worker updates after shutdown. Show Plugin off in the integration hub and disable join/game-goal controls while off.
+- [x] Validation: **274 core tests, 34 browser tests, production/package build and isolated desktop smoke pass**. Rebuilt `release/linux-unpacked/` as v0.4.11. Tests cover remembered-connection startup, lifecycle restart, off/on persistence, worker shutdown, goal cancellation, retained grants, late worker events, disabled join controls and actual toggle IPC across restart. No live world was joined or normal profile modified.
+
 ## Later refinements
 
 - Memory consolidation/summarization, richer retrieval evaluation and scalable vector storage.

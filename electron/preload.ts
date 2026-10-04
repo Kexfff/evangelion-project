@@ -10,6 +10,8 @@ const api: Bridge = {
     ipcRenderer.invoke("eva:minecraft:configure", config),
   minecraftAction: (action) =>
     ipcRenderer.invoke("eva:minecraft:action", action),
+  setMinecraftEnabled: (enabled) =>
+    ipcRenderer.invoke("eva:minecraft:enabled", enabled),
   saveLandmark: (name) => ipcRenderer.invoke("eva:minecraft:landmark", name),
   deleteLandmark: (id) =>
     ipcRenderer.invoke("eva:minecraft:delete-landmark", id),

@@ -793,6 +793,12 @@ nav button.active:before {
   border-color: #44384f;
   padding: 20px;
 }
+.integration-hub .minecraft-goal-controls {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: none;
+}
 .integration-hub .field input,
 .integration-hub .field select,
 .integration-hub .field textarea {

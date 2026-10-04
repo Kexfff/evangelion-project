@@ -46,6 +46,7 @@ const preview: Bridge = {
   configureGameGoals: desktopOnly,
   configureMinecraft: desktopOnly,
   minecraftAction: desktopOnly,
+  setMinecraftEnabled: desktopOnly,
   saveLandmark: desktopOnly,
   deleteLandmark: desktopOnly,
   configureMcp: desktopOnly,

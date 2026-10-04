@@ -31,6 +31,17 @@ export class MinecraftPlugin {
     private changed: () => void,
     private factory?: MinecraftFactory,
   ) {
+    // Joining a world is session-only; never restore the old MCP auto-start flag.
+    if (
+      store.data.mcp.servers.some(
+        (s) => s.config.id === MINECRAFT_ID && s.config.enabled,
+      )
+    )
+      store.update((d) => {
+        const saved = d.mcp.servers.find((s) => s.config.id === MINECRAFT_ID);
+        if (saved) saved.config.enabled = false;
+      });
+    if (!this.enabled) this.live.status = "Minecraft plugin is off";
     // One-time migration: retire the old second permission layer and its limits.
     // Explicit MCP Blocked/Ask choices are preserved as the single authority.
     if (store.data.minecraft.permissionsVersion === 0)
@@ -59,6 +70,8 @@ export class MinecraftPlugin {
       });
   }
   create(invalidated: () => void) {
+    if (!this.enabled)
+      throw new Error("Enable the Minecraft plugin before joining a world.");
     if (!this.factory)
       throw new Error("Bundled Minecraft requires the desktop app.");
     const generation = ++this.generation;
@@ -135,6 +148,7 @@ export class MinecraftPlugin {
   }
   snapshot(): MinecraftSnapshot {
     return {
+      enabled: this.enabled,
       config: this.effectiveConfig(),
       live: this.live,
       goals: this.store.data.minecraft.goals.filter(
@@ -167,6 +181,25 @@ export class MinecraftPlugin {
       d.minecraft.config = config;
     });
     this.changed();
+  }
+  get enabled() {
+    return this.store.data.minecraft.enabled;
+  }
+  async setEnabled(enabled: boolean, mcp: McpPlugin) {
+    if (enabled === this.enabled) return;
+    this.store.update((d) => {
+      d.minecraft.enabled = enabled;
+    });
+    if (!enabled) {
+      // Abort goal planning and physical actions before awaiting worker shutdown.
+      this.stopAction();
+      if (this.store.data.mcp.servers.some((s) => s.config.id === MINECRAFT_ID))
+        await mcp.action(MINECRAFT_ID, "disconnect");
+      this.disconnected("Minecraft plugin is off");
+    } else {
+      this.live.status = "Not connected. Choose Join world when ready.";
+      this.changed();
+    }
   }
   stopAction(notify = true) {
     if (notify) this.onStop?.();
@@ -220,6 +253,7 @@ export class MinecraftPlugin {
   }
   context() {
     if (
+      !this.enabled ||
       !this.live.connected ||
       this.store.data.minecraft.config.characterId !== this.store.characterId
     )

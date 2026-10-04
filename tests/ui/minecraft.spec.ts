@@ -96,6 +96,7 @@ test("Minecraft jobs, stop control and world landmarks stay separate from chat",
         busy: false,
         secretStorage: "local-file",
         minecraft: {
+          enabled: true,
           config,
           live: {
             status: "Connected",
@@ -176,6 +177,14 @@ test("Minecraft jobs, stop control and world landmarks stay separate from chat",
           minecraftAction: async () => {
             job.status = "cancelled";
             job.detail = "Stopped by user.";
+            listener({ type: "state", state: structuredClone(snapshot) });
+          },
+          setMinecraftEnabled: async (enabled: boolean) => {
+            snapshot.minecraft.enabled = enabled;
+            snapshot.minecraft.live.connected = false;
+            snapshot.minecraft.live.status = enabled
+              ? "Not connected"
+              : "Minecraft plugin is off";
             listener({ type: "state", state: structuredClone(snapshot) });
           },
           saveLandmark: async (name: string) => {
@@ -272,6 +281,26 @@ test("Minecraft jobs, stop control and world landmarks stay separate from chat",
     path: "test-results/settings-minecraft.png",
     fullPage: true,
   });
+  await page.getByLabel("Enable Minecraft plugin", { exact: true }).uncheck();
+  await expect(
+    page.getByRole("button", { name: "Join world", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Minecraft", exact: true }),
+  ).toContainText("Plugin off");
+  await page.getByText("New inventory goal", { exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Start game goal", exact: true }),
+  ).toBeDisabled();
+  await page.getByLabel("Enable Minecraft plugin", { exact: true }).check();
+  await expect(
+    page.getByRole("button", { name: "Join world", exact: true }),
+  ).toBeEnabled();
+  expect(
+    await page.evaluate(
+      () => (window as any).mcFixture.minecraft.live.connected,
+    ),
+  ).toBe(false);
   await page.goto("/?window=companion");
   await expect(
     page.getByRole("status").filter({ hasText: "Minecraft:" }),

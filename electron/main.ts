@@ -289,6 +289,10 @@ else {
         }
         return plugins.exclusive(async () => {
           if (action === "connect") {
+            if (!plugins.minecraft.enabled)
+              throw new Error(
+                "Enable the Minecraft plugin before joining a world.",
+              );
             const c = store.data.minecraft.config;
             const result = await dialog.showMessageBox({
               type: "question",
@@ -307,6 +311,11 @@ else {
       handle("minecraft:landmark", (name) =>
         plugins.minecraft.saveLandmark(
           z.string().trim().min(1).max(80).parse(name),
+        ),
+      );
+      handle("minecraft:enabled", (enabled) =>
+        plugins.exclusive(() =>
+          plugins.minecraft.setEnabled(z.boolean().parse(enabled), plugins.mcp),
         ),
       );
       handle("minecraft:delete-landmark", (id) =>

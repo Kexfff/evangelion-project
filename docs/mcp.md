@@ -2,7 +2,7 @@
 
 [← Documentation](README.md) · [Project home](../README.md)
 
-Sprint 4's MCP foundation landed in v0.4.0. Telegram remains a bundled chat channel; MCP adds separately configured tool providers to the same companion. v0.4.1 adds a [bundled Minecraft adapter](minecraft.md) for Java Edition LAN worlds. v0.4.9 adds persistent, verified game goals and opt-in scheduled/survival actions through a Minecraft-only coordinator.
+Sprint 4's MCP foundation landed in v0.4.0. Telegram remains a bundled chat channel; MCP adds separately configured tool providers to the same companion. v0.4.1 adds a [bundled Minecraft adapter](minecraft.md) for Java Edition LAN worlds. v0.4.9 adds persistent, verified game goals and opt-in scheduled/survival actions through a Minecraft-only coordinator. Since v0.4.11 Minecraft has an independent plugin on/off switch and never auto-connects on startup; enabled external MCP connections retain their existing auto-start behavior.
 
 ## Connect a server
 

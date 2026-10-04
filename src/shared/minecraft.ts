@@ -105,6 +105,7 @@ export const landmarkSchema = z.object({
   port: z.number().int(),
 });
 export const minecraftStateSchema = z.object({
+  enabled: z.boolean().default(true),
   goals: z.array(gameGoalSchema).max(100).default([]),
   goalConfig: gameGoalConfigSchema.default(() =>
     gameGoalConfigSchema.parse({}),
@@ -181,6 +182,7 @@ export const minecraftLiveSchema = z
   .strict();
 export type MinecraftLive = z.infer<typeof minecraftLiveSchema>;
 export interface MinecraftSnapshot {
+  enabled?: boolean;
   goals?: GameGoal[];
   goalConfig?: GameGoalConfig;
   config: MinecraftConfig;

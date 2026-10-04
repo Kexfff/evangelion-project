@@ -6,6 +6,10 @@ The app includes a managed Mineflayer adapter for **Minecraft Java 26.1**, initi
 
 ## Join your world
 
+**Plugin on/off (v0.4.11):** the **Enable Minecraft plugin** switch under Plugins & MCP → Minecraft applies immediately and is saved independently of the world connection. Turning it off cancels active/queued/paused game goals, stops gameplay, closes the bundled worker and removes Minecraft tools/context from the LLM. Connection settings, tool permissions, landmarks and history are kept. Turning it on does **not** join a world or resume goals. Existing profiles keep the plugin enabled unless you switch it off.
+
+**Joining is always manual.** Relaunching Evangelion, restarting its plugin host or enabling Minecraft leaves Eva offline, even if she was connected before shutdown. Use **Join world** and its confirmation to reconnect. Telegram's enable/disable control and external MCP connection startup preferences are unchanged.
+
 1. Open your own Java world to LAN and note its current port. Only connect where you have permission.
 2. Open **Settings → Plugins & MCP → Minecraft**. Set host (`127.0.0.1` for the same computer), port (initial default `25556`), bot name and authentication. For a normal offline-auth LAN world, use a distinct bot name such as `EvaCompanion`. Online-auth servers require a Microsoft account entitled to play Java Edition; enter the account identifier and follow the displayed device-code instructions at `microsoft.com/link`. Account tokens are session-only. Microsoft login has not yet been live-tested in this release.
 3. Give the world a recognizable label and select its initial dimension. This label is your organizational identifier, not a server-verified world identity. Use a different label when reusing the same LAN address for another world.

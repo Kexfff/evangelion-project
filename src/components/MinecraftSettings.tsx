@@ -39,6 +39,7 @@ export function MinecraftSettings({
     setConfig(data?.config ?? minecraftConfigSchema.parse({}));
   }, [saved]);
   const connection = mcp?.servers.find((s) => s.config.id === MINECRAFT_ID);
+  const enabled = data?.enabled !== false;
   const set = <K extends keyof MinecraftConfig>(
     key: K,
     value: MinecraftConfig[K],
@@ -75,9 +76,34 @@ export function MinecraftSettings({
         <span
           className={`connection-badge ${data?.live.connected ? "online" : ""}`}
         >
-          {data?.live.connected ? "Connected" : "Offline"}
+          {!enabled
+            ? "Plugin off"
+            : data?.live.connected
+              ? "Connected"
+              : "Offline"}
         </span>
       </div>
+      <label className="toggle-row">
+        <span>Enable Minecraft plugin</span>
+        <input
+          type="checkbox"
+          checked={enabled}
+          disabled={busy}
+          onChange={(e) => {
+            const next = e.target.checked;
+            void run(
+              () => bridge.setMinecraftEnabled(next),
+              next
+                ? "Minecraft enabled. Choose Join world when ready."
+                : "Minecraft is off. Gameplay stopped; connection settings, tool choices and history were kept.",
+            );
+          }}
+        />
+      </label>
+      <p className="connection-status-line">
+        Applies immediately. Turning off stops gameplay and removes Minecraft
+        tools. Enabling or restarting the app never joins a world automatically.
+      </p>
       <p className="connection-status-line">
         {data?.live.status ?? "Not connected"} ·{" "}
         {connection?.status ?? "Save a connection to begin"}
@@ -86,7 +112,10 @@ export function MinecraftSettings({
         <button
           className="button primary"
           disabled={
-            busy || !connection || connection.config.characterId !== characterId
+            busy ||
+            !enabled ||
+            !connection ||
+            connection.config.characterId !== characterId
           }
           onClick={() =>
             void run(
@@ -132,7 +161,9 @@ export function MinecraftSettings({
           This code is temporary; sign-in is session-only.
         </p>
       )}
-      <GameGoals data={data} />
+      <fieldset disabled={!enabled} className="minecraft-goal-controls">
+        <GameGoals data={data} />
+      </fieldset>
       <details className="integration-disclosure" open={!connection}>
         <summary>World connection and optional limits</summary>
         <p>

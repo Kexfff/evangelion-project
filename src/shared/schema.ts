@@ -193,6 +193,7 @@ export interface Bridge {
     config: import("./minecraft").MinecraftConfig,
   ): Promise<void>;
   minecraftAction(action: "connect" | "disconnect" | "stop"): Promise<void>;
+  setMinecraftEnabled(enabled: boolean): Promise<void>;
   saveLandmark(name: string): Promise<void>;
   deleteLandmark(id: string): Promise<void>;
   configureMcp(

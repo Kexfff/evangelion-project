@@ -816,6 +816,16 @@ try {
     }
     throw new Error("Disconnected goal must be rejected");
   });
+  await scheduledWindow.evaluate(async () => {
+    await window.eva.setMinecraftEnabled(false);
+    try {
+      await window.eva.minecraftAction("connect");
+    } catch (error) {
+      if (String(error).includes("Enable the Minecraft plugin")) return;
+      throw error;
+    }
+    throw new Error("Disabled Minecraft must not join");
+  });
   await desktop.close();
   desktop = null;
   assert.ok(
@@ -835,6 +845,16 @@ try {
     .toBe("Connected");
   mcpState = (await mcpReopened.evaluate(() => window.eva.snapshot())).mcp;
   assert.equal(mcpState.servers[0].hasSecrets, true);
+  assert.equal(
+    (await mcpReopened.evaluate(() => window.eva.snapshot())).minecraft.enabled,
+    false,
+  );
+  await mcpReopened.evaluate(() => window.eva.setMinecraftEnabled(true));
+  assert.equal(
+    (await mcpReopened.evaluate(() => window.eva.snapshot())).minecraft.live
+      .connected,
+    false,
+  );
   assert.deepEqual(
     (await mcpReopened.evaluate(() => window.eva.snapshot())).settings.providers
       .llm.openrouterProviders,
