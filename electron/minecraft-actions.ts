@@ -16,6 +16,7 @@ export interface GameplayHost {
   ): unknown;
   check(signal: AbortSignal): void;
   navigate(point: Vec3, signal: AbortSignal, distance?: number): Promise<void>;
+  approachBlock(point: Vec3, signal: AbortSignal): Promise<void>;
   area(point: Vec3): void;
   until(
     test: () => boolean,
@@ -167,16 +168,9 @@ export class MinecraftActions {
     return (this.bot as Bot & { vehicle?: Bot["entity"] }).vehicle;
   }
   private async approachBlock(p: Vec3, signal: AbortSignal) {
-    await this.host.navigate(p, signal, 2);
+    await this.host.approachBlock(p, signal);
     this.host.check(signal);
     const block = this.blockAt(p);
-    if (
-      this.bot.entity.position.distanceTo(p) > 4.5 ||
-      !this.bot.canSeeBlock(block)
-    )
-      throw new ActionError(
-        "The block is out of reach or behind another block.",
-      );
     return block;
   }
   private start(
@@ -737,21 +731,74 @@ export class MinecraftActions {
         async (signal) => {
           const item = this.bot.registry.itemsByName[a.item];
           if (!item) throw new ActionError("Unknown item ID.");
-          let table = a.table ? this.blockAt(point(a.table)) : undefined;
-          if (table && table.name !== "crafting_table")
-            throw new ActionError(
-              "The supplied block is not a crafting table.",
-            );
-          if (!table && !this.bot.recipesFor(item.id, null, 1, null).length)
-            table =
-              this.bot.findBlock({
-                matching: (b) => b.name === "crafting_table",
-                maxDistance: 32,
-              }) ?? undefined;
-          if (table) table = await this.approachBlock(table.position, signal);
+          // A table coordinate is a hint, not evidence: models often supply the
+          // base position or a stale placement. Prefer inventory crafting when possible.
+          let table: ReturnType<Bot["blockAt"]> = null;
+          if (!this.bot.recipesFor(item.id, null, 1, null).length) {
+            if (!this.bot.recipesFor(item.id, null, 1, true).length)
+              throw new ActionError(
+                "Missing crafting ingredients. Use get_recipes and gather the required items first; nothing was crafted.",
+              );
+            const hinted = a.table ? this.bot.blockAt(point(a.table)) : null;
+            const candidates = [
+              ...(hinted?.name === "crafting_table" ? [hinted.position] : []),
+              ...this.bot
+                .findBlocks({
+                  matching: (b) => b.name === "crafting_table",
+                  maxDistance: 32,
+                  count: 8,
+                })
+                .sort(
+                  (a, b) =>
+                    a.distanceTo(this.bot.entity.position) -
+                    b.distanceTo(this.bot.entity.position),
+                ),
+            ].filter((p, i, all) => all.findIndex((v) => v.equals(p)) === i);
+            if (!candidates.length)
+              throw new ActionError(
+                "No loaded crafting table within 32 blocks. Find or place one, then craft again; table coordinates must identify the table block, not the base or floor.",
+              );
+            for (const position of candidates) {
+              this.host.check(signal);
+              if (this.bot.blockAt(position)?.name !== "crafting_table")
+                continue;
+              try {
+                this.host.progress("Walking to an accessible crafting table.");
+                const reached = await this.approachBlock(position, signal);
+                if (reached.name === "crafting_table") {
+                  table = reached;
+                  break;
+                }
+              } catch (error) {
+                this.host.check(signal);
+                // Only route failures may try another station, before any crafting I/O.
+                if (
+                  !(error instanceof Error) ||
+                  !["NoPath", "Timeout"].includes(error.name)
+                )
+                  throw error;
+              }
+            }
+            if (!table)
+              throw new ActionError(
+                "No reachable crafting table remains. Check an entrance or place a table on accessible ground; nothing was crafted.",
+              );
+          }
           const before = this.inventoryCount(a.item);
           for (let n = 0; n < a.count; n++) {
             this.host.check(signal);
+            if (table) {
+              const current = this.blockAt(table.position);
+              if (current.name !== "crafting_table")
+                throw new ActionError(
+                  "The crafting table changed before use. Inspect the world; completed crafting operations were kept.",
+                );
+              table = await this.approachBlock(current.position, signal);
+              if (table.name !== "crafting_table")
+                throw new ActionError(
+                  "The crafting table changed while approaching it; no further crafting was attempted.",
+                );
+            }
             const recipe = this.bot.recipesFor(
               item.id,
               null,
@@ -763,7 +810,7 @@ export class MinecraftActions {
                 "Missing ingredients or crafting table. Earlier crafting operations, if any, were kept.",
               );
             await this.step(
-              () => this.bot.craft(recipe, 1, table),
+              () => this.bot.craft(recipe, 1, table ?? undefined),
               signal,
               "Crafting",
               20000,

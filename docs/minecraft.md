@@ -96,6 +96,8 @@ Digging and scaffolding have higher route costs so reachable entrances are prefe
 
 ## Goals that continue while you chat
 
+**Crafting/interaction approaches (v0.4.13):** reaching a nearby point is no longer enough—Eva plans to a position with an unobstructed, in-range view of the target block and checks the actual arrival before interacting. This also applies to furnaces, containers, beds and direct block interactions/digging. Existing door navigation and terrain permissions still apply. A crafting-table coordinate is a preferred hint; wrong/stale hints trigger discovery of loaded tables within 32 blocks. Inventory-only recipes skip the table entirely. Missing ingredients are reported before walking; the table is checked again before each crafting operation. Alternative stations are tried only for navigation failures before crafting begins, never as a retry of uncertain inventory effects.
+
 Ask “Make a stone pickaxe” or “Gather 16 oak logs.” The LLM can create a `game_goal` with concrete inventory, location, hunger or exact-block completion criteria. **Settings → Plugins & MCP → Minecraft → Game goals** also provides a simple inventory-goal form.
 
 The coordinator observes the world, asks the configured LLM for one structured next step, executes it through the existing Minecraft MCP permissions, waits for the action's outcome, and observes again. This permits gathering and crafting prerequisites across many chat turns. Completion is checked by application code against observed state, not the model's claim. Recipe counts remain crafting operations; the target goal count is the total desired inventory quantity. Planning quality still depends on the chosen LLM and reachable resources.

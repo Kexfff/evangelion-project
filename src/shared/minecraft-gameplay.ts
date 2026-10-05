@@ -128,7 +128,7 @@ export const minecraftGameplayTools = [
   ),
   tool(
     "craft_item",
-    "Craft an item using current inventory and optionally a crafting table. count means crafting operations, NOT output items (one planks operation normally yields multiple planks). Does not recursively gather ingredients or place a table. Reports actual output inventory gain.",
+    "Craft an item using current inventory. Automatically finds a loaded crafting table within 32 blocks when needed and walks to a reachable, unobstructed interaction position. Optional table is a preferred table BLOCK coordinate, not a base/floor coordinate; stale hints fall back to discovery. Inventory-only recipes need no table. count means crafting operations, NOT output items. Does not gather ingredients or place a table. Reports actual output inventory gain.",
     { item, count: { type: "integer", minimum: 1, maximum: 64 }, table: point },
     ["item", "count"],
   ),

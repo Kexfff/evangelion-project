@@ -448,6 +448,15 @@ Deferred from this mini-sprint: automatic fishing, enchanting/anvils, full villa
 - [x] Guard joins through the Minecraft factory and MCP connection/action paths; reject stale tool execution while disabled. Ignore late worker updates after shutdown. Show Plugin off in the integration hub and disable join/game-goal controls while off.
 - [x] Validation: **274 core tests, 34 browser tests, production/package build and isolated desktop smoke pass**. Rebuilt `release/linux-unpacked/` as v0.4.11. Tests cover remembered-connection startup, lifecycle restart, off/on persistence, worker shutdown, goal cancellation, retained grants, late worker events, disabled join controls and actual toggle IPC across restart. No live world was joined or normal profile modified.
 
+### Minecraft interaction/crafting fix — v0.4.13 (2026-10-05)
+
+- [x] Replace proximity-only block approaches with a pathfinding goal requiring an in-reach, unobstructed eye-to-block ray. Recheck the actual position after navigation; an empty/unsuccessful pathfinder result cannot authorize interaction. Existing movement, door and terrain permissions remain unchanged.
+- [x] Apply the shared approach to crafting tables, furnaces, containers, beds, block interaction and single-block digging. Existing doors/routes are preferred by the existing movement costs; no guarantee of terrain preservation when edits are allowed.
+- [x] Treat optional crafting-table coordinates as a preferred hint, not proof. Prefer inventory-only recipes; check ingredients before walking; rediscover loaded tables within 32 blocks when the hint is wrong/stale. Try another discovered table only after a route failure, before crafting starts.
+- [x] Revalidate the table after movement and before every craft operation. Preserve cancellation and pending-operation fences; never retry uncertain crafting/inventory effects automatically. Explain missing ingredients/tables and inaccessible stations distinctly.
+- [x] Add 11 regression cases: real Minecraft 26.1 block geometry/raycast and A* around walls/through an open doorway, engine-level arrival verification, invalid table hints, inventory-only crafting, missing resources, alternate stations, table replacement, uncertain failure and cancellation. **306 core tests, 34 browser tests, typecheck and isolated desktop smoke pass; production/Linux unpacked package rebuilt as v0.4.13.**
+- [ ] Live verification at the user's obstructed crafting station remains pending. No Minecraft connection, world changes, paid requests or normal-profile edits were performed. Previously failed goals are not replayed; ask for the craft/goal again after restarting the updated app.
+
 ## Later refinements
 
 ### Independent Minecraft autonomy (v0.4.12) + push-to-talk (planned)

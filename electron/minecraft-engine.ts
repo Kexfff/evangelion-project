@@ -5,6 +5,7 @@ import { Movements, goals } from "mineflayer-pathfinder";
 import type { Bot } from "mineflayer";
 import { MinecraftLocator } from "./minecraft-locator";
 import { MinecraftActions } from "./minecraft-actions";
+import { canInteractFrom, GoalInteractBlock } from "./minecraft-interaction";
 import { DoorNavigation, doorMovements } from "./minecraft-doors";
 import { MinecraftActionError } from "./minecraft-action-error";
 import { z } from "zod";
@@ -110,6 +111,7 @@ export class MinecraftEngine {
       check: (signal) => this.check(signal),
       navigate: (point, signal, distance) =>
         this.navigate(point, signal, distance),
+      approachBlock: (point, signal) => this.navigate(point, signal, 2, true),
       area: (point) => this.area(point),
       until: (check, signal, milliseconds) =>
         this.until(check, signal, milliseconds),
@@ -277,6 +279,7 @@ export class MinecraftEngine {
     target: { x: number; y: number; z: number },
     signal: AbortSignal,
     distance = 1,
+    interaction = false,
   ) {
     const point = new Vec3(target.x, target.y, target.z);
     this.check(signal);
@@ -287,10 +290,27 @@ export class MinecraftEngine {
       throw new MinecraftActionError(
         "Target is outside the permitted movement radius.",
       );
+    if (
+      interaction &&
+      canInteractFrom(this.bot, this.bot.entity.position, point)
+    )
+      return;
     await this.bot.pathfinder.goto(
-      new goals.GoalNear(point.x, point.y, point.z, distance),
+      interaction
+        ? new GoalInteractBlock(this.bot, point)
+        : new goals.GoalNear(point.x, point.y, point.z, distance),
     );
     this.check(signal);
+    if (interaction) {
+      if (!canInteractFrom(this.bot, this.bot.entity.position, point))
+        throw Object.assign(
+          new MinecraftActionError(
+            "The route ended without a clear, in-reach view of the block. Check the entrance or a changed obstruction; no interaction was sent.",
+          ),
+          { name: "NoPath" },
+        );
+      return;
+    }
     if (this.bot.entity.position.distanceTo(point) > distance + 1.5)
       throw new MinecraftActionError("Destination was not reached.");
   }

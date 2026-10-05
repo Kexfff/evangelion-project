@@ -194,6 +194,9 @@ function fixture() {
     navigate: vi.fn(async (target) => {
       bot.entity.position = target.clone();
     }),
+    approachBlock: vi.fn(async (target) => {
+      bot.entity.position = target.clone();
+    }),
     area: vi.fn(),
     progress: vi.fn(),
     until: vi.fn(async (test, signal) => {
@@ -444,6 +447,108 @@ describe("Minecraft everyday gameplay", () => {
       await h.actions.call("craft_item", { item: "oak_planks", count: 2 }),
     ).toMatchObject({ operations: 2, outputGain: 8 });
     expect(h.bot.craft).toHaveBeenCalledTimes(2);
+  });
+  function tableCraftFixture() {
+    const h = fixture();
+    const table = {
+      name: "crafting_table",
+      stateId: 2,
+      position: new Vec3(3, 64, 0),
+    };
+    const recipe = { requiresTable: true, result: { count: 4 } };
+    h.bot.recipesFor.mockImplementation(
+      (_id: number, _meta: unknown, _count: number, table: unknown) =>
+        table ? [recipe] : [],
+    );
+    h.bot.blockAt.mockImplementation((p: Vec3) =>
+      p.equals(table.position) ? table : { name: "stone", position: p },
+    );
+    h.bot.findBlocks.mockReturnValue([table.position]);
+    return { ...h, table };
+  }
+  it("rediscovers a real table when a base/floor coordinate is supplied, then approaches before crafting", async () => {
+    const h = tableCraftFixture();
+    await h.actions.call("craft_item", {
+      item: "oak_planks",
+      count: 1,
+      table: { x: 0, y: 63, z: 0 },
+    });
+    expect(h.host.approachBlock).toHaveBeenCalledWith(
+      h.table.position,
+      h.controller.signal,
+    );
+    expect(h.host.navigate).not.toHaveBeenCalled();
+    expect(h.bot.craft).toHaveBeenCalledWith(expect.anything(), 1, h.table);
+    expect(
+      vi.mocked(h.host.approachBlock).mock.invocationCallOrder[0],
+    ).toBeLessThan(h.bot.craft.mock.invocationCallOrder[0]);
+  });
+  it("ignores unnecessary stale table hints for inventory-only recipes", async () => {
+    const h = fixture();
+    await h.actions.call("craft_item", {
+      item: "oak_planks",
+      count: 1,
+      table: p,
+    });
+    expect(h.host.approachBlock).not.toHaveBeenCalled();
+    expect(h.bot.craft).toHaveBeenCalledWith(expect.anything(), 1, undefined);
+  });
+  it("checks ingredients before walking, and gives an actionable missing-table error", async () => {
+    const h = tableCraftFixture();
+    h.bot.recipesFor.mockReturnValue([]);
+    await expect(
+      h.actions.call("craft_item", { item: "oak_planks", count: 1 }),
+    ).rejects.toThrow("ingredients");
+    expect(h.host.approachBlock).not.toHaveBeenCalled();
+    const missing = tableCraftFixture();
+    missing.bot.findBlocks.mockReturnValue([]);
+    await expect(
+      missing.actions.call("craft_item", { item: "oak_planks", count: 1 }),
+    ).rejects.toThrow("No loaded crafting table");
+    expect(missing.bot.craft).not.toHaveBeenCalled();
+  });
+  it("tries another discovered station only on a navigation failure before crafting", async () => {
+    const h = tableCraftFixture();
+    const other = { ...h.table, position: new Vec3(8, 64, 0) };
+    h.bot.findBlocks.mockReturnValue([h.table.position, other.position]);
+    h.bot.blockAt.mockImplementation((p: Vec3) =>
+      p.equals(other.position) ? other : h.table,
+    );
+    vi.mocked(h.host.approachBlock).mockRejectedValueOnce(
+      Object.assign(new Error("unreachable"), { name: "NoPath" }),
+    );
+    await h.actions.call("craft_item", { item: "oak_planks", count: 1 });
+    expect(h.bot.craft).toHaveBeenCalledExactlyOnceWith(
+      expect.anything(),
+      1,
+      other,
+    );
+  });
+  it("never crafts at a replaced table and does not retry uncertain inventory operations", async () => {
+    const h = tableCraftFixture();
+    vi.mocked(h.host.approachBlock).mockImplementation(async () => {
+      h.table.name = "stone";
+    });
+    await expect(
+      h.actions.call("craft_item", { item: "oak_planks", count: 1 }),
+    ).rejects.toThrow("No reachable crafting table");
+    expect(h.bot.craft).not.toHaveBeenCalled();
+    const failed = tableCraftFixture();
+    failed.bot.craft.mockRejectedValue(new Error("server failure"));
+    await expect(
+      failed.actions.call("craft_item", { item: "oak_planks", count: 2 }),
+    ).rejects.toThrow("no automatic retry");
+    expect(failed.bot.craft).toHaveBeenCalledOnce();
+  });
+  it("does not dispatch crafting after cancellation during navigation", async () => {
+    const h = tableCraftFixture();
+    vi.mocked(h.host.approachBlock).mockImplementation(async () => {
+      h.controller.abort();
+    });
+    await expect(
+      h.actions.call("craft_item", { item: "oak_planks", count: 1 }),
+    ).rejects.toThrow();
+    expect(h.bot.craft).not.toHaveBeenCalled();
   });
   it("inspects/deposits/withdraws using the active window's inventory and closes it", async () => {
     const h = fixture();
