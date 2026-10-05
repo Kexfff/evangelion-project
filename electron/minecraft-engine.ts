@@ -6,6 +6,7 @@ import type { Bot } from "mineflayer";
 import { MinecraftLocator } from "./minecraft-locator";
 import { MinecraftActions } from "./minecraft-actions";
 import { canInteractFrom, GoalInteractBlock } from "./minecraft-interaction";
+import { NavigationProgress } from "./minecraft-progress";
 import { DoorNavigation, doorMovements } from "./minecraft-doors";
 import { MinecraftActionError } from "./minecraft-action-error";
 import { z } from "zod";
@@ -90,6 +91,7 @@ export class MinecraftEngine {
   private gameplay: MinecraftActions;
   private doors: DoorNavigation;
   private workTail: Promise<unknown> = Promise.resolve();
+  private navigation?: NavigationProgress;
   constructor(
     readonly config: MinecraftConfig,
     private bot: Bot,
@@ -118,7 +120,22 @@ export class MinecraftEngine {
       progress: (detail, count) => {
         if (this.job?.status !== "running") return;
         this.job.detail = detail.slice(0, 300);
+        if (count !== undefined && count > this.job.progress)
+          this.markProgress(detail);
         if (count !== undefined) this.job.progress = count;
+        this.publish();
+      },
+      diagnostic: (entry) => {
+        if (this.job?.status !== "running") return;
+        this.job.diagnostics = [
+          ...(this.job.diagnostics ?? []).filter(
+            (d) =>
+              d.position.x !== entry.position.x ||
+              d.position.y !== entry.position.y ||
+              d.position.z !== entry.position.z,
+          ),
+          entry,
+        ].slice(-9);
         this.publish();
       },
     });
@@ -228,6 +245,7 @@ export class MinecraftEngine {
       throw new MinecraftActionError("Health is low; action stopped.");
   }
   stop(reason = "Stopped by user.") {
+    this.navigation = undefined;
     this.doors.stop();
     this.locator.cancel();
     ++this.sequence;
@@ -238,6 +256,15 @@ export class MinecraftEngine {
     this.bot.stopDigging();
     this.bot.deactivateItem?.();
     if (this.job?.status === "running") {
+      this.job.diagnostics = this.job.diagnostics?.map((d) =>
+        d.outcome === "approaching"
+          ? {
+              ...d,
+              outcome: "interrupted",
+              elapsedMs: Math.max(0, Date.now() - Date.parse(d.startedAt)),
+            }
+          : d,
+      );
       this.job.status = "cancelled";
       this.job.detail = reason;
       this.job.updatedAt = new Date().toISOString();
@@ -249,6 +276,10 @@ export class MinecraftEngine {
     try {
       this.guard();
       this.doors.tick();
+      if (this.navigation?.observe(this.bot.entity.position))
+        this.markProgress(
+          `Travelled to ${this.bot.entity.position.floored().toString()}.`,
+        );
     } catch (e) {
       this.stop(e instanceof Error ? e.message : "World changed.");
     }
@@ -256,6 +287,11 @@ export class MinecraftEngine {
   private check(signal: AbortSignal) {
     signal.throwIfAborted();
     this.guard();
+  }
+  private markProgress(detail: string) {
+    if (this.job?.status !== "running") return;
+    this.job.lastProgressAt = new Date().toISOString();
+    this.job.progressDetail = detail.slice(0, 180);
   }
   dispose() {
     this.stop();
@@ -295,24 +331,35 @@ export class MinecraftEngine {
       canInteractFrom(this.bot, this.bot.entity.position, point)
     )
       return;
-    await this.bot.pathfinder.goto(
-      interaction
-        ? new GoalInteractBlock(this.bot, point)
-        : new goals.GoalNear(point.x, point.y, point.z, distance),
-    );
-    this.check(signal);
-    if (interaction) {
-      if (!canInteractFrom(this.bot, this.bot.entity.position, point))
-        throw Object.assign(
-          new MinecraftActionError(
-            "The route ended without a clear, in-reach view of the block. Check the entrance or a changed obstruction; no interaction was sent.",
-          ),
-          { name: "NoPath" },
+    const tracking = (this.navigation = new NavigationProgress(
+      this.bot.entity.position,
+    ));
+    try {
+      await this.bot.pathfinder.goto(
+        interaction
+          ? new GoalInteractBlock(this.bot, point)
+          : new goals.GoalNear(point.x, point.y, point.z, distance),
+      );
+      this.check(signal);
+      if (tracking.observe(this.bot.entity.position))
+        this.markProgress(
+          `Travelled to ${this.bot.entity.position.floored().toString()}.`,
         );
-      return;
+      if (interaction) {
+        if (!canInteractFrom(this.bot, this.bot.entity.position, point))
+          throw Object.assign(
+            new MinecraftActionError(
+              "The route ended without a clear, in-reach view of the block. Check the entrance or a changed obstruction; no interaction was sent.",
+            ),
+            { name: "InteractionBlocked" },
+          );
+        return;
+      }
+      if (this.bot.entity.position.distanceTo(point) > distance + 1.5)
+        throw new MinecraftActionError("Destination was not reached.");
+    } finally {
+      if (this.navigation === tracking) this.navigation = undefined;
     }
-    if (this.bot.entity.position.distanceTo(point) > distance + 1.5)
-      throw new MinecraftActionError("Destination was not reached.");
   }
   private area(point: { x: number; y: number; z: number }) {
     if (
@@ -355,6 +402,8 @@ export class MinecraftEngine {
       progress: 0,
       total,
       startedAt: now,
+      lastProgressAt: now,
+      progressDetail: "Action accepted; waiting for execution.",
       updatedAt: now,
       characterId: this.config.characterId,
       worldId: this.config.worldId,
@@ -375,6 +424,9 @@ export class MinecraftEngine {
         await this.gameplay.idle(controller.signal);
         await this.doors.idle(controller.signal);
         this.check(controller.signal);
+        this.markProgress(
+          "Execution started after previous operations settled.",
+        );
         return work(controller.signal);
       });
     this.workTail = task.catch(() => {});
@@ -726,6 +778,7 @@ export class MinecraftEngine {
           await this.navigate(target.position, signal, 0.5);
           await this.until(() => inventoryCount() > before, signal);
           this.job!.progress = i + 1;
+          this.markProgress(`Collected ${i + 1} blocks; pickup verified.`);
           this.publish();
         }
       });
@@ -841,6 +894,9 @@ export class MinecraftEngine {
             signal,
           );
           this.job!.progress++;
+          this.markProgress(
+            `Placed ${this.job!.progress} blocks; placement verified.`,
+          );
           this.publish();
         }
         for (const b of blocks)

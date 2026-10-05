@@ -457,6 +457,15 @@ Deferred from this mini-sprint: automatic fishing, enchanting/anvils, full villa
 - [x] Add 11 regression cases: real Minecraft 26.1 block geometry/raycast and A* around walls/through an open doorway, engine-level arrival verification, invalid table hints, inventory-only crafting, missing resources, alternate stations, table replacement, uncertain failure and cancellation. **306 core tests, 34 browser tests, typecheck and isolated desktop smoke pass; production/Linux unpacked package rebuilt as v0.4.13.**
 - [ ] Live verification at the user's obstructed crafting station remains pending. No Minecraft connection, world changes, paid requests or normal-profile edits were performed. Previously failed goals are not replayed; ask for the craft/goal again after restarting the updated app.
 
+### Minecraft progress timeouts and table diagnostics — v0.4.14 (2026-10-05)
+
+- [x] Change the goal action timer from total step duration to time without observed progress (default 90 seconds). Credit actual travel into new block cells and completed action units; stationary ticks, status updates, jitter and small repeated loops do not refresh it. Preserve the hard overall goal deadline and existing worker/protocol deadlines.
+- [x] Rename the setting to **No-progress timeout (seconds)** and explain its scope. Stall errors now include the action, idle time, total runtime, completed units and last observed progress; completed world changes are not rolled back or automatically replayed.
+- [x] Record each crafting-table approach separately: coordinates, start time, duration and outcome (reached, no path, search timeout, obstructed interaction, changed/unloaded table, interruption or other failure). Preserve failed candidates even when a later table succeeds; avoid treating a failed search as proof that no table is reachable.
+- [x] Add expandable **Crafting-table approaches** to Minecraft job and goal-step histories, with persisted diagnostics and last-progress details. Old records remain readable but cannot gain diagnostics retroactively. Preserve cancellation fencing so an old operation cannot publish diagnostics into a replacement job.
+- [x] Validation: **316 core tests, 34 browser tests, typecheck, production/Linux unpacked package build and isolated desktop smoke pass.** Source/package updated to v0.4.14. Coverage includes steady travel, stalls/heartbeats/loops, hard goal deadlines, malformed timestamps, per-candidate outcomes, cancellation, persistence and desktop settings across restart.
+- [ ] Live acceptance at the user's crafting stations remains pending. No Minecraft connection, world changes, paid requests or normal-profile edits were performed. Restart the updated app and start a fresh attempt to collect the new diagnostics; these changes improve timeout behavior and evidence, not guarantee every route is navigable.
+
 ## Later refinements
 
 ### Independent Minecraft autonomy (v0.4.12) + push-to-talk (planned)

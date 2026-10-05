@@ -72,6 +72,22 @@ test("game goals queue, pause, reconcile, cancel and save independent budgets", 
               resume: "queued",
               cancel: "cancelled",
             }[action];
+            if (action === "cancel")
+              data.minecraft.goals[0].history = [
+                {
+                  tool: "craft_item",
+                  args: {},
+                  outcome: "Approach interrupted",
+                  diagnostics: [
+                    {
+                      position: { x: -1056, y: 66, z: 296 },
+                      startedAt: "2026-10-05T12:00:00Z",
+                      elapsedMs: 91000,
+                      outcome: "interrupted",
+                    },
+                  ],
+                },
+              ];
             emit();
           },
           configureGameGoals: async (cfg: unknown) => {
@@ -169,8 +185,21 @@ test("game goals queue, pause, reconcile, cancel and save independent budgets", 
   await expect(
     page.locator('.game-goals [data-status="cancelled"]'),
   ).toContainText("Gather wood for our house");
+  await page.getByText("Step history", { exact: true }).click();
+  await page
+    .getByText("Crafting-table approaches · 1", { exact: true })
+    .click();
+  await expect(
+    page.locator(".game-goals .minecraft-diagnostics"),
+  ).toContainText("(-1056, 66, 296)");
+  await expect(
+    page.locator(".game-goals .minecraft-diagnostics"),
+  ).toContainText("Stopped before approach completed");
   await page.getByText("Planning budgets & reactions", { exact: true }).click();
   await page.getByLabel("Maximum steps", { exact: true }).fill("12");
+  await page
+    .getByLabel("No-progress timeout (seconds)", { exact: true })
+    .fill("120");
   await page.getByLabel("Enable scheduled game goals").check();
   await page.getByLabel("Enable survival reactions").check();
   await page
@@ -179,7 +208,12 @@ test("game goals queue, pause, reconcile, cancel and save independent budgets", 
   await expect(page.getByLabel("Scheduled start (optional)")).toBeEnabled();
   expect(
     await page.evaluate(() => (window as any).goalFixture.minecraft.goalConfig),
-  ).toMatchObject({ maxSteps: 12, scheduled: true, survival: true });
+  ).toMatchObject({
+    maxSteps: 12,
+    stepSeconds: 120,
+    scheduled: true,
+    survival: true,
+  });
   await page.setViewportSize({ width: 390, height: 900 });
   expect(
     await page.evaluate(

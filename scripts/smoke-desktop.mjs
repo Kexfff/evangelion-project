@@ -804,6 +804,7 @@ try {
     await window.eva.configureGameGoals({
       ...data.minecraft.goalConfig,
       maxSteps: 17,
+      stepSeconds: 120,
     });
     await window.eva.configureGameAutonomy({
       ...data.minecraft.autonomy.config,
@@ -879,6 +880,11 @@ try {
     (await mcpReopened.evaluate(() => window.eva.snapshot())).minecraft
       .goalConfig.maxSteps,
     17,
+  );
+  assert.equal(
+    (await mcpReopened.evaluate(() => window.eva.snapshot())).minecraft
+      .goalConfig.stepSeconds,
+    120,
   );
   assert.equal(
     mcpState.servers[0].tools.find((t) => t.name === "echo").policy,

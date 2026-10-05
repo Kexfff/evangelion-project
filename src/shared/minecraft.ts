@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { approachDiagnosticSchema } from "./minecraft-diagnostics";
 import {
   gameAutonomyStateSchema,
   type GameAutonomyState,
@@ -82,6 +83,9 @@ export const minecraftJobSchema = z.object({
     "furnace",
   ]),
   result: z.record(z.string(), z.unknown()).optional(),
+  diagnostics: z.array(approachDiagnosticSchema).max(9).optional(),
+  lastProgressAt: z.string().datetime().optional(),
+  progressDetail: z.string().max(180).optional(),
   status: z.enum([
     "running",
     "succeeded",

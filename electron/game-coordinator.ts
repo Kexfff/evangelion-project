@@ -578,7 +578,39 @@ export class GameCoordinator {
     status: "completed" | "failed",
     detail: string,
   ) {
-    this.update(g, { status, detail: detail.slice(0, 600), jobId: undefined });
+    const job = this.minecraft.snapshot().live.job;
+    const attempted = [...g.history]
+      .reverse()
+      .find((h) => h.tool === g.currentTool);
+    const history =
+      g.jobId && job?.id === g.jobId
+        ? [
+            ...g.history.slice(-63),
+            {
+              tool: g.currentTool ?? "unknown",
+              args: attempted?.args ?? {},
+              outcome: detail.slice(0, 600),
+              diagnostics: job.diagnostics?.map((d) =>
+                d.outcome === "approaching" && status === "failed"
+                  ? {
+                      ...d,
+                      outcome: "interrupted" as const,
+                      elapsedMs: Math.max(
+                        0,
+                        Date.now() - Date.parse(d.startedAt),
+                      ),
+                    }
+                  : d,
+              ),
+            },
+          ]
+        : g.history;
+    this.update(g, {
+      status,
+      detail: detail.slice(0, 600),
+      jobId: undefined,
+      history,
+    });
     this.director.remember(g, this.minecraft.snapshot().live);
     this.runtime.autonomy.log(
       `game-${status}`,
@@ -823,15 +855,25 @@ export class GameCoordinator {
           });
           return;
         }
-        if (
-          Date.now() - Date.parse(job.startedAt) >
-          this.config.stepSeconds * 1000
-        ) {
+        const reportedStart = Date.parse(job.startedAt);
+        const startedAt =
+          Number.isFinite(reportedStart) && reportedStart <= now
+            ? reportedStart
+            : now - elapsedMs;
+        const reportedProgressAt = Date.parse(
+          job.lastProgressAt ?? job.startedAt,
+        );
+        // Invalid/future timestamps cannot keep a stalled action alive.
+        const lastProgressAt =
+          Number.isFinite(reportedProgressAt) && reportedProgressAt <= now
+            ? Math.max(startedAt, reportedProgressAt)
+            : startedAt;
+        if (now - lastProgressAt > this.config.stepSeconds * 1000) {
           this.minecraft.stopAction(false);
           await this.finish(
             g,
             "failed",
-            "Step time limit reached; effects may be partial.",
+            `${g.currentTool ?? job.kind ?? "Action"} stalled: no observed progress for ${Math.floor((now - lastProgressAt) / 1000)}s (limit ${this.config.stepSeconds}s; running ${Math.floor((now - startedAt) / 1000)}s; ${job.progress ?? 0} action units completed). Last progress: ${job.progressDetail ?? "none reported"}. Stopped; completed changes remain and final effects may be partial.`,
           );
         }
         return;
@@ -869,7 +911,12 @@ export class GameCoordinator {
           jobId: undefined,
           history: [
             ...g.history.slice(-63),
-            { tool: g.currentTool ?? "unknown", args: {}, outcome: job.detail },
+            {
+              tool: g.currentTool ?? "unknown",
+              args: {},
+              outcome: job.detail,
+              diagnostics: job.diagnostics,
+            },
           ],
           elapsedMs,
         });

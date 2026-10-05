@@ -89,7 +89,9 @@ export class MinecraftPlugin {
           if (
             !previous ||
             previous.status !== state.job.status ||
-            previous.progress !== state.job.progress
+            previous.progress !== state.job.progress ||
+            JSON.stringify(previous.diagnostics) !==
+              JSON.stringify(state.job.diagnostics)
           )
             this.store.update((d) => {
               d.minecraft.jobs = [

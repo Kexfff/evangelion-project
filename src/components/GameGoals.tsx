@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Flag, Pause, Play, X } from "lucide-react";
 import { bridge } from "../bridge";
+import { MinecraftDiagnostics } from "./MinecraftDiagnostics";
 import { gameGoalConfigSchema } from "../shared/game-goals";
 import type { MinecraftSnapshot } from "../shared/minecraft";
 
@@ -115,6 +116,7 @@ export function GameGoals({ data }: { data?: MinecraftSnapshot }) {
                       {g.history.map((h, i) => (
                         <li key={i}>
                           <code>{h.tool}</code> · {h.outcome}
+                          <MinecraftDiagnostics entries={h.diagnostics} />
                         </li>
                       ))}
                     </ol>
@@ -232,7 +234,7 @@ export function GameGoals({ data }: { data?: MinecraftSnapshot }) {
                   ["maxSteps", "Maximum steps", 1, 64],
                   ["maxRequests", "Maximum planning requests", 1, 100],
                   ["maxMinutes", "Goal time budget (minutes)", 1, 120],
-                  ["stepSeconds", "Action timeout (seconds)", 10, 300],
+                  ["stepSeconds", "No-progress timeout (seconds)", 10, 300],
                   ["maxCost", "Reported cost budget (USD)", 0, 50],
                   [
                     "reactionCooldownSeconds",
@@ -275,6 +277,11 @@ export function GameGoals({ data }: { data?: MinecraftSnapshot }) {
                 />
               </label>
             ))}
+            <p>
+              The no-progress timer resets on observed travel or completed
+              action units, not heartbeats or status text. The overall goal time
+              budget and any configured worker job limit remain hard deadlines.
+            </p>
             <p>
               Cost is provider-reported, not a guaranteed billing cap. Request,
               step and time limits apply even when cost is unavailable. Saving

@@ -575,6 +575,31 @@ describe("Minecraft persistence and character scoping", () => {
     };
     publish(state);
     plugin.saveLandmark("Our base");
+    state.job = {
+      id: "diagnostic-job",
+      kind: "craft",
+      status: "running",
+      detail: "Finding a table",
+      progress: 0,
+      total: 0,
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      worldId: store.data.minecraft.config.worldId,
+      characterId: store.characterId,
+    };
+    publish(state);
+    state.job.diagnostics = [
+      {
+        position: { x: 2, y: 64, z: 0 },
+        startedAt: new Date().toISOString(),
+        elapsedMs: 5000,
+        outcome: "search_timeout",
+      },
+    ];
+    publish(state); // Neither status nor completed count changed.
+    expect(new Store(dir).data.minecraft.jobs[0].diagnostics?.[0].outcome).toBe(
+      "search_timeout",
+    );
     expect(plugin.context()).toContain("Our base");
     store.update((d) => {
       d.minecraft.config.worldId = "different-world";

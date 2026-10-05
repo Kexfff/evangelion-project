@@ -199,6 +199,7 @@ function fixture() {
     }),
     area: vi.fn(),
     progress: vi.fn(),
+    diagnostic: vi.fn(),
     until: vi.fn(async (test, signal) => {
       signal.throwIfAborted();
       if (!test())
@@ -531,7 +532,7 @@ describe("Minecraft everyday gameplay", () => {
     });
     await expect(
       h.actions.call("craft_item", { item: "oak_planks", count: 1 }),
-    ).rejects.toThrow("No reachable crafting table");
+    ).rejects.toThrow("No usable table approach");
     expect(h.bot.craft).not.toHaveBeenCalled();
     const failed = tableCraftFixture();
     failed.bot.craft.mockRejectedValue(new Error("server failure"));
@@ -549,6 +550,58 @@ describe("Minecraft everyday gameplay", () => {
       h.actions.call("craft_item", { item: "oak_planks", count: 1 }),
     ).rejects.toThrow();
     expect(h.bot.craft).not.toHaveBeenCalled();
+    expect(
+      vi.mocked(h.host.diagnostic).mock.calls.map(([d]) => d.outcome),
+    ).toEqual(["approaching"]);
+  });
+  it("retains all three table coordinates and distinguishes path failure, search timeout and failed arrival", async () => {
+    const h = tableCraftFixture();
+    const positions = [
+      new Vec3(3, 64, 0),
+      new Vec3(4, 64, 0),
+      new Vec3(5, 64, 0),
+    ];
+    h.bot.findBlocks.mockReturnValue(positions);
+    h.bot.blockAt.mockImplementation((p: Vec3) => ({
+      ...h.table,
+      position: p,
+    }));
+    for (const name of ["NoPath", "Timeout", "InteractionBlocked"])
+      vi.mocked(h.host.approachBlock).mockRejectedValueOnce(
+        Object.assign(new Error("untrusted server content"), { name }),
+      );
+    await expect(
+      h.actions.call("craft_item", { item: "oak_planks", count: 1 }),
+    ).rejects.toThrow("3 checked");
+    const entries = vi
+      .mocked(h.host.diagnostic)
+      .mock.calls.map(([d]) => d)
+      .filter((d) => d.outcome !== "approaching");
+    expect(entries.map((d) => d.outcome)).toEqual([
+      "no_path",
+      "search_timeout",
+      "interaction_blocked",
+    ]);
+    expect(entries.map((d) => d.position.x)).toEqual([3, 4, 5]);
+    expect(entries.every((d) => d.elapsedMs >= 0)).toBe(true);
+    expect(JSON.stringify(entries)).not.toContain("untrusted");
+    expect(h.bot.craft).not.toHaveBeenCalled();
+  });
+  it("preserves an earlier table failure when a later table succeeds", async () => {
+    const h = tableCraftFixture();
+    h.bot.findBlocks.mockReturnValue([new Vec3(3, 64, 0), new Vec3(4, 64, 0)]);
+    h.bot.blockAt.mockImplementation((p: Vec3) => ({
+      ...h.table,
+      position: p,
+    }));
+    vi.mocked(h.host.approachBlock).mockRejectedValueOnce(
+      Object.assign(new Error("Timeout"), { name: "Timeout" }),
+    );
+    await h.actions.call("craft_item", { item: "oak_planks", count: 1 });
+    expect(
+      vi.mocked(h.host.diagnostic).mock.calls.map(([d]) => d.outcome),
+    ).toEqual(["approaching", "search_timeout", "approaching", "reached"]);
+    expect(h.bot.craft).toHaveBeenCalledOnce();
   });
   it("inspects/deposits/withdraws using the active window's inventory and closes it", async () => {
     const h = fixture();

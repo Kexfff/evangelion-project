@@ -119,6 +119,22 @@ test("Minecraft jobs, stop control and world landmarks stay separate from chat",
               status: "succeeded",
               detail: "Crafted oak_planks",
               result: { operations: 2, outputGain: 8 },
+              lastProgressAt: "2026-10-05T12:00:10Z",
+              progressDetail: "Crafted 2/2 operations.",
+              diagnostics: [
+                {
+                  position: { x: 3, y: 64, z: 0 },
+                  startedAt: "2026-10-05T12:00:00Z",
+                  elapsedMs: 5000,
+                  outcome: "search_timeout",
+                },
+                {
+                  position: { x: 5, y: 64, z: 0 },
+                  startedAt: "2026-10-05T12:00:05Z",
+                  elapsedMs: 2500,
+                  outcome: "reached",
+                },
+              ],
             },
           ],
           landmarks: [] as any[],
@@ -210,6 +226,22 @@ test("Minecraft jobs, stop control and world landmarks stay separate from chat",
     .getByRole("button", { name: "Plugins & MCP", exact: true })
     .click();
   await expect(page.getByText("follow · running")).toBeVisible();
+  await page
+    .getByText("Crafting-table approaches · 2", { exact: true })
+    .click();
+  await expect(page.locator(".minecraft-diagnostics")).toContainText(
+    "(3, 64, 0)",
+  );
+  await expect(page.locator(".minecraft-diagnostics")).toContainText(
+    "Path search timed out",
+  );
+  await expect(page.locator(".minecraft-diagnostics")).toContainText(
+    "Reached within range and line of sight",
+  );
+  await expect(page.locator(".minecraft-diagnostics")).toContainText("5.0s");
+  await expect(
+    page.getByText(/Last observed progress: Crafted 2\/2 operations/),
+  ).toBeVisible();
   await page.getByText("Action result", { exact: true }).click();
   await expect(page.locator(".minecraft-jobs pre")).toContainText(
     '"outputGain": 8',

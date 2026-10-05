@@ -1237,6 +1237,15 @@ nav button.active:before {
   width: 100%;
   resize: vertical;
 }
+.minecraft-diagnostics li {
+  display: grid;
+  gap: 5px;
+  overflow-wrap: anywhere;
+}
+.minecraft-diagnostics p {
+  color: #a5a3b5;
+  line-height: 1.6;
+}
 .game-goals > p {
   color: #b2a5be;
   font-size: 12px;

@@ -64,6 +64,55 @@ function fixture(door = false) {
 }
 
 describe("block interaction navigation with real 26.1 collision/raycast and A*", () => {
+  it("publishes navigation progress only for actual travel and stops tracking on cancellation", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const f = fixture();
+    let release!: () => void;
+    Object.assign(f.bot, { clearControlStates: vi.fn(), stopDigging: vi.fn() });
+    Object.assign(f.bot.pathfinder, {
+      setMovements: vi.fn(),
+      setGoal: vi.fn(),
+      goto: vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            release = resolve;
+          }),
+      ),
+    });
+    const engine = new MinecraftEngine(
+      minecraftConfigSchema.parse({}),
+      f.bot,
+      () => {},
+    );
+    try {
+      engine.ready();
+      await engine.call("move_to", { x: 10, y: 64, z: 0 });
+      await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+      const started = engine.job!.lastProgressAt;
+      vi.setSystemTime(Date.now() + 60000);
+      engine.tick();
+      expect(engine.job!.lastProgressAt).toBe(started);
+      f.bot.entity.position = new Vec3(1.5, 64, 0.5);
+      engine.tick();
+      const moved = engine.job!.lastProgressAt;
+      expect(moved).not.toBe(started);
+      expect(engine.job!.progressDetail).toContain("Travelled");
+      vi.setSystemTime(Date.now() + 60000);
+      for (const x of [0.5, 1.5, 0.5, 1.5]) {
+        f.bot.entity.position = new Vec3(x, 64, 0.5);
+        engine.tick();
+      }
+      expect(engine.job!.lastProgressAt).toBe(moved);
+      engine.stop();
+      f.bot.entity.position = new Vec3(5.5, 64, 0.5);
+      engine.tick();
+      expect(engine.job!.lastProgressAt).toBe(moved);
+    } finally {
+      release?.();
+      engine.dispose();
+      vi.useRealTimers();
+    }
+  });
   it.each([true, false])(
     "engine crafts only after an actually completed visible approach (arrived=%s)",
     async (arrived) => {
@@ -115,8 +164,15 @@ describe("block interaction navigation with real 26.1 collision/raycast and A*",
           expect(engine.job?.status).toBe(arrived ? "succeeded" : "failed"),
         );
         expect(f.bot.craft).toHaveBeenCalledTimes(arrived ? 1 : 0);
+        if (arrived)
+          expect(engine.job?.progressDetail).toContain(
+            "Crafted 1/1 operations",
+          );
         if (!arrived)
-          expect(engine.job?.detail).toContain("No reachable crafting table");
+          expect(engine.job?.detail).toContain("No usable table approach");
+        expect(engine.job?.diagnostics?.[0].outcome).toBe(
+          arrived ? "reached" : "interaction_blocked",
+        );
       } finally {
         engine.dispose();
       }

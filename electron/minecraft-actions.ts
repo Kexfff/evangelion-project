@@ -6,6 +6,10 @@ import { z } from "zod";
 import { pointSchema, type MinecraftJob } from "../src/shared/minecraft";
 import { minecraftGameplayTools } from "../src/shared/minecraft-gameplay";
 import { MinecraftActionError as ActionError } from "./minecraft-action-error";
+import {
+  approachLabels,
+  type ApproachDiagnostic,
+} from "../src/shared/minecraft-diagnostics";
 
 type Result = Record<string, unknown>;
 export interface GameplayHost {
@@ -24,6 +28,7 @@ export interface GameplayHost {
     milliseconds?: number,
   ): Promise<void>;
   progress(detail: string, count?: number): void;
+  diagnostic(entry: ApproachDiagnostic): void;
 }
 const itemName = z.string().regex(/^[a-z0-9_]{1,100}$/);
 const blockPoint = pointSchema.extend({
@@ -758,30 +763,68 @@ export class MinecraftActions {
               throw new ActionError(
                 "No loaded crafting table within 32 blocks. Find or place one, then craft again; table coordinates must identify the table block, not the base or floor.",
               );
+            const attempts: ApproachDiagnostic[] = [];
             for (const position of candidates) {
               this.host.check(signal);
-              if (this.bot.blockAt(position)?.name !== "crafting_table")
+              const startedAt = new Date().toISOString();
+              const report = (outcome: ApproachDiagnostic["outcome"]) => {
+                const entry = {
+                  position: { x: position.x, y: position.y, z: position.z },
+                  startedAt,
+                  elapsedMs: Math.max(0, Date.now() - Date.parse(startedAt)),
+                  outcome,
+                };
+                this.host.diagnostic(entry);
+                if (outcome !== "approaching") attempts.push(entry);
+              };
+              const current = this.bot.blockAt(position);
+              if (current?.name !== "crafting_table") {
+                report(current ? "target_changed" : "unloaded");
                 continue;
+              }
               try {
-                this.host.progress("Walking to an accessible crafting table.");
+                report("approaching");
+                this.host.progress(
+                  `Approaching crafting table at (${position.x}, ${position.y}, ${position.z}).`,
+                );
                 const reached = await this.approachBlock(position, signal);
                 if (reached.name === "crafting_table") {
+                  report("reached");
                   table = reached;
                   break;
                 }
+                report("target_changed");
               } catch (error) {
+                // The engine finalizes diagnostics on Stop. A cancelled action
+                // must not publish into a replacement job's diagnostics.
+                signal.throwIfAborted();
+                const outcome =
+                  error instanceof Error
+                    ? error.name === "NoPath"
+                      ? "no_path"
+                      : error.name === "Timeout"
+                        ? "search_timeout"
+                        : error.name === "InteractionBlocked"
+                          ? "interaction_blocked"
+                          : undefined
+                    : undefined;
+                report(outcome ?? "failed");
                 this.host.check(signal);
                 // Only route failures may try another station, before any crafting I/O.
-                if (
-                  !(error instanceof Error) ||
-                  !["NoPath", "Timeout"].includes(error.name)
-                )
-                  throw error;
+                if (!outcome) throw error;
               }
             }
             if (!table)
               throw new ActionError(
-                "No reachable crafting table remains. Check an entrance or place a table on accessible ground; nothing was crafted.",
+                `No usable table approach (${attempts.length} checked); nothing crafted. ` +
+                  attempts
+                    .slice(0, 2)
+                    .map(
+                      (d) =>
+                        `(${d.position.x},${d.position.y},${d.position.z}): ${approachLabels[d.outcome]}.`,
+                    )
+                    .join(" ") +
+                  " See Crafting-table approaches for all attempts.",
               );
           }
           const before = this.inventoryCount(a.item);

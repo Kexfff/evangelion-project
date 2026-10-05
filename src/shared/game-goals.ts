@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { approachDiagnosticSchema } from "./minecraft-diagnostics";
 
 const point = z
   .object({
@@ -90,6 +91,7 @@ export const gameGoalSchema = z.object({
         tool: z.string().max(128),
         args: z.record(z.string(), z.unknown()),
         outcome: z.string().max(600),
+        diagnostics: z.array(approachDiagnosticSchema).max(9).optional(),
       }),
     )
     .max(64)

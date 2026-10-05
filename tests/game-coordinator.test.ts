@@ -11,6 +11,7 @@ const cleanups: (() => void)[] = [];
 afterEach(() => {
   cleanups.splice(0).forEach((f) => f());
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 function fixture() {
   const dir = mkdtempSync(path.join(tmpdir(), "eva-goals-")),
@@ -603,9 +604,96 @@ describe("Minecraft goal coordinator", () => {
     await f.game.tick();
     expect(f.goal()).toMatchObject({
       status: "failed",
-      detail: "Step time limit reached; effects may be partial.",
+      detail: expect.stringContaining(
+        "craft_item stalled: no observed progress for 100s (limit 90s",
+      ),
     });
     expect(f.minecraft.stopAction).toHaveBeenCalledWith(false);
+  });
+  it("allows a long action making progress, then stops after 90 seconds without progress", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const f = fixture();
+    f.submit();
+    f.step();
+    await f.game.tick();
+    for (let i = 1; i <= 4; i++) {
+      vi.setSystemTime(Date.now() + 60000);
+      f.live.job.lastProgressAt = new Date().toISOString();
+      f.live.job.progressDetail = `Crafted ${i} operations.`;
+      f.live.job.progress = i;
+      await f.game.tick();
+      expect(f.goal().status).toBe("running");
+    }
+    vi.setSystemTime(Date.now() + 91000);
+    f.live.job.updatedAt = new Date().toISOString();
+    f.live.job.detail = "Heartbeat/status changed, not progress";
+    await f.game.tick();
+    expect(f.goal().detail).toContain("no observed progress for 91s");
+    expect(f.goal().detail).toContain("4 action units completed");
+    expect(f.goal().detail).toContain("Crafted 4 operations");
+    expect(f.goal().history.at(-1)?.outcome).toBe(f.goal().detail);
+  });
+  it("keeps the overall goal deadline even when action progress is fresh", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const f = fixture();
+    f.store.update((d) => {
+      d.minecraft.goalConfig.maxMinutes = 1;
+    });
+    f.submit();
+    f.step();
+    await f.game.tick();
+    vi.setSystemTime(Date.now() + 61000);
+    f.live.job.lastProgressAt = new Date().toISOString();
+    await f.game.tick();
+    expect(f.goal().status).toBe("failed");
+    expect(f.goal().detail).toContain("Goal time budget reached");
+  });
+  it("does not trust invalid or future progress timestamps to extend a stalled action", async () => {
+    for (const lastProgressAt of [
+      "bad-date",
+      new Date(Date.now() + 86400000).toISOString(),
+    ]) {
+      const f = fixture();
+      f.submit();
+      f.step();
+      await f.game.tick();
+      f.live.job.startedAt = new Date(Date.now() - 100000).toISOString();
+      f.live.job.lastProgressAt = lastProgressAt;
+      await f.game.tick();
+      expect(f.goal().status).toBe("failed");
+    }
+  });
+  it("saves per-table reasons in failed goal history, including an interrupted approach", async () => {
+    const f = fixture();
+    f.submit();
+    f.step();
+    await f.game.tick();
+    f.live.job.diagnostics = [
+      {
+        position: { x: 1, y: 64, z: 2 },
+        startedAt: new Date().toISOString(),
+        elapsedMs: 5000,
+        outcome: "search_timeout",
+      },
+      {
+        position: { x: 4, y: 64, z: 2 },
+        startedAt: new Date().toISOString(),
+        elapsedMs: 0,
+        outcome: "approaching",
+      },
+    ];
+    f.live.job.startedAt = new Date(Date.now() - 100000).toISOString();
+    await f.game.tick();
+    expect(
+      f
+        .goal()
+        .history.at(-1)
+        ?.diagnostics?.map((d) => d.outcome),
+    ).toEqual(["search_timeout", "interrupted"]);
+    expect(f.goal().history.at(-1)?.args).toEqual({
+      item: "stone_pickaxe",
+      count: 1,
+    });
   });
   it("passes the Telegram source and active character through every MCP step", async () => {
     const f = fixture();

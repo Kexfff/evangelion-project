@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { ToolPermissions } from "./ToolPermissions";
 import { GameGoals } from "./GameGoals";
+import { MinecraftDiagnostics } from "./MinecraftDiagnostics";
 import { GameAutonomy } from "./GameAutonomy";
 import { bridge } from "../bridge";
 import {
@@ -539,6 +540,14 @@ export function MinecraftSettings({
                   </>
                 )}
                 <p>{j.detail}</p>
+                {j.lastProgressAt && (
+                  <small>
+                    Last observed progress:{" "}
+                    {j.progressDetail ?? "Action progress"} ·{" "}
+                    {new Date(j.lastProgressAt).toLocaleTimeString()}
+                  </small>
+                )}
+                <MinecraftDiagnostics entries={j.diagnostics} />
                 {j.result && (
                   <details>
                     <summary>Action result</summary>
