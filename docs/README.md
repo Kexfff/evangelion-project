@@ -5,7 +5,7 @@
 ## Start here
 
 - [Getting started](getting-started.md) — install, run, package, and understand browser preview mode.
-- [Providers and voice](providers-and-voice.md) — first conversation, API contracts, microphone controls, speech delivery, and automatic fact extraction.
+- [Providers and voice](providers-and-voice.md) — first conversation, API contracts, microphone controls, press-to-talk, speech delivery, and automatic fact extraction.
 - [Image messages](image-messages.md) — attachments, vision models, limits, and privacy.
 
 ## Make it yours

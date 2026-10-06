@@ -1,6 +1,13 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { Bridge, RuntimeEvent } from "../src/shared/schema";
 const api: Bridge = {
+  pttStatus: () => ipcRenderer.invoke("eva:ptt:status"),
+  pttTest: (testing) => ipcRenderer.invoke("eva:ptt:test", testing),
+  pttRetry: () => ipcRenderer.invoke("eva:ptt:retry"),
+  pttSettled: () => ipcRenderer.invoke("eva:ptt:settled"),
+  microphoneLease: (id, acquire) =>
+    ipcRenderer.invoke("eva:microphone:lease", id, acquire),
+  voiceActivity: (phase) => ipcRenderer.invoke("eva:voice:activity", phase),
   configureGameAutonomy: (config) =>
     ipcRenderer.invoke("eva:game:autonomy:configure", config),
   pauseGameAutonomy: (paused) =>

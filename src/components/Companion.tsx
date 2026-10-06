@@ -350,7 +350,7 @@ export function Companion() {
             aria-label="Message Eva"
             placeholder={
               app.micOn
-                ? settings.voice.vadEnabled
+                ? settings.voice.vadEnabled && !settings.voice.ptt.enabled
                   ? "Hands-free listening…"
                   : "Listening… tap mic to finish"
                 : `Talk to ${character.name}…`
@@ -358,19 +358,22 @@ export function Companion() {
             value={text}
             maxLength={8000}
             onChange={(e) => setText(e.target.value)}
-            disabled={app.micOn && !settings.voice.vadEnabled}
+            disabled={
+              app.micOn &&
+              (!settings.voice.vadEnabled || settings.voice.ptt.enabled)
+            }
           />
           <button
             type="button"
             aria-label={
               app.micOn
-                ? settings.voice.vadEnabled
+                ? settings.voice.vadEnabled && !settings.voice.ptt.enabled
                   ? "Stop hands-free listening"
                   : "Finish recording"
                 : "Start recording"
             }
             title={
-              settings.voice.vadEnabled
+              settings.voice.vadEnabled && !settings.voice.ptt.enabled
                 ? "Toggle hands-free listening"
                 : "Click to record; click again to send"
             }
@@ -410,9 +413,13 @@ export function Companion() {
         )}
         <div className="companion-footnote">
           {app.micOn
-            ? settings.voice.vadEnabled
-              ? "Hands-free mic on · pause to send · click mic to stop"
-              : "Microphone on · up to 60 seconds"
+            ? settings.voice.ptt.enabled
+              ? settings.voice.ptt.mode === "hold"
+                ? "Listening · release your key to send · Esc cancels"
+                : "Listening · press your key again to send · Esc cancels"
+              : settings.voice.vadEnabled
+                ? "Hands-free mic on · pause to send · click mic to stop"
+                : "Microphone on · up to 60 seconds"
             : "A little more present, every conversation."}
         </div>
       </div>

@@ -5,6 +5,7 @@ import type { ImageAttachment } from "./shared/images";
 import { createSpeechBuffer } from "./audio/sentences";
 import { playSpeech } from "./audio/playback";
 import { MicrophoneCapture } from "./audio/microphone";
+import { PttEdges, pttKey, pttMatches, type PttAction } from "./shared/ptt";
 
 export function useCompanion() {
   const [state, setState] = useState<Snapshot>();
@@ -19,6 +20,9 @@ export function useCompanion() {
   const active = useRef(true);
   const microphone = useRef<MicrophoneCapture | null>(null);
   const capturing = useRef(false);
+  const keyboardCapture = useRef(false);
+  const localKeys = useRef<PttEdges | null>(null);
+  const shortcutTest = useRef(false);
   const transcribing = useRef(false);
   const generating = useRef(false);
   const speaking = useRef(false);
@@ -59,6 +63,17 @@ export function useCompanion() {
   function restingPhase() {
     if (!active.current) return;
     heartbeat();
+    void bridge
+      .voiceActivity(
+        keyboardCapture.current
+          ? transcribing.current
+            ? "transcribing"
+            : microphone.current
+              ? "listening"
+              : "idle"
+          : "idle",
+      )
+      .catch(() => {});
     setPhase(
       capturing.current
         ? "listening"
@@ -79,6 +94,9 @@ export function useCompanion() {
     capturing.current = false;
     setMicOn(false);
     setMicLevel(0);
+    keyboardCapture.current = false;
+    localKeys.current?.settled();
+    void bridge.pttSettled().catch(() => {});
   }
   function interrupt(closeMic = false) {
     ++generation.current;
@@ -145,16 +163,30 @@ export function useCompanion() {
     const timer = setInterval(heartbeat, 2000);
     document.addEventListener("visibilitychange", heartbeat);
     void bridge
+      .pttStatus()
+      .then((status) => {
+        shortcutTest.current = status.testing;
+      })
+      .catch(() => {});
+    void bridge
       .snapshot()
       .then((s) => {
         if (active.current) {
           latest.current = s;
           setState(s);
+          localKeys.current = new PttEdges(
+            s.settings.voice.ptt.mode,
+            pttAction,
+          );
         }
       })
       .catch(report);
     const off = bridge.onEvent((event) => {
-      if (event.type === "autonomous-start") {
+      if (event.type === "ptt-action") {
+        pttAction(event.action);
+      } else if (event.type === "ptt-status") {
+        shortcutTest.current = event.status.testing;
+      } else if (event.type === "autonomous-start") {
         if (
           draftBusy.current ||
           microphone.current ||
@@ -220,8 +252,13 @@ export function useCompanion() {
             event.state.settings.autonomy.paused);
         latest.current = event.state;
         setState(event.state);
-        if (changedSession || changedVoice || stoppedAutonomy)
+        if (changedSession || changedVoice || stoppedAutonomy) {
           void interrupt(true);
+          localKeys.current = new PttEdges(
+            event.state.settings.voice.ptt.mode,
+            pttAction,
+          );
+        }
         if (!event.state.busy) setPartial("");
       } else if (event.type === "delta" && accepting.current) {
         if (event.autonomousId && event.autonomousId !== autonomous.current)
@@ -237,6 +274,46 @@ export function useCompanion() {
             enqueue(chunk, generation.current);
       } else if (event.type === "warning") report(event.message);
     });
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && (microphone.current || transcribing.current)) {
+        void interrupt(true);
+        return;
+      }
+      const c = latest.current?.settings.voice.ptt;
+      if (
+        !c?.enabled ||
+        c.scope !== "app" ||
+        shortcutTest.current ||
+        e.repeat ||
+        e.isComposing ||
+        (e.target instanceof Element &&
+          e.target.closest("input,textarea,select,[contenteditable=true]"))
+      )
+        return;
+      if (pttMatches(e, c)) {
+        e.preventDefault();
+        localKeys.current?.press();
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      const c = latest.current?.settings.voice.ptt;
+      if (c?.enabled && c.scope === "app" && pttKey(e) === c.key)
+        localKeys.current?.release();
+    };
+    const onBlur = () => {
+      const c = latest.current?.settings.voice.ptt;
+      if (c?.enabled && c.scope === "app") {
+        if (keyboardCapture.current) localKeys.current?.cancel();
+        else localKeys.current = new PttEdges(c.mode, pttAction);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
+    const hidden = () => {
+      if (document.hidden) onBlur();
+    };
+    document.addEventListener("visibilitychange", hidden);
     return () => {
       active.current = false;
       clearInterval(timer);
@@ -247,11 +324,22 @@ export function useCompanion() {
       accepting.current = false;
       audio.current?.abort();
       microphone.current?.close();
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+      document.removeEventListener("visibilitychange", hidden);
+      void bridge.voiceActivity("idle").catch(() => {});
       void bridge.cancel();
     };
   }, []);
   async function send(text: string, images: ImageAttachment[] = []) {
     if ((!text.trim() && !images.length) || !latest.current) return;
+    if (
+      microphone.current &&
+      (keyboardCapture.current || !latest.current.settings.voice.vadEnabled)
+    )
+      closeMicrophone();
+    keyboardCapture.current = false;
     const interrupted = interrupt();
     const token = generation.current;
     await interrupted;
@@ -303,77 +391,153 @@ export function useCompanion() {
     enqueue(text, token);
     await queue.current;
   }
-  async function toggleRecording() {
-    if (microphone.current) {
-      if (latest.current?.settings.voice.vadEnabled) {
-        await interrupt(true);
-        return;
-      }
-      const mic = microphone.current;
-      mic.finish();
-      mic.close();
-      microphone.current = null;
-      capturing.current = false;
-      setMicOn(false);
-      restingPhase();
+  function pttAction(action: PttAction) {
+    if (action === "cancel") {
+      void interrupt(true);
       return;
     }
+    if (!latest.current?.settings.voice.ptt.enabled || shortcutTest.current)
+      return;
+    if (action === "start") void startRecording(true);
+    else if (keyboardCapture.current) void finishRecording();
+  }
+  async function finishRecording() {
+    const mic = microphone.current;
+    if (!mic) return;
+    await mic.finishAndSend();
+    if (microphone.current === mic) closeMicrophone();
+    restingPhase();
+  }
+  async function toggleRecording() {
+    if (microphone.current) {
+      if (
+        latest.current?.settings.voice.vadEnabled &&
+        !latest.current.settings.voice.ptt.enabled
+      )
+        await interrupt(true);
+      else await finishRecording();
+    } else
+      await startRecording(latest.current?.settings.voice.ptt.enabled ?? false);
+  }
+  async function startRecording(ptt = false) {
+    if (microphone.current) return;
     const settings = latest.current?.settings;
+    const reject = (message: string) => {
+      report(new Error(message));
+      localKeys.current?.settled();
+      void bridge.pttSettled().catch(() => {});
+    };
     if (!settings?.providers.asr.enabled) {
-      report(
-        new Error("Enable speech recognition in Settings → Providers first."),
+      reject("Enable speech recognition in Settings → Providers first.");
+      return;
+    }
+    if (transcribing.current || (ptt && draftBusy.current)) {
+      reject(
+        "Finish the current message or transcription before recording another.",
       );
       return;
     }
-    await interrupt();
+    if (
+      ptt &&
+      (generating.current || speaking.current || latest.current?.busy) &&
+      !settings.voice.bargeIn
+    ) {
+      reject(
+        "Eva is replying. Wait, or enable ‘Interrupt when I speak’ in Voice & audio.",
+      );
+      return;
+    }
+    const interrupted = interrupt();
+    const token = generation.current;
     setError("");
-    const mic = new MicrophoneCapture(settings.voice, {
-      level: (n) => {
-        if (active.current) setMicLevel(n);
-      },
-      acceptsSpeech: () =>
-        !transcribing.current &&
-        ((!generating.current && !speaking.current) || settings.voice.bargeIn),
-      start: () => {
-        capturing.current = true;
-        void interrupt();
-        restingPhase();
-      },
-      utterance: (wav) => {
-        capturing.current = false;
-        transcribing.current = true;
-        restingPhase();
-        if (!settings.voice.vadEnabled) {
-          microphone.current = null;
-          setMicOn(false);
-        }
-        const token = generation.current;
-        void (async () => {
-          try {
-            await interrupting.current;
-            if (token !== generation.current) return;
-            const text = await bridge.transcribe(wav, "audio/wav");
-            if (token !== generation.current) return;
-            transcribing.current = false;
-            await send(text);
-          } catch (err) {
-            if (token === generation.current) {
-              report(err);
-              transcribing.current = false;
-              restingPhase();
-            }
+    const voice = {
+      ...settings.voice,
+      vadEnabled: !ptt && settings.voice.vadEnabled,
+    };
+    keyboardCapture.current = ptt;
+    const mic = new MicrophoneCapture(
+      voice,
+      {
+        level: (n) => {
+          if (active.current && microphone.current === mic) setMicLevel(n);
+        },
+        acceptsSpeech: () =>
+          !transcribing.current &&
+          ((!generating.current && !speaking.current) ||
+            settings.voice.bargeIn),
+        start: () => {
+          if (microphone.current !== mic || !active.current) return;
+          capturing.current = true;
+          if (voice.vadEnabled) void interrupt();
+          restingPhase();
+        },
+        utterance: (wav) => {
+          if (microphone.current !== mic || !active.current) return;
+          capturing.current = false;
+          transcribing.current = true;
+          restingPhase();
+          if (!voice.vadEnabled) {
+            microphone.current = null;
+            setMicOn(false);
           }
-        })();
+          const token = generation.current;
+          void (async () => {
+            try {
+              await interrupting.current;
+              if (token !== generation.current) return;
+              const text = await bridge.transcribe(wav, "audio/wav");
+              if (token !== generation.current || !active.current) return;
+              transcribing.current = false;
+              if (text.trim()) await send(text);
+              else {
+                keyboardCapture.current = false;
+                restingPhase();
+              }
+            } catch (err) {
+              if (token === generation.current) {
+                report(err);
+                transcribing.current = false;
+                keyboardCapture.current = false;
+                restingPhase();
+              }
+            }
+          })();
+        },
+        error: (err) => {
+          if (microphone.current !== mic) return;
+          report(err);
+          closeMicrophone();
+          restingPhase();
+        },
+        ended: () => {
+          if (microphone.current === mic) {
+            microphone.current = null;
+            capturing.current = false;
+            setMicOn(false);
+            keyboardCapture.current = false;
+          }
+          if (ptt) {
+            localKeys.current?.settled();
+            void bridge.pttSettled().catch(() => {});
+          }
+          if (active.current) restingPhase();
+        },
       },
-      error: (err) => {
-        report(err);
-        closeMicrophone();
-        restingPhase();
-      },
-    });
+      ptt,
+    );
     microphone.current = mic;
     setMicOn(true);
+    restingPhase();
     try {
+      await interrupted;
+      if (
+        microphone.current !== mic ||
+        token !== generation.current ||
+        !active.current
+      ) {
+        mic.close();
+        return;
+      }
       await mic.open();
       if (microphone.current === mic) restingPhase();
     } catch (err) {

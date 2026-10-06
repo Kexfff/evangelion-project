@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { pttConfigSchema, type PttStatus, type PttAction } from "./ptt";
 import {
   openRouterSelectionsSchema,
   type OpenRouterEndpoint,
@@ -68,6 +69,7 @@ export const settingsSchema = z
       embedding: providerSchema.default(embeddingDefaults),
     }),
     voice: z.object({
+      ptt: pttConfigSchema.default(() => pttConfigSchema.parse({})),
       autoSpeak: z.boolean(),
       speed: z.number().min(0.5).max(2),
       volume: z.number().min(0).max(1),
@@ -173,6 +175,8 @@ export interface Snapshot {
   minecraft?: import("./minecraft").MinecraftSnapshot;
 }
 export type RuntimeEvent =
+  | { type: "ptt-action"; action: PttAction }
+  | { type: "ptt-status"; status: PttStatus }
   | { type: "autonomous-start"; id: string }
   | { type: "autonomous-end"; id: string; text: string }
   | { type: "autonomous-cancel" }
@@ -181,6 +185,12 @@ export type RuntimeEvent =
   | { type: "phase"; phase: Phase }
   | { type: "warning"; message: string };
 export interface Bridge {
+  pttStatus(): Promise<PttStatus>;
+  pttTest(testing: boolean): Promise<void>;
+  pttRetry(): Promise<void>;
+  pttSettled(): Promise<void>;
+  microphoneLease(id: string, acquire: boolean): Promise<boolean>;
+  voiceActivity(phase: "idle" | "listening" | "transcribing"): Promise<void>;
   configureGameAutonomy(
     config: import("./game-autonomy").GameAutonomyConfig,
   ): Promise<void>;
@@ -300,6 +310,7 @@ export const defaultSettings: Settings = {
     embedding: embeddingDefaults,
   },
   voice: {
+    ptt: pttConfigSchema.parse({}),
     autoSpeak: true,
     speed: 1,
     volume: 0.8,

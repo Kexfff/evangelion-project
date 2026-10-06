@@ -1,4 +1,5 @@
 import type { Settings } from "../shared/schema";
+import { bridge } from "../bridge";
 import { encodeWav, rms, VoiceActivityDetector } from "./vad";
 
 export class MicrophoneCapture {
@@ -10,6 +11,13 @@ export class MicrophoneCapture {
   private preRoll: Float32Array[] = [];
   private lengthMs = 0;
   private inSpeech = false;
+  private lease = crypto.randomUUID();
+  private leased = false;
+  private ready = false;
+  private draining?: Promise<void>;
+  private drained?: () => void;
+  private deadline?: ReturnType<typeof setTimeout>;
+  private voicedMs = 0;
   private vad: VoiceActivityDetector;
   constructor(
     private voice: Settings["voice"],
@@ -19,7 +27,9 @@ export class MicrophoneCapture {
       utterance(wav: ArrayBuffer): void;
       error(error: Error): void;
       acceptsSpeech(): boolean;
+      ended?(): void;
     },
+    private pressToTalk = false,
   ) {
     this.vad = new VoiceActivityDetector(
       voice.vadThreshold,
@@ -29,6 +39,26 @@ export class MicrophoneCapture {
   }
   async open() {
     try {
+      if (!this.voice.vadEnabled)
+        this.deadline = setTimeout(() => {
+          if (!this.closed) {
+            this.callbacks.error(
+              new Error(
+                "Recording cancelled after 60 seconds. Release the key and try a shorter message.",
+              ),
+            );
+            this.close();
+          }
+        }, 60000);
+      this.leased = await bridge.microphoneLease(this.lease, true);
+      if (!this.leased)
+        throw new Error(
+          "The microphone is already in use by a recording or microphone test.",
+        );
+      if (this.closed) {
+        this.releaseLease();
+        return;
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           deviceId: this.voice.inputDeviceId
@@ -70,13 +100,22 @@ export class MicrophoneCapture {
       source.connect(gain);
       gain.connect(node);
       node.connect(context.destination);
-      node.port.onmessage = (event) => this.receive(event.data as Float32Array);
+      node.port.onmessage = (event) => {
+        if (event.data === "finished") this.drained?.();
+        else this.receive(event.data as Float32Array);
+      };
       await context.resume();
+      if (this.closed) return;
+      this.ready = true;
       if (!this.voice.vadEnabled) {
         this.inSpeech = true;
         this.callbacks.start();
       }
     } catch (error) {
+      if (!this.closed)
+        this.callbacks.error(
+          error instanceof Error ? error : new Error(String(error)),
+        );
       this.close();
       throw error;
     }
@@ -86,6 +125,7 @@ export class MicrophoneCapture {
     const level = rms(samples),
       ms = (samples.length / this.context.sampleRate) * 1000;
     this.callbacks.level(level);
+    if (level >= this.voice.vadThreshold) this.voicedMs += ms;
     if (!this.callbacks.acceptsSpeech()) {
       this.vad.reset();
       this.chunks = [];
@@ -119,22 +159,63 @@ export class MicrophoneCapture {
       this.chunks.push(samples);
       this.lengthMs += ms;
     }
-    if (this.lengthMs >= 60000) this.finish();
+    if (this.lengthMs >= 60000 && this.voice.vadEnabled) this.finish();
+  }
+  async finishAndSend() {
+    if (this.draining) return this.draining;
+    if (this.closed) return;
+    // Release before permission/worklet initialization: discard, never open later.
+    if (!this.ready || !this.node) {
+      this.close();
+      return;
+    }
+    this.draining = (async () => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let flushed = false;
+      await new Promise<void>((resolve) => {
+        this.drained = () => {
+          flushed = true;
+          resolve();
+        };
+        timer = setTimeout(resolve, 250);
+        this.node!.port.postMessage("finish");
+      });
+      clearTimeout(timer);
+      this.drained = undefined;
+      if (this.closed) return;
+      if (!flushed) {
+        this.callbacks.error(
+          new Error(
+            "Microphone did not finish cleanly; recording discarded. Try again.",
+          ),
+        );
+        this.close();
+        return;
+      }
+      this.finish();
+    })();
+    return this.draining;
   }
   finish() {
     if (!this.context || !this.inSpeech) return;
     const chunks = this.chunks;
+    const enoughSpeech =
+      !this.pressToTalk ||
+      (this.lengthMs >= 200 && this.voicedMs >= this.voice.vadMinSpeechMs);
     this.chunks = [];
     this.preRoll = [];
     this.inSpeech = false;
     this.lengthMs = 0;
     this.vad.reset();
-    if (chunks.length)
+    if (chunks.length && enoughSpeech)
       this.callbacks.utterance(encodeWav(chunks, this.context.sampleRate));
     if (!this.voice.vadEnabled) this.close();
   }
   close() {
+    if (this.closed) return;
     this.closed = true;
+    clearTimeout(this.deadline);
+    this.drained?.();
     if (this.node) {
       this.node.port.onmessage = null;
       this.node.disconnect();
@@ -147,5 +228,12 @@ export class MicrophoneCapture {
     this.chunks = [];
     this.preRoll = [];
     this.callbacks.level(0);
+    this.releaseLease();
+    this.callbacks.ended?.();
+  }
+  private releaseLease() {
+    if (!this.leased) return;
+    this.leased = false;
+    void bridge.microphoneLease(this.lease, false).catch(() => {});
   }
 }

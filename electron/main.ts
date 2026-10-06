@@ -17,6 +17,8 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { Store, atomicWrite } from "./store";
 import { configureTestProfile } from "./test-profile";
+import { PttService } from "./ptt-service";
+import { bindPortalShortcut } from "./ptt-portal";
 import {
   historyQuerySchema,
   conversationQuerySchema,
@@ -79,6 +81,49 @@ let runtime: CompanionRuntime;
 let store: Store;
 let vault: CredentialVault;
 let plugins: PluginHost;
+let ptt: PttService;
+let microphoneOwner: { sender: number; id: string } | undefined;
+let voiceIndicator: BrowserWindow | null = null;
+let voiceIndicatorPhase = "idle";
+function showVoiceActivity(phase: "idle" | "listening" | "transcribing") {
+  if (phase === voiceIndicatorPhase) return;
+  voiceIndicatorPhase = phase;
+  if (phase === "idle") {
+    voiceIndicator?.destroy();
+    voiceIndicator = null;
+    return;
+  }
+  if (!voiceIndicator) {
+    voiceIndicator = new BrowserWindow({
+      width: 280,
+      height: 64,
+      frame: false,
+      resizable: false,
+      focusable: false,
+      show: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      backgroundColor: "#191b24",
+      webPreferences: {
+        sandbox: true,
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    });
+    voiceIndicator.setIgnoreMouseEvents(true);
+  }
+  const indicator = voiceIndicator;
+  const label =
+    phase === "listening" ? "● Eva is listening" : "◌ Transcribing…";
+  void indicator
+    .loadURL(
+      `data:text/html;charset=utf-8,${encodeURIComponent(`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><body style="margin:12px 18px;color:#f7e3f1;background:#191b24;font:15px system-ui"><strong>${label}</strong><div style="font-size:11px;opacity:.65;margin-top:4px">Press-to-talk · maximum 60 seconds</div></body>`)}`,
+    )
+    .then(() => {
+      if (!indicator.isDestroyed()) indicator.showInactive();
+    })
+    .catch(() => {});
+}
 const providerKind = z.enum(providerKinds);
 const animations = new Set([
   "idle_loop",
@@ -114,10 +159,22 @@ function createWindow(mode: "companion" | "settings") {
       nodeIntegration: false,
       sandbox: true,
       webSecurity: true,
+      backgroundThrottling: !avatar,
     },
   });
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.webContents.on("will-navigate", (event) => event.preventDefault());
+  const releaseCapture = () => {
+    if (microphoneOwner?.sender === win.webContents.id)
+      microphoneOwner = undefined;
+    if (avatar) {
+      ptt?.cancel();
+      showVoiceActivity("idle");
+    } else if (ptt?.status.testing) ptt.test(false);
+  };
+  win.webContents.on("render-process-gone", releaseCapture);
+  win.webContents.on("did-start-loading", releaseCapture);
+  win.on("close", releaseCapture);
   if (devUrl) void win.loadURL(`${devUrl}/?window=${mode}`);
   else
     void win.loadFile(path.join(here, "../dist/index.html"), {
@@ -175,6 +232,27 @@ else {
         (kind) => vault.get(kind),
         vault.mode,
         send,
+      );
+      ptt = new PttService(
+        bindPortalShortcut,
+        (action) => {
+          if (action === "cancel") showVoiceActivity("idle");
+          if (companion && !companion.isDestroyed())
+            companion.webContents.send("eva:event", {
+              type: "ptt-action",
+              action,
+            });
+          if (
+            action === "cancel" &&
+            settingsWindow &&
+            !settingsWindow.isDestroyed()
+          )
+            settingsWindow.webContents.send("eva:event", {
+              type: "ptt-action",
+              action,
+            });
+        },
+        (status) => send({ type: "ptt-status", status }),
       );
       plugins = new PluginHost(
         runtime,
@@ -253,6 +331,55 @@ else {
           return fn(...args);
         });
       handle("snapshot", () => runtime.snapshot());
+      handle("ptt:status", () => ptt.status);
+      handle("ptt:test", (raw) => ptt.test(z.boolean().parse(raw)));
+      handle("ptt:retry", () => {
+        void ptt.configure(store.data.settings.voice.ptt, true);
+      });
+      handle("ptt:settled", () => ptt.settled());
+      ipcMain.handle("eva:microphone:lease", (event, rawId, rawAcquire) => {
+        if (
+          event.senderFrame !== event.sender.mainFrame ||
+          !trustedOrigin(event.sender.getURL()) ||
+          ![companion?.webContents, settingsWindow?.webContents].includes(
+            event.sender,
+          )
+        )
+          throw new Error("Untrusted caller");
+        const id = z.string().uuid().parse(rawId);
+        const acquire = z.boolean().parse(rawAcquire);
+        if (!acquire) {
+          if (
+            microphoneOwner?.sender === event.sender.id &&
+            microphoneOwner.id === id
+          )
+            microphoneOwner = undefined;
+          return true;
+        }
+        if (
+          microphoneOwner &&
+          (microphoneOwner.sender !== event.sender.id ||
+            microphoneOwner.id !== id)
+        )
+          return false;
+        microphoneOwner = { sender: event.sender.id, id };
+        return true;
+      });
+      ipcMain.handle("eva:voice:activity", (event, raw) => {
+        if (
+          event.sender !== companion?.webContents ||
+          event.senderFrame !== event.sender.mainFrame ||
+          !trustedOrigin(event.sender.getURL())
+        )
+          throw new Error("Companion only");
+        const phase = z.enum(["idle", "listening", "transcribing"]).parse(raw);
+        showVoiceActivity(
+          store.data.settings.voice.ptt.enabled &&
+            store.data.settings.voice.ptt.scope === "global"
+            ? phase
+            : "idle",
+        );
+      });
       handle("game:autonomy:configure", (raw) =>
         plugins.game.configureAutonomy(raw),
       );
@@ -429,6 +556,7 @@ else {
           if (runtime.snapshot().busy) await runtime.cancel();
           idle();
           const settings = settingsSchema.parse(raw);
+          ptt.cancel();
           const incoming = z
             .object({
               llm: z.string().max(2000).optional(),
@@ -444,6 +572,7 @@ else {
           store.settings(settings);
           companion?.setAlwaysOnTop(settings.window.alwaysOnTop);
           runtime.broadcast();
+          void ptt.configure(settings.voice.ptt);
         }),
       );
       handle("send", (text, images) => {
@@ -746,6 +875,7 @@ else {
         else companion?.close();
       });
       showCompanion();
+      void ptt.configure(store.data.settings.voice.ptt);
       const scheduler = setInterval(() => {
         void runtime.autonomy.tick().catch(() =>
           send({
@@ -757,12 +887,14 @@ else {
       }, 5000);
       scheduler.unref();
       const suspend = () => {
+        ptt.suspend(true);
         runtime.autonomy.suspend(true);
         plugins.game.suspend(true);
         plugins.minecraft.stopAction(false);
         void runtime.cancel();
       };
       const resume = () => {
+        ptt.suspend(false);
         runtime.autonomy.suspend(false);
         plugins.game.suspend(false);
       };
@@ -773,6 +905,8 @@ else {
       let pluginsClosed = false;
       let pluginsClosing = false;
       app.on("before-quit", (event) => {
+        ptt.close();
+        showVoiceActivity("idle");
         if (!pluginsClosed) {
           event.preventDefault();
           if (!pluginsClosing) {

@@ -3,6 +3,8 @@ import { Mic, RefreshCw, Square } from "lucide-react";
 import type { Settings } from "../shared/schema";
 import { MicrophoneCapture } from "../audio/microphone";
 import { routeOutput } from "../audio/playback";
+import { PushToTalkSettings } from "./PushToTalkSettings";
+import { bridge } from "../bridge";
 
 export function VoiceSettings({
   voice,
@@ -20,10 +22,19 @@ export function VoiceSettings({
     setError("");
     try {
       if (permission) {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-        });
-        stream.getTracks().forEach((t) => t.stop());
+        const id = crypto.randomUUID();
+        if (!(await bridge.microphoneLease(id, true)))
+          throw new Error(
+            "Stop the current recording or microphone test before refreshing device permissions.",
+          );
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+          });
+          stream.getTracks().forEach((t) => t.stop());
+        } finally {
+          await bridge.microphoneLease(id, false);
+        }
       }
       setDevices(await navigator.mediaDevices.enumerateDevices());
     } catch (err) {
@@ -38,9 +49,13 @@ export function VoiceSettings({
   };
   useEffect(() => {
     void refresh();
+    const off = bridge.onEvent((event) => {
+      if (event.type === "ptt-action" && event.action === "cancel") stop();
+    });
     const changed = () => void refresh();
     navigator.mediaDevices?.addEventListener("devicechange", changed);
     return () => {
+      off();
       capture.current?.close();
       navigator.mediaDevices?.removeEventListener("devicechange", changed);
     };
@@ -58,11 +73,14 @@ export function VoiceSettings({
     const mic = new MicrophoneCapture(
       { ...voice, vadEnabled: true },
       {
-        level: setLevel,
+        level: (value) => {
+          if (capture.current === mic) setLevel(value);
+        },
         start: () => {},
         utterance: () => {},
         acceptsSpeech: () => true,
         error: (err) => {
+          if (capture.current !== mic) return;
           setError(err.message);
           stop();
         },
@@ -72,8 +90,10 @@ export function VoiceSettings({
     try {
       await mic.open();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-      stop();
+      if (capture.current === mic) {
+        setError(err instanceof Error ? err.message : String(err));
+        stop();
+      }
     }
   };
   const testOutput = async () => {
@@ -176,6 +196,10 @@ export function VoiceSettings({
       )}
       <div className="two-column">
         <div>
+          <PushToTalkSettings
+            config={voice.ptt}
+            change={(ptt) => change({ ptt })}
+          />
           <section className="card">
             <div className="section-heading">
               <h2>Input & output devices</h2>
@@ -260,7 +284,9 @@ export function VoiceSettings({
             {toggle(
               "vadEnabled",
               "Hands-free voice detection",
-              "Click the companion microphone to enable listening. Speech is sent after a pause; click again to turn it off.",
+              voice.ptt.enabled
+                ? "Paused while keyboard voice control is enabled. Disable keyboard control to use hands-free listening."
+                : "Click the companion microphone to enable listening. Speech is sent after a pause; click again to turn it off.",
             )}
             {range("vadSilenceMs", "Pause before sending (ms)", 300, 3000, 100)}
             {range(
@@ -273,7 +299,7 @@ export function VoiceSettings({
             {toggle(
               "bargeIn",
               "Interrupt when I speak",
-              "While hands-free listening is on, your voice stops her reply. Headphones reduce accidental interruptions from speakers.",
+              "Your press-to-talk key or hands-free speech stops her reply. When off, press-to-talk waits until she finishes. Headphones reduce feedback.",
             )}
             <label className="field">
               <span>Recognition language</span>

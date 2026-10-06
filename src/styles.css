@@ -3389,3 +3389,48 @@ nav button.active:before {
     font-size: 8px;
   }
 }
+.ptt-card h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ptt-binding-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 18px 0 8px;
+}
+.ptt-binding {
+  min-height: 48px;
+  flex: 1;
+  justify-content: center;
+  font-family: var(--font-mono, monospace);
+}
+.ptt-status {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(180, 150, 210, 0.04);
+  margin: 16px 0;
+}
+.ptt-status p {
+  margin: 5px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.ptt-card small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.ptt-binding-row + small {
+  margin-bottom: 18px;
+  line-height: 1.6;
+}
+.ptt-test {
+  border-left: 2px solid #d9abd4;
+  padding: 8px 12px;
+  font-size: 13px;
+}

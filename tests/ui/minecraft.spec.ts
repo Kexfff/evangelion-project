@@ -172,6 +172,13 @@ test("Minecraft jobs, stop control and world landmarks stay separate from chat",
         eva: {
           snapshot: async () => structuredClone(snapshot),
           presence: async () => {},
+          pttStatus: async () => ({
+            state: "off",
+            message: "Keyboard control is off.",
+            testing: false,
+          }),
+          voiceActivity: async () => {},
+          pttSettled: async () => {},
           onEvent: (fn: typeof listener) => {
             listener = fn;
             return () => {};

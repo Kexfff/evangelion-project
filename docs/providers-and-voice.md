@@ -25,6 +25,22 @@ Provider adapters and discovery use these OpenAI-compatible HTTP endpoints:
 
 Provider errors show an actionable status without reflecting potentially sensitive upstream response bodies. Requests time out after 90 seconds. Chat replies and transport/auth/quota failures are not automatically retried. Automatic fact extraction has the bounded format-recovery exception below.
 
+## Press-to-talk (v0.4.15)
+
+In **Voice & audio → Press to talk**, enable **Keyboard voice control**, then **Save changes**. The initial binding is **Right Shift**, **Hold to talk**, **App-focused** (keyboard control stays off until enabled). Click the key button to record another key or chord; modifier-only keys are captured on release so Ctrl+letter combinations can also be entered. Clear removes the binding and disables keyboard control.
+
+With the **companion window focused**, hold Right Shift, speak, and release to send one utterance through the existing ASR → chat → TTS pipeline. Text fields do not trigger app-focused shortcuts. **Press to talk · press again to send** is a separate, explicit toggle mode. The microphone button remains available. Enabling keyboard control temporarily overrides saved hands-free VAD: pauses while holding the key do not split your message.
+
+The selected device, input gain, processing and speech thresholds still apply. Short taps (under 200 ms) and audio with less than the configured minimum voiced duration are discarded locally. No audio is captured before activation. Release flushes the worklet’s trailing samples (up to 250 ms to acknowledge), then sends at most one 16 kHz WAV. With **Interrupt when I speak** enabled, pressing stops an ongoing response/playback immediately; with it disabled, a busy reply rejects the recording. An in-flight transcription or unfinished draft also rejects another capture instead of queuing or replacing it.
+
+Escape/Stop, app-focused blur, character/session/voice changes, lock/suspend, device loss and shortcut revocation discard uncertain capture. A missed release cancels after 60 seconds; it does not auto-submit. Listening/transcribing is visible in the companion. Microphone tests and chat recording share a main-process lease. **Test keybind (no microphone)** checks press/release without opening the mic or calling providers and ends after 30 seconds. Save the binding first; app-focused key tests run in the settings page, actual recording in the companion.
+
+### Global shortcut availability
+
+An optional Linux adapter uses the [XDG GlobalShortcuts portal](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.GlobalShortcuts.html) for actual activation **and deactivation** events; it does not install a keyboard hook. Registration can request desktop consent. The returned desktop binding—not just the requested key—is displayed. Cancellation, empty bindings, failed sessions and revoked access are shown explicitly; there is no silent mode fallback. The desktop may retain/change its assignment independently of Eva’s requested key. A non-focusable recording indicator is requested for global capture, but its placement/always-on-top behavior depends on the compositor.
+
+**Local capability check on 2026-10-06:** Niri 26.04 with the GNOME portal advertises GlobalShortcuts, but refused the live shortcut session. The user chose **app-focused only for now**. Right Shift therefore does **not** work while Minecraft/another app is focused on this setup. No Niri configuration or keyboard-device permissions were changed. Global physical press/release and microphone acceptance on a working portal desktop remain unverified; Windows/macOS global capture is not implemented. Use app-focused mode on unsupported desktops. Merely advertising the portal interface is not evidence that registration will work.
+
 ### OpenRouter model providers
 
 In **Providers → Language model**, use an OpenRouter base URL (`https://openrouter.ai/api/v1`), choose a model, then **Fetch providers**. The picker fetches the [public endpoint catalog for that model](https://openrouter.ai/docs/api/api-reference/endpoints/list-all-endpoints-for-a-model), showing provider names, routing IDs, advertised tool support and catalog input/output prices per million tokens. Discovery can use the unsaved model ID; it sends no API key or conversation content. Router aliases/presets may not have a usable endpoint list—choose a concrete model when needed.

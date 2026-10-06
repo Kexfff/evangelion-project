@@ -6,7 +6,7 @@ await build({
   platform: "node",
   format: "esm",
   target: "node22",
-  external: ["electron"],
+  external: ["electron", "dbus-next"],
   banner: {
     js: 'import { createRequire as __createRequire } from "node:module"; const require = __createRequire(import.meta.url);',
   },

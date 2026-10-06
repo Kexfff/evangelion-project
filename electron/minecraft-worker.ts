@@ -198,7 +198,7 @@ const transport: Transport = parent
     }
   : new StdioServerTransport();
 server = new Server(
-  { name: "evangelion-minecraft", version: "0.4.14" },
+  { name: "evangelion-minecraft", version: "0.4.15" },
   { capabilities: { tools: {} } },
 );
 server.setRequestHandler(ListToolsRequestSchema, async () => ({

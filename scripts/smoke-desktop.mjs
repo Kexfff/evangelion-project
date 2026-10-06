@@ -529,6 +529,58 @@ try {
     window.testMicrophone.oscillator.stop();
     await window.testMicrophone.context.close();
   });
+  // Right Shift uses real renderer key events, worklet capture, lease IPC and local ASR.
+  // No system-global binding or real microphone is opened in this test.
+  await reopened.evaluate(async () => {
+    const s = (await window.eva.snapshot()).settings;
+    s.voice.ptt = {
+      ...s.voice.ptt,
+      enabled: true,
+      scope: "app",
+      key: "ShiftRight",
+      mode: "hold",
+    };
+    s.voice.autoSpeak = false;
+    await window.eva.saveSettings(s, {});
+    const context = new AudioContext();
+    await context.resume();
+    const oscillator = context.createOscillator(),
+      gain = context.createGain();
+    gain.gain.value = 0.15;
+    oscillator.connect(gain);
+    oscillator.start();
+    navigator.mediaDevices.getUserMedia = async () => {
+      const destination = context.createMediaStreamDestination();
+      gain.connect(destination);
+      return destination.stream;
+    };
+    window.testMicrophone = { context, oscillator, gain };
+    document.activeElement?.blur();
+  });
+  await reopened.bringToFront();
+  await expect
+    .poll(() => reopened.evaluate(() => window.eva.pttStatus()))
+    .toMatchObject({ state: "ready", binding: "Right Shift" });
+  const pttAsrBefore = requests.filter(
+    (r) => r.url === "/v1/audio/transcriptions",
+  ).length;
+  await reopened.keyboard.down("ShiftRight");
+  await expect(reopened.locator(".phase-label")).toHaveText("listening…");
+  await reopened.waitForTimeout(700);
+  await reopened.keyboard.up("ShiftRight");
+  await expect
+    .poll(
+      () => requests.filter((r) => r.url === "/v1/audio/transcriptions").length,
+    )
+    .toBe(pttAsrBefore + 1);
+  await expect(reopened.locator(".phase-label")).toHaveText("here with you");
+  await reopened.evaluate(async () => {
+    window.testMicrophone.oscillator.stop();
+    await window.testMicrophone.context.close();
+    const s = (await window.eva.snapshot()).settings;
+    s.voice.ptt.enabled = false;
+    await window.eva.saveSettings(s, {});
+  });
   // Authorize one reminder and cancel another, then restart the real desktop.
   // Exercise real plugin settings IPC and vault persistence without contacting Telegram.
   await reopened.evaluate(() => window.eva.openSettings());
@@ -835,6 +887,17 @@ try {
     }
     throw new Error("Disabled Minecraft must not join");
   });
+  await scheduledWindow.evaluate(async () => {
+    const s = (await window.eva.snapshot()).settings;
+    s.voice.ptt = {
+      ...s.voice.ptt,
+      enabled: true,
+      mode: "toggle",
+      scope: "app",
+      key: "ShiftRight",
+    };
+    await window.eva.saveSettings(s, {});
+  });
   await desktop.close();
   desktop = null;
   assert.ok(
@@ -845,6 +908,24 @@ try {
   desktop = await launch();
   const mcpReopened = await desktop.firstWindow();
   await mcpReopened.waitForFunction(() => !!window.eva);
+  assert.deepEqual(
+    (await mcpReopened.evaluate(() => window.eva.snapshot())).settings.voice
+      .ptt,
+    {
+      enabled: true,
+      mode: "toggle",
+      scope: "app",
+      key: "ShiftRight",
+      ctrl: false,
+      alt: false,
+      shift: false,
+      meta: false,
+    },
+  );
+  assert.equal(
+    (await mcpReopened.evaluate(() => window.eva.pttStatus())).state,
+    "ready",
+  );
   await expect
     .poll(
       async () =>
@@ -903,7 +984,7 @@ try {
     0,
   );
   console.log(
-    "Desktop smoke passed: MCP subprocess/discovery/approval/tool results/restart/stop, plugin installation/settings, vault and grant persistence/removal, restart-safe authorized reminders, typing deferral, task cancellation, pause, activity logs, image attachments, credential persistence, models, semantic recall, all speech modes, barge-in, VRM and archives.",
+    "Desktop smoke passed: MCP subprocess/discovery/approval/tool results/restart/stop, plugin installation/settings, vault and grant persistence/removal, restart-safe authorized reminders, typing deferral, task cancellation, pause, activity logs, image attachments, credential persistence, models, semantic recall, Right Shift PTT capture/ASR/settings persistence, all speech modes, barge-in, VRM and archives.",
   );
 } catch (error) {
   // Only fixture UI diagnostics; never dump credentials or conversation stores.

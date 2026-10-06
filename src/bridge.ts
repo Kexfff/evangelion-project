@@ -41,6 +41,16 @@ const desktopOnly = async (): Promise<never> => {
   );
 };
 const preview: Bridge = {
+  pttStatus: async () => ({
+    state: "unavailable",
+    message: "Browser preview: global shortcuts require the desktop app.",
+    testing: false,
+  }),
+  pttTest: desktopOnly,
+  pttRetry: desktopOnly,
+  pttSettled: async () => {},
+  microphoneLease: async () => true,
+  voiceActivity: async () => {},
   configureGameAutonomy: desktopOnly,
   pauseGameAutonomy: desktopOnly,
   submitGameGoal: desktopOnly,
