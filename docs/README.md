@@ -22,4 +22,5 @@
 - [Development and verification](development.md) — tests, desktop smoke checks, and build validation.
 - [Assets](assets.md) — default model, compatibility, and attribution metadata.
 - [Reference material](references.md) — upstream projects and protocol documentation.
-- [Development plan](../PLAN.MD) — architecture, completed work, and future sprints.
+- [Development plan](../PLAN.MD) — current status, prioritized acceptance checks, implementation backlog and deferred work.
+- [Development history](development-history.md) — archived sprint/release notes, validation evidence and incident corrections through v0.4.15.
