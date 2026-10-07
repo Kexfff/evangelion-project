@@ -449,6 +449,92 @@ describe("Minecraft everyday gameplay", () => {
     ).toMatchObject({ operations: 2, outputGain: 8 });
     expect(h.bot.craft).toHaveBeenCalledTimes(2);
   });
+  it.each([0, 1, 3])(
+    "rejects incomplete recipe output (%s of 4), without sending another craft",
+    async (gain) => {
+      const h = fixture();
+      h.bot.craft.mockImplementation(async () => {
+        h.add("oak_planks", gain, 13);
+      });
+      await expect(
+        h.actions.call("craft_item", { item: "oak_planks", count: 2 }),
+      ).rejects.toThrow(
+        `expected 4 oak_planks from this operation, observed gain ${gain}`,
+      );
+      expect(h.bot.craft).toHaveBeenCalledOnce();
+      expect(h.host.progress).not.toHaveBeenCalled();
+    },
+  );
+  it("keeps verified earlier output when a later craft produces nothing", async () => {
+    const h = fixture();
+    h.bot.craft
+      .mockImplementationOnce(async () => {
+        h.add("oak_planks", 4, 13);
+      })
+      .mockImplementationOnce(async () => {});
+    await expect(
+      h.actions.call("craft_item", { item: "oak_planks", count: 3 }),
+    ).rejects.toThrow("verified 1/3 operations");
+    expect(h.bot.craft).toHaveBeenCalledTimes(2);
+    expect(h.slots[13].count).toBe(4);
+    expect(h.host.progress).toHaveBeenCalledExactlyOnceWith(
+      expect.stringContaining("output verified"),
+      1,
+    );
+  });
+  it("waits for server inventory synchronization and rejects rolled-back optimistic output", async () => {
+    const h = fixture();
+    h.bot.supportFeature = () => true;
+    h.bot._syncWindow = vi
+      .fn(async () => {})
+      .mockImplementationOnce(async () => {})
+      .mockImplementationOnce(async () => {
+        h.slots[13] = null;
+      });
+    await expect(
+      h.actions.call("craft_item", { item: "oak_planks", count: 2 }),
+    ).rejects.toThrow("observed gain 0");
+    expect(h.bot._syncWindow).toHaveBeenCalledTimes(2);
+    expect(h.bot.craft).toHaveBeenCalledOnce();
+    expect(h.host.progress).not.toHaveBeenCalled();
+  });
+  it.each([false, true])(
+    "synchronizes each crafting click and restores the original handler (failure=%s)",
+    async (fail) => {
+      const h = fixture();
+      const events: string[] = [];
+      h.bot.supportFeature = () => true;
+      const click = (h.bot.clickWindow = vi.fn(async () => {
+        events.push("click");
+      }));
+      h.bot._syncWindow = vi.fn(async () => {
+        events.push("sync");
+      });
+      h.bot.craft.mockImplementation(async () => {
+        await h.bot.clickWindow(9, 0, 0);
+        expect(events).toEqual(["sync", "click", "sync"]);
+        if (fail) throw new Error("Rejected");
+        h.add("oak_planks", 4, 13);
+      });
+      const work = h.actions.call("craft_item", {
+        item: "oak_planks",
+        count: 1,
+      });
+      if (fail)
+        await expect(work).rejects.toThrow("Crafting was not confirmed");
+      else await expect(work).resolves.toMatchObject({ outputGain: 4 });
+      expect(h.bot.clickWindow).toBe(click);
+      expect(h.bot.craft).toHaveBeenCalledOnce();
+    },
+  );
+  it("refuses modern crafting without a server synchronization barrier before changing inventory", async () => {
+    const h = fixture();
+    h.bot.supportFeature = () => true;
+    await expect(
+      h.actions.call("craft_item", { item: "oak_planks", count: 1 }),
+    ).rejects.toThrow("cannot confirm inventory state");
+    expect(h.bot.craft).not.toHaveBeenCalled();
+  });
   function tableCraftFixture() {
     const h = fixture();
     const table = {

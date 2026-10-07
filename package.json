@@ -1,6 +1,6 @@
 {
   "name": "evangelion_project",
-  "version": "0.4.15",
+  "version": "0.4.16",
   "private": true,
   "description": "A local-first desktop companion with voice, memory, and a VRM avatar.",
   "type": "module",
@@ -13,6 +13,7 @@
     "start": "electron .",
     "test": "vitest run",
     "test:ui": "playwright test",
+    "test:minecraft:live": "node scripts/accept-minecraft.mjs",
     "test:desktop": "npm run build && node scripts/smoke-desktop.mjs",
     "format": "prettier --write src electron scripts tests docs *.ts *.json *.html *.md PLAN.MD",
     "package": "npm run build && electron-builder --dir"

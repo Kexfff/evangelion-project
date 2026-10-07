@@ -6,6 +6,8 @@ The app includes a managed Mineflayer adapter for **Minecraft Java 26.1**, initi
 
 ## Join your world
 
+**v0.4.16 reliability:** live-tested door approaches no longer target the top edge or clip diagonal corners. Station navigation leaves room for the pathfinder's arrival tolerance. Crafting synchronizes inventory clicks with the server and verifies each operation's full output before continuing. See [repeatable acceptance checks and results](minecraft-acceptance.md).
+
 **Plugin on/off (v0.4.11):** the **Enable Minecraft plugin** switch under Plugins & MCP → Minecraft applies immediately and is saved independently of the world connection. Turning it off cancels active/queued/paused game goals, stops gameplay, closes the bundled worker and removes Minecraft tools/context from the LLM. Connection settings, tool permissions, landmarks and history are kept. Turning it on does **not** join a world or resume goals. Existing profiles keep the plugin enabled unless you switch it off.
 
 **Joining is always manual.** Relaunching Evangelion, restarting its plugin host or enabling Minecraft leaves Eva offline, even if she was connected before shutdown. Use **Join world** and its confirmation to reconnect. Telegram's enable/disable control and external MCP connection startup preferences are unchanged.
@@ -139,10 +141,8 @@ In **Plugins & MCP → Minecraft → Independent gameplay**, enable **Choose act
 
 Automated fixtures validate the loop and lifecycle, not autonomous survival competence. A sustained real-provider session in a designated world remains necessary to evaluate practical planning quality and terrain behavior. No Minecraft world is joined by the ordinary test suite.
 
-Door planning/interaction, goal sequencing, permissions, interruptions, persistence and these reactions are fixture-tested. **Live house entry, autonomous gathering/crafting and real-provider planning quality are still pending acceptance in a designated test world.** No live world was joined or changed while implementing v0.4.9.
+Door planning/interaction, goal sequencing, permissions, interruptions, persistence and reactions are fixture-tested. **v0.4.16 also passed controlled live-world checks** for door traversal both ways, obstructed crafting-table fallback, crafting/building, storage/smelting, combat, sleep/wake, food and follow/knockback. Three real-provider crafting intentions completed with Consciousness disabled. See [acceptance scope, repeatable commands and remaining gaps](minecraft-acceptance.md). From-empty autonomous survival and concurrent real voice/Telegram acceptance remain open.
 
-The v0.4.7 gameplay additions are covered by simulated-game tests, not live-world acceptance. No world-changing actions were performed in the user's LAN world while developing these tools.
-
-Validated on the user's Java 26.1 LAN world: joining, observation, inventory, following/movement, concurrent conversation, stopping and emergency disconnect. No blocks were changed and no public messages sent. Collection/building are covered by simulated-world tests, not a live building trial.
+Earlier v0.4.7/v0.4.9 checks were simulated and did not change a live world; v0.4.16 used the user's explicitly authorized disposable world and changed its test arena. Packaged-worker join/observe/disconnect checks use isolated profiles and no paid provider calls.
 
 v0.4.4 packaged acceptance also retrieved operator coordinates with the player about **302 blocks away**, walked to that position and reacquired the player within four blocks. Free play block changes and respawning were not live-tested; those capabilities should first be tried in a disposable world.

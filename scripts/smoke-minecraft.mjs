@@ -273,7 +273,7 @@ try {
     false,
   );
   console.log(
-    "Minecraft live smoke passed: app-managed process, 26.1 LAN join, observation, inventory, landmarks, concurrent chat/follow/stop, emergency disconnect. No block changes or public chat requested.",
+    `Minecraft live smoke passed: app-managed process, 26.1 LAN join, observation, inventory, landmarks, emergency disconnect. ${process.env.EVA_MC_PLAYER ? "Concurrent chat/follow/stop verified." : "Follow not requested."} No block changes or public chat requested.`,
   );
 } finally {
   if (app) await app.close();

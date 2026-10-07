@@ -54,6 +54,21 @@ export function doorMovements(
     return b;
   };
   movement.canOpenDoors = false;
+  // The open leaf still occupies an edge. Approach/leave cardinally instead
+  // of clipping a diagonal corner or stopping out of sight of the handle.
+  const diagonal = movement.getMoveDiagonal.bind(movement);
+  movement.getMoveDiagonal = (node, dir, neighbors) => {
+    for (const [dx, dz] of [
+      [0, 0],
+      [dir.x, dir.z],
+    ]) {
+      const block = get(node as unknown as Vec3, dx, 0, dz);
+      if (!block?.getProperties) continue;
+      const s = doorState(block);
+      if (s.door || s.gate) return;
+    }
+    diagonal(node, dir, neighbors);
+  };
   movement.digCost = 12;
   movement.placeCost = 8;
 }
@@ -63,8 +78,27 @@ export class DoorNavigation {
   private pending = false;
   private epoch = 0;
   private readonly path = (result: {
-    path: { x: number; y: number; z: number }[];
+    path: { x: number; y: number; z: number; hash?: string }[];
   }) => {
+    // Pathfinder's postProcessPath snaps nodes to the TOP of collision shapes.
+    // A* correctly plans through our projected door cells, but post-processing
+    // then turns them into jump-on-the-door waypoints. Restore the original
+    // cell (Move.hash survives post-processing), without changing world shapes.
+    for (const node of result.path ?? []) {
+      if (!node.hash || !/^-?\d+,-?\d+,-?\d+$/.test(node.hash)) continue;
+      const [x, y, z] = node.hash.split(",").map(Number);
+      const block = this.bot.blockAt(new Vec3(x, y, z));
+      if (!block) continue;
+      const s = doorState(block);
+      if (
+        (s.door || s.gate) &&
+        (s.open || (s.manual && this.allowed(block.position)))
+      ) {
+        node.x = x + 0.5;
+        node.y = y;
+        node.z = z + 0.5;
+      }
+    }
     this.route = (result.path ?? [])
       .slice(0, 256)
       .map((p) => new Vec3(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z)));
@@ -102,7 +136,24 @@ export class DoorNavigation {
       const s = doorState(b);
       if (!s.manual || s.open) continue;
       if (s.upper) b = this.bot.blockAt(p.offset(0, -1, 0));
-      if (!b || !this.allowed(b.position) || !this.bot.canSeeBlock(b)) continue;
+      if (!b || !this.allowed(b.position)) continue;
+      // At close range the upper half can occlude the lower half from one side.
+      // Clicking either half opens the same door; prefer a genuinely visible one.
+      let click = b;
+      if (!this.bot.canSeeBlock(click)) {
+        const upper = s.door
+          ? this.bot.blockAt(b.position.offset(0, 1, 0))
+          : null;
+        if (
+          !upper ||
+          upper.name !== b.name ||
+          !doorState(upper).upper ||
+          !this.allowed(upper.position) ||
+          !this.bot.canSeeBlock(upper)
+        )
+          continue;
+        click = upper;
+      }
       this.pending = true;
       const epoch = this.epoch,
         target = b,
@@ -115,7 +166,7 @@ export class DoorNavigation {
       }, 4500);
       void (async () => {
         // A single click, followed by observed state; no toggle retries.
-        await this.bot.activateBlock(target);
+        await this.bot.activateBlock(click);
         while (epoch === this.epoch) {
           const current = this.bot.blockAt(target.position);
           if (current && doorState(current).open) return;

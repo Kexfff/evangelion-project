@@ -1,6 +1,15 @@
-# Development history — through v0.4.15
+# Development history
 
 [← Active development plan](../PLAN.MD) · [Documentation](README.md)
+
+## v0.4.16 — Minecraft reliability mini-sprint (2026-10-07)
+
+- Fixed live-reproduced door post-processing (waypoints on top of the leaf), diagonal doorway stalls and visibility of the upper/lower halves. Fixed interaction endpoints that left Eva just outside reach after approximate arrival.
+- Crafting now synchronizes optimistic clicks with the server and checks the full output of each recipe operation before issuing another. Added regressions for partial/rolled-back output, click sequencing/cleanup and navigation geometry.
+- Added an opt-in disposable-world acceptance runner and isolated, hard-capped real-provider autonomy mode. Core live gameplay and three independent intentions passed; 8 requests, 39,110 reported tokens and $0.005911 reported cost. Normal profile unchanged.
+- Linux package rebuilt; automated, desktop, isolation and live-worker checks recorded in [Minecraft acceptance](minecraft-acceptance.md). Extended survival, real cross-channel concurrency and Microsoft login remain open in the active plan.
+
+## Archive through v0.4.15
 
 Historical snapshot archived on 2026-10-06 when PLAN.MD was consolidated. Entries describe the state at each release: older limitations and unchecked tasks may have been superseded. Use the active plan for current status and remaining work. Original incident corrections and validation evidence are retained; local guide links are adjusted for this file's location.
 

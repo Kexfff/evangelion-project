@@ -126,7 +126,7 @@ describe("block interaction navigation with real 26.1 collision/raycast and A*",
           _meta: unknown,
           _count: number,
           table: unknown,
-        ) => (table ? [{ requiresTable: true }] : []),
+        ) => (table ? [{ requiresTable: true, result: { count: 1 } }] : []),
         findBlocks: () => [f.target],
         craft: vi.fn(async () => {
           items.push({ name: "wooden_pickaxe", count: 1 });
@@ -220,5 +220,17 @@ describe("block interaction navigation with real 26.1 collision/raycast and A*",
     expect(canInteractFrom(f.bot, new Vec3(20, 64, 0), f.target)).toBe(false);
     f.place("stone", 3, 65, 0);
     expect(canInteractFrom(f.bot, feet, f.target)).toBe(false);
+  });
+  it("keeps reach slack for pathfinder's approximate waypoint arrival", () => {
+    const f = fixture();
+    const target = f.place("crafting_table", 8, 64, 0).position;
+    const center = new Vec3(4.5, 64, 0.5);
+    expect(canInteractFrom(f.bot, center, target)).toBe(true);
+    expect(
+      new GoalInteractBlock(f.bot, target).isEnd({ x: 4, y: 64, z: 0 }),
+    ).toBe(false);
+    expect(
+      new GoalInteractBlock(f.bot, target).isEnd({ x: 5, y: 64, z: 0 }),
+    ).toBe(true);
   });
 });

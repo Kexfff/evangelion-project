@@ -20,18 +20,23 @@ type RayWorld = {
 /** Use the same eye-to-target ray for A* endpoints and the final live check.
  * Proximity alone accepts the wrong side of a wall. No blocks are modified here.
  */
-export function canInteractFrom(bot: Bot, feet: Vec3, target: Vec3) {
+export function canInteractFrom(
+  bot: Bot,
+  feet: Vec3,
+  target: Vec3,
+  reach = 4.5,
+) {
   const eye = feet.offset(
     0,
     (bot.entity as Bot["entity"] & { eyeHeight?: number }).eyeHeight ?? 1.62,
     0,
   );
   const direction = target.offset(0.5, 0.5, 0.5).minus(eye);
-  if (direction.norm() > 4.5) return false;
+  if (direction.norm() > reach) return false;
   const hit = (bot.world as unknown as RayWorld).raycast(
     eye,
     direction.normalize(),
-    4.5,
+    reach,
     (block, ray) =>
       !!ray.intersect(block.shapes, block.position) ||
       block.position.equals(target),
@@ -52,6 +57,10 @@ export class GoalInteractBlock extends goals.GoalNear {
       this.bot,
       new Vec3(node.x + 0.5, node.y, node.z + 0.5),
       this.target,
+      // goto accepts a waypoint within 0.35 on each horizontal axis. Leave
+      // half a block of slack so a valid cell center isn't an out-of-reach
+      // actual arrival. The final live check retains Minecraft's full reach.
+      4,
     );
   }
 }

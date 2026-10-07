@@ -71,6 +71,48 @@ function fixture(
   return { bot, movements, world, doors, fail };
 }
 describe("door-aware navigation against installed 26.1 block data/pathfinder", () => {
+  it("approaches doorways cardinally instead of clipping a diagonal corner", () => {
+    const f = fixture();
+    const neighbors: any[] = [];
+    f.movements.getMoveDiagonal(
+      { x: 0, y: 64, z: -1, remainingBlocks: 0 },
+      { x: 1, z: 1 },
+      neighbors,
+    );
+    f.movements.getMoveDiagonal(
+      { x: 1, y: 64, z: 0, remainingBlocks: 0 },
+      { x: 1, z: 1 },
+      neighbors,
+    );
+    expect(neighbors).toHaveLength(0);
+    f.movements.getMoveForward(
+      { x: 0, y: 64, z: 0, remainingBlocks: 0 },
+      { x: 1, z: 0 },
+      neighbors,
+    );
+    expect(neighbors).toHaveLength(1);
+  });
+  it("restores post-processed door waypoints to the walk-through cell, not the top edge", () => {
+    const f = fixture();
+    const node = { x: 1.296875, y: 65, z: 0.5, hash: "1,64,0" };
+    f.bot.emit("path_update", { path: [node] });
+    expect(node).toMatchObject({ x: 1.5, y: 64, z: 0.5 });
+    expect(f.bot.blockAt(new Vec3(1, 64, 0)).shapes.length).toBeGreaterThan(0);
+    const blocked = fixture("iron_door");
+    const iron = { x: 1.296875, y: 65, z: 0.5, hash: "1,64,0" };
+    blocked.bot.emit("path_update", { path: [iron] });
+    expect(iron.y).toBe(65);
+  });
+  it("clicks the visible upper half when it occludes the lower half", async () => {
+    const f = fixture();
+    f.bot.canSeeBlock = (block: any) => block.position.y === 65;
+    f.bot.emit("path_update", { path: [{ x: 1, y: 64, z: 0 }] });
+    f.doors.tick();
+    await f.doors.idle(new AbortController().signal);
+    expect(f.bot.activateBlock).toHaveBeenCalledOnce();
+    expect(f.bot.activateBlock.mock.calls[0][0].position.y).toBe(65);
+    expect(f.fail).not.toHaveBeenCalled();
+  });
   it("opens either leaf of a double entrance without touching the other leaf", async () => {
     const f = fixture();
     for (const half of ["lower", "upper"]) {

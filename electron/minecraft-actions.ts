@@ -736,6 +736,25 @@ export class MinecraftActions {
         async (signal) => {
           const item = this.bot.registry.itemsByName[a.item];
           if (!item) throw new ActionError("Unknown item ID.");
+          // Modern inventory clicks are optimistic. Mineflayer's server-sync
+          // barrier is needed even for the 2x2 inventory grid: craft() only
+          // synchronizes a table window, and can otherwise return phantom output.
+          const syncInventory = (
+            this.bot as Bot & {
+              _syncWindow?: (window: Bot["inventory"]) => Promise<void>;
+            }
+          )._syncWindow;
+          const needsSync = this.bot.supportFeature?.("stateIdUsed");
+          if (needsSync && !syncInventory)
+            throw new ActionError(
+              "The installed Minecraft adapter cannot confirm inventory state. Update Mineflayer before crafting; nothing was crafted.",
+            );
+          if (needsSync)
+            await this.step(
+              () => syncInventory!.call(this.bot, this.bot.inventory),
+              signal,
+              "Inventory synchronization",
+            );
           // A table coordinate is a hint, not evidence: models often supply the
           // base position or a stale placement. Prefer inventory crafting when possible.
           let table: ReturnType<Bot["blockAt"]> = null;
@@ -852,21 +871,52 @@ export class MinecraftActions {
               throw new ActionError(
                 "Missing ingredients or crafting table. Earlier crafting operations, if any, were kept.",
               );
+            const operationBefore = this.inventoryCount(a.item);
             await this.step(
-              () => this.bot.craft(recipe, 1, table ?? undefined),
+              async () => {
+                const click = this.bot.clickWindow;
+                if (needsSync)
+                  this.bot.clickWindow = async (...args) => {
+                    await click.apply(this.bot, args);
+                    await syncInventory!.call(
+                      this.bot,
+                      this.bot.currentWindow ?? this.bot.inventory,
+                    );
+                  };
+                try {
+                  await this.bot.craft(recipe, 1, table ?? undefined);
+                  if (needsSync)
+                    await syncInventory!.call(this.bot, this.bot.inventory);
+                } finally {
+                  // The action owner prevents competing inventory operations.
+                  // Restore even after rejection; pending operations stay fenced.
+                  if (needsSync) this.bot.clickWindow = click;
+                }
+              },
               signal,
               "Crafting",
               20000,
             );
+            // A resolved craft promise is not proof of the requested quantity.
+            // Verify each operation before sending the next inventory mutation.
+            try {
+              await this.host.until(
+                () =>
+                  this.inventoryCount(a.item) >=
+                  operationBefore + recipe.result.count,
+                signal,
+              );
+            } catch (error) {
+              signal.throwIfAborted();
+              throw new ActionError(
+                `Crafting output incomplete: verified ${n}/${a.count} operations; expected ${recipe.result.count} ${a.item} from this operation, observed gain ${this.inventoryCount(a.item) - operationBefore}. Effects may be partial; inspect inventory before retrying.`,
+              );
+            }
             this.host.progress(
-              `Crafted ${n + 1}/${a.count} operations.`,
+              `Crafted ${n + 1}/${a.count} operations; output verified.`,
               n + 1,
             );
           }
-          await this.host.until(
-            () => this.inventoryCount(a.item) > before,
-            signal,
-          );
           return {
             summary: `Crafted ${a.item}; output inventory gain verified.`,
             operations: a.count,

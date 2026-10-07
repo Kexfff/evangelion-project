@@ -28,6 +28,7 @@ vi.mock("mineflayer-pathfinder", () => ({
     getBlock() {
       return null;
     }
+    getMoveDiagonal() {}
   },
   goals: {
     GoalNear: class {

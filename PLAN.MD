@@ -1,6 +1,6 @@
 # evangelion_project — development plan
 
-Updated: 2026-10-06 · Current release: **v0.4.15**
+Updated: 2026-10-07 · Current release: **v0.4.16** · Roadmap target: **v0.5**
 
 This is the active roadmap. Detailed implementation notes, past test results and incident records live in [development history](docs/development-history.md). Historical unchecked boxes there are not the current backlog.
 
@@ -33,41 +33,36 @@ Guides: [voice](docs/providers-and-voice.md), [memory](docs/characters-and-memor
 | Sprint 3 | Plugin foundation and Telegram text/images/voice with shared conversation and memory | Implemented; live Telegram acceptance open |
 | UI / provider refinements | Fact constellation, searchable conversation archives, overview statistics, default avatar/docs refresh, resilient fact extraction, OpenRouter provider selection | Implemented |
 | Sprint 4 + Minecraft mini-sprints | MCP, 26 gameplay tools, following/operator lookup, physics fixes, door-aware routes, goals/planning/verification, independent autonomy, manual join/plugin switch | Implemented foundation; live gameplay acceptance open |
-| v0.4.13–0.4.14 | Reach/visibility-aware station approaches, alternate tables, progress-aware timeouts, per-table diagnostics | Implemented; obstructed-station acceptance open |
+| v0.4.13–0.4.14 | Reach/visibility-aware station approaches, alternate tables, progress-aware timeouts, per-table diagnostics | Implemented; controlled-world station acceptance passed in v0.4.16 |
 | v0.4.15 | Configurable hold/toggle press-to-talk, Right Shift default, capture ownership/cancellation, keybind test | App-focused delivered; global acceptance deferred |
+| v0.4.16 | Live-found door/arrival fixes, server-synchronized crafting and exact output verification; repeatable opt-in gameplay/autonomy acceptance | Controlled-world core checks passed; extended acceptance below |
 
-**Latest recorded validation:** 341 core tests, 40 browser tests, typecheck, production/package build, isolated desktop smoke and packaged-isolation smoke passed for v0.4.15. Linux unpacked build: `release/linux-unpacked/`. These are prior recorded results, not a test rerun for this documentation edit.
+**Latest validation:** v0.4.16 typecheck, core/browser regressions, Linux package, isolated desktop smoke, packaged-isolation smoke and packaged live Minecraft worker smoke. Counts and scenarios are recorded in [acceptance results](docs/minecraft-acceptance.md). Linux unpacked build: `release/linux-unpacked/`.
 
-**Live evidence:** movement/following and operator lookup at roughly 302 blocks were verified in authorized LAN tests. The user reports working chat/TTS, some newer game tools, and no more apparent freezing. This does not establish complete gameplay, physical-microphone or cross-platform acceptance.
+**Live evidence:** v0.4.16 verified door entry/exit, obstructed stations, crafting/building, storage/smelting, combat, sleep/wake, food and follow/knockback on the authorized test world. Three real-provider autonomous intentions completed with Consciousness off in 8 requests; Stop stayed stopped. Prior operator lookup reached roughly 302 blocks. This does not establish complete survival, physical-microphone or cross-platform acceptance.
 
 Previously stale Sprint 4 TODOs for task planning, observed completion, shared action coordination, schedules and autonomous goal selection are implemented. Remaining gaps are separated below.
 
-## 3. Next: acceptance and reliability
+## 3. v0.5 roadmap — ordered mini-sprints
 
-Suggested next mini-sprint: validate the existing Minecraft and voice features before expanding mechanics. These checks require the user's setup or a designated test world; this plan does not authorize live connections, paid calls or world changes.
+User-confirmed priority: **Minecraft → Gameplay depth → Plugins, MCP and delivery → Memory, voice and presentation → Voice, providers and Telegram**. Work through these mini-sprints in order; optional items remain optional. The v0.5 goal is reliable, deeper gameplay, extensible delivery, and a more polished companion, with final real-device/provider acceptance.
 
-### Minecraft
+Live checks require the user's setup or a designated test world; this plan does not authorize live connections, paid calls or world changes. Acceptance records should name the app version, scenario, observed result and remaining failure—not infer success from a “running” job or a passed fixture.
 
-- [ ] **Navigation and stations:** enter a designated house through its door from both sides; route around walls to crafting tables/furnaces/storage; test multiple nearby tables and inspect approach diagnostics. Confirm progress resets the inactivity timer, while genuine stalls and the overall deadline stop work.
-- [ ] **End-to-end crafting/building:** obtain missing prerequisites and craft a stone pickaxe; verify recipe output counts, bench placement, inventory changes, a small build and partial-failure reporting. Use a disposable/designated area for block changes.
-- [ ] **Continuous autonomy:** with companion Consciousness disabled, complete several useful intentions without chat prompts. Check concurrent desktop/voice/Telegram chat, explicit user priority, Stop staying stopped, pause/resume reconciliation, budgets/backoff, world switches and no automatic rejoin.
-- [ ] **Gameplay coverage:** finish a tool-by-tool live pass for dropping, beds, combat, equipment/food, storage and smelting. Include knockback while following; investigate freezing further only if it recurs.
-- [ ] **Integration coverage:** add repeatable disposable-server tests alongside the existing simulated-world and MCP transport/failure fixtures; verify live Microsoft device-code login separately.
+### 3.1 Minecraft — reliability delivered; extended acceptance open
 
-### Voice, providers and Telegram
+Goal: validate the existing Minecraft foundation end to end, fix observed reliability failures and make the checks repeatable before expanding gameplay.
 
-- [ ] **Physical press-to-talk:** Right Shift in the focused companion, outside text fields; verify release-to-send, toggle, fast taps, silence, selected device, barge-in, Escape/blur cancellation and restart. App-focused is the user's chosen scope for now.
-- [ ] **Provider/device quality:** verify real ASR/TTS latency, streaming and line-mode quality, permissions, echo handling, vision responses, extraction recovery and multilingual semantic recall with the user's chosen endpoints. Basic chat/TTS already works according to user feedback.
-- [ ] **Telegram acceptance:** paired private-bot text/images/OGG voice, optional MP3 replies, shared recall, scheduled notifications and disable/unpair behavior on actual devices.
-- [ ] **Companion autonomy:** validate live model scheduling, mood/expression presentation and actual lock/suspend behavior beyond simulated clocks and desktop fixtures.
+- [x] **Navigation and stations:** live doorway traversal both ways without wall damage, wall detours to stations, enclosed-table fallback and approach diagnostics. Fixed door waypoint height/corner stalls and station arrival tolerance. Progress/inactivity/overall deadlines remain regression-tested.
+- [x] **Scripted crafting/building:** live harvesting, stone pickaxe, exact recipe quantities, bench creation/placement/use, small build and preserved partial-failure effects in a prepared arena. Fixed optimistic crafting with server synchronization and per-operation output checks.
+- [x] **Bounded real-provider autonomy:** three separately selected/completed intentions with Consciousness off; Stop stays stopped. 8/10 authorized requests, approximately $0.006 reported. Priority, pause/resume, budgets/backoff, world isolation and no-auto-rejoin remain covered by deterministic tests.
+- [x] **Core gameplay acceptance:** live drops, beds/wake, confirmed enemy death, equipment/food, storage transfers, completed smelting and follow/knockback/Stop. No physics freeze observed during these checks.
+- [x] **Repeatable integration checks:** opt-in disposable-world runner plus isolated real-provider mode; packaged app-managed MCP worker join/observe/disconnect smoke. Instructions and exact evidence: [Minecraft acceptance](docs/minecraft-acceptance.md).
+- [ ] **Extended acceptance:** from-empty autonomous prerequisite gathering/survival; concurrent real desktop/voice/Telegram interaction and priority/pause/world-switch scenarios; remaining tool variants and Microsoft device-code login. Do not infer these from the bounded arena run. No further paid runs are authorized by the completed ten-request test allowance.
 
-Acceptance records should name the app version, scenario, observed result and remaining failure—not infer success from a “running” job or a passed fixture.
+### 3.2 Gameplay depth
 
-## 4. Remaining implementation backlog
-
-Not all items belong in the next mini-sprint; choose scope after the acceptance pass.
-
-### Gameplay depth
+Goal: extend Eva's survival skills and longer-term projects, with stronger resource planning, recovery and verifiable outcomes.
 
 - [ ] Richer persistent multi-project records and resource targets beyond finite intentions and the bounded world journal.
 - [ ] Dedicated host-verifiable sleep/combat goal-completion criteria; those tools already exist as execution steps.
@@ -76,7 +71,20 @@ Not all items belong in the next mini-sprint; choose scope after the acceptance 
 - [ ] Automatic discovery/use of redstone mechanisms for closed iron doors; ordinary manually openable doors are already supported.
 - [ ] Encrypted persistent Microsoft account sessions; current authentication tokens are memory-only.
 
-### Memory, voice and presentation
+### 3.3 Plugins, MCP and delivery
+
+Goal: make integrations extensible and distribution practical, with explicit trust boundaries, broader MCP support and installable releases.
+
+- [ ] Third-party plugin loading/discovery, signatures, updates and an actual hostile-code sandbox. Current bundled workers and local MCP programs are not such a sandbox.
+- [ ] MCP OAuth, resources/prompts UI, sampling/elicitation, filesystem roots and broader validated schema support. Tools over stdio/Streamable HTTP are implemented; legacy HTTP+SSE is not.
+- [ ] Telegram enhancements if needed: album grouping, additional media types and broader account/character routing. Current scope is one paired private account/character.
+- [ ] Tray/background-service/OS-wake support; the app currently must remain running.
+- [ ] Installable, signed platform releases; test transparency, audio permissions and always-on-top behavior on each supported OS/compositor.
+- [ ] Obtain the bundled model's original source/license URL or license text **from the user/source**; retain existing embedded attribution without inventing a license.
+
+### 3.4 Memory, voice and presentation
+
+Goal: improve long-term recall and data management, make voice/avatar interaction more natural, and reduce resource use.
 
 - [ ] Conversation summarization/consolidation, retrieval evaluation, scalable SQLite/FTS/vector storage and task/archive retention.
 - [ ] Image resizing/compression, separate attachment storage and visual long-term retrieval. Current inline images can push archives beyond the 50 MB import cap.
@@ -87,22 +95,22 @@ Not all items belong in the next mini-sprint; choose scope after the acceptance 
 - [ ] Optional genuine embedding projection/similarity links; the existing fact-only constellation is intentionally artistic, as requested.
 - [ ] CPU/GPU profiling, lazy avatar loading and reduced work while windows are hidden.
 
-### Plugins, MCP and delivery
+### 3.5 Voice, providers and Telegram
 
-- [ ] Third-party plugin loading/discovery, signatures, updates and an actual hostile-code sandbox. Current bundled workers and local MCP programs are not such a sandbox.
-- [ ] MCP OAuth, resources/prompts UI, sampling/elicitation, filesystem roots and broader validated schema support. Tools over stdio/Streamable HTTP are implemented; legacy HTTP+SSE is not.
-- [ ] Telegram enhancements if needed: album grouping, additional media types and broader account/character routing. Current scope is one paired private account/character.
-- [ ] Tray/background-service/OS-wake support; the app currently must remain running.
-- [ ] Installable, signed platform releases; test transparency, audio permissions and always-on-top behavior on each supported OS/compositor.
-- [ ] Obtain the bundled model's original source/license URL or license text **from the user/source**; retain existing embedded attribution without inventing a license.
+Goal: finish v0.5 acceptance on real microphones, chosen providers and Telegram devices, including companion initiative and scheduling.
 
-## 5. Explicitly deferred
+- [ ] **Physical press-to-talk:** Right Shift in the focused companion, outside text fields; verify release-to-send, toggle, fast taps, silence, selected device, barge-in, Escape/blur cancellation and restart. App-focused is the user's chosen scope for now.
+- [ ] **Provider/device quality:** verify real ASR/TTS latency, streaming and line-mode quality, permissions, echo handling, vision responses, extraction recovery and multilingual semantic recall with the user's chosen endpoints. Basic chat/TTS already works according to user feedback.
+- [ ] **Telegram acceptance:** paired private-bot text/images/OGG voice, optional MP3 replies, shared recall, scheduled notifications and disable/unpair behavior on actual devices.
+- [ ] **Companion autonomy:** validate live model scheduling, mood/expression presentation and actual lock/suspend behavior beyond simulated clocks and desktop fixtures.
+
+## 4. Explicitly deferred
 
 - **Raw DSML tool markup:** detection/recovery was deferred by the user. OpenRouter provider selection does not fix it; track it as a potential live-model reliability blocker.
 - **Global press-to-talk on this desktop:** Niri 26.04/Wayland advertises the GNOME shortcut portal but rejected the live session. The user chose app-focused only. A Linux portal adapter exists; actual global press/release, consent/reassignment and overlay behavior still need acceptance on a working desktop. Windows/macOS global input is unimplemented. Do not add keyboard hooks, device permissions or compositor changes without a new decision.
 - **General PC observation/control:** an optional future capability-gated integration, not part of Minecraft autonomy or the current sprint.
 
-## 6. Guardrails and definition of done
+## 5. Guardrails and definition of done
 
 - Minecraft is app-managed, Java Edition/LAN, manually joined. No separate user-run bot and no auto-rejoin. Game tools are allowed unless explicitly blocked/Ask; external MCP tools remain default-deny. Do not restore duplicate Minecraft permission gates.
 - Keep one physical-action owner, observed completion, clear partial failures and cancellation. Stop pauses autonomous reselection. Restart/disconnect never blindly replays uncertain actions; explicit Resume reconciles the current world.

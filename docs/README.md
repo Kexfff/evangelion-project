@@ -20,7 +20,8 @@
 
 - [Storage and privacy](storage-and-privacy.md) — app data, backups, credentials, and security boundaries.
 - [Development and verification](development.md) — tests, desktop smoke checks, and build validation.
+- [Minecraft acceptance](minecraft-acceptance.md) — opt-in live test arena, bounded real-provider checks, results and remaining gaps.
 - [Assets](assets.md) — default model, compatibility, and attribution metadata.
 - [Reference material](references.md) — upstream projects and protocol documentation.
 - [Development plan](../PLAN.MD) — current status, prioritized acceptance checks, implementation backlog and deferred work.
-- [Development history](development-history.md) — archived sprint/release notes, validation evidence and incident corrections through v0.4.15.
+- [Development history](development-history.md) — sprint/release notes, validation evidence and incident corrections.
