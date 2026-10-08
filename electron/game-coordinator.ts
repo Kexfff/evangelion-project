@@ -3,6 +3,7 @@ import {
   goalInputSchema,
   goalControlSchema,
   plannerDecisionSchema,
+  gameProjectInputSchema,
   type GameGoal,
   type GoalCondition,
 } from "../src/shared/game-goals";
@@ -19,6 +20,7 @@ const reads = new Set([
   "inspect_inventory",
   "find_blocks",
   "get_recipes",
+  "plan_resources",
   "locate_player",
   "job_status",
 ]);
@@ -39,9 +41,30 @@ type Observation = MinecraftLive & {
     position: { x: number; y: number; z: number };
   }[];
 };
-export function conditionsMet(conditions: GoalCondition[], state: Observation) {
+export function conditionsMet(
+  conditions: GoalCondition[],
+  state: Observation,
+  history: GameGoal["history"] = [],
+  verified: GoalCondition[] = [],
+) {
   if (!state.connected) return false;
   return conditions.every((c) => {
+    if (c.kind === "sleep")
+      return (
+        verified.some((e) => e.kind === "sleep") ||
+        history.some((h) => h.evidence?.kind === "sleep")
+      );
+    if (c.kind === "defeat")
+      return (
+        verified.some(
+          (e) => e.kind === "defeat" && e.entityUuid === c.entityUuid,
+        ) ||
+        history.some(
+          (h) =>
+            h.evidence?.kind === "defeat" &&
+            h.evidence.entityUuid === c.entityUuid,
+        )
+      );
     if (c.kind === "inventory")
       return (
         state.inventory
@@ -74,6 +97,49 @@ export function conditionsMet(conditions: GoalCondition[], state: Observation) {
  * ownership. Every step still passes through the normal MCP grants/audit layer.
  */
 export class GameCoordinator {
+  saveProject(raw: unknown) {
+    const input = gameProjectInputSchema.parse(raw);
+    const store = this.runtime.store;
+    const previous = input.id
+      ? store.data.minecraft.projects.find(
+          (p) =>
+            p.id === input.id &&
+            p.characterId === store.characterId &&
+            p.world === this.world(),
+        )
+      : undefined;
+    if (input.id && !previous)
+      throw new Error("Project belongs to another character or world.");
+    if (!this.minecraft.snapshot().live.connected)
+      throw new Error("Join the project's world before editing it.");
+    if (!previous && store.data.minecraft.projects.length >= 100)
+      throw new Error("Project storage is full (100 records).");
+    if (new Set(input.targets.map((t) => t.item)).size !== input.targets.length)
+      throw new Error("Use one target per item.");
+    const now = new Date().toISOString();
+    const project = {
+      ...previous,
+      ...input,
+      id: previous?.id ?? randomUUID(),
+      characterId: store.characterId,
+      world: this.world(),
+      createdAt: previous?.createdAt ?? now,
+      updatedAt: now,
+      lastVerifiedAt:
+        previous &&
+        JSON.stringify(previous.targets) === JSON.stringify(input.targets)
+          ? previous.lastVerifiedAt
+          : undefined,
+    };
+    store.update((d) => {
+      d.minecraft.projects = [
+        ...d.minecraft.projects.filter((p) => p.id !== project.id),
+        project,
+      ];
+    });
+    this.runtime.broadcast();
+    return project;
+  }
   private timer?: ReturnType<typeof setInterval>;
   private controller?: AbortController;
   private working = false;
@@ -429,6 +495,27 @@ export class GameCoordinator {
       throw new Error(
         "Finish or cancel a goal before adding more (16 active goals maximum).",
       );
+    if (
+      input.projectId &&
+      !this.runtime.store.data.minecraft.projects.some(
+        (p) =>
+          p.id === input.projectId &&
+          p.characterId === context.characterId &&
+          p.world === this.world() &&
+          p.status === "active",
+      )
+    )
+      throw new Error("Select an active project in this world.");
+    if (
+      input.projectId &&
+      input.mode !== "replace" &&
+      this.goals.some(
+        (g) =>
+          g.projectId === input.projectId &&
+          ["queued", "running", "paused"].includes(g.status),
+      )
+    )
+      throw new Error("This project already has an active goal.");
     if (input.mode === "replace") this.cancelAll(false);
     else if ((source === "desktop" || source === "telegram") && !input.dueAt)
       this.yieldAutonomous();
@@ -436,6 +523,7 @@ export class GameCoordinator {
     const goal: GameGoal = {
       id: randomUUID(),
       objective: input.objective,
+      projectId: input.projectId,
       completion: input.completion,
       status: "queued",
       source,
@@ -612,6 +700,27 @@ export class GameCoordinator {
       history,
     });
     this.director.remember(g, this.minecraft.snapshot().live);
+    if (g.projectId)
+      this.runtime.store.update((d) => {
+        const p = d.minecraft.projects.find(
+          (p) =>
+            p.id === g.projectId &&
+            p.world === g.world &&
+            p.characterId === g.characterId,
+        );
+        if (p) {
+          p.lastOutcome = `${g.status}: ${g.detail}`.slice(0, 600);
+          p.updatedAt = new Date().toISOString();
+          if (
+            status === "completed" &&
+            conditionsMet(
+              p.targets.map((t) => ({ kind: "inventory" as const, ...t })),
+              this.minecraft.snapshot().live,
+            )
+          )
+            p.lastVerifiedAt = p.updatedAt;
+        }
+      });
     this.runtime.autonomy.log(
       `game-${status}`,
       `${g.objective}: ${detail}`,
@@ -908,6 +1017,21 @@ export class GameCoordinator {
         return;
       } else
         this.update(g, {
+          verifiedEvents: g.completion.filter(
+            (c) =>
+              (g!.verifiedEvents ?? []).some(
+                (e) => JSON.stringify(e) === JSON.stringify(c),
+              ) ||
+              (c.kind === "sleep" &&
+                g!.currentTool === "sleep" &&
+                job.kind === "sleep" &&
+                job.result?.outcome === "sleeping") ||
+              (c.kind === "defeat" &&
+                g!.currentTool === "attack_entity" &&
+                job.kind === "combat" &&
+                job.result?.outcome === "dead" &&
+                job.result.entityUuid === c.entityUuid),
+          ),
           jobId: undefined,
           history: [
             ...g.history.slice(-63),
@@ -916,6 +1040,25 @@ export class GameCoordinator {
               args: {},
               outcome: job.detail,
               diagnostics: job.diagnostics,
+              evidence:
+                g.currentTool === "sleep" &&
+                job.kind === "sleep" &&
+                job.result?.outcome === "sleeping"
+                  ? { kind: "sleep" as const }
+                  : g.currentTool === "attack_entity" &&
+                      job.kind === "combat" &&
+                      job.result?.outcome === "dead" &&
+                      typeof job.result.entityUuid === "string" &&
+                      g.completion.some(
+                        (c) =>
+                          c.kind === "defeat" &&
+                          c.entityUuid === job.result?.entityUuid,
+                      )
+                    ? {
+                        kind: "defeat" as const,
+                        entityUuid: job.result.entityUuid,
+                      }
+                    : undefined,
             },
           ],
           elapsedMs,
@@ -962,7 +1105,9 @@ export class GameCoordinator {
     ]);
     try {
       const observation = await this.observe(g, signal);
-      if (conditionsMet(g.completion, observation)) {
+      if (
+        conditionsMet(g.completion, observation, g.history, g.verifiedEvents)
+      ) {
         await this.finish(
           g,
           "completed",
@@ -1075,6 +1220,11 @@ export class GameCoordinator {
         wakeAt: undefined,
         elapsedMs,
       });
+      if (decision.tool === "attack_entity") {
+        const args = decision.args as Record<string, unknown>;
+        const target = observation.nearby.find((e) => e.id === args.entityId);
+        if (target?.uuid) args.entityUuid = target.uuid;
+      }
       const result = await this.call(decision.tool, decision.args, g, signal);
       this.update(g, {
         jobId: result.jobId,
@@ -1085,7 +1235,7 @@ export class GameCoordinator {
             args: decision.args,
             outcome: result.jobId
               ? "Accepted; waiting for verification."
-              : JSON.stringify(result).slice(0, 600),
+              : JSON.stringify(result).slice(0, 3000),
           },
         ],
       });
@@ -1179,6 +1329,12 @@ export class GameCoordinator {
       const output = await this.runtime.chooseGameActivity(
         {
           preference: d.config.preference,
+          projects: this.runtime.store.data.minecraft.projects.filter(
+            (p) =>
+              p.characterId === characterId &&
+              p.world === world &&
+              p.status === "active",
+          ),
           objective: d.config.objective,
           observation,
           observedAt: new Date().toISOString(),
@@ -1245,7 +1401,11 @@ export class GameCoordinator {
         return;
       }
       this.submit(
-        { objective: decision.objective, completion: decision.completion },
+        {
+          objective: decision.objective,
+          completion: decision.completion,
+          projectId: decision.projectId,
+        },
         context,
         "autonomous",
       );

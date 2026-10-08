@@ -257,7 +257,7 @@ test("Minecraft jobs, stop control and world landmarks stay separate from chat",
   await page.getByText("Individual tool permissions", { exact: true }).click();
   await page.getByRole("button", { name: "Survive", exact: true }).click();
   await expect(page.locator(".tool-result-count").first()).toHaveText(
-    "6 of 26 tools",
+    "7 of 32 tools",
   );
   await page.getByLabel("Search Minecraft tools").fill("sleep");
   await expect(

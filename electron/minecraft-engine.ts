@@ -219,6 +219,7 @@ export class MinecraftEngine {
         .map((e) => ({
           name: (e.username ?? e.name ?? "entity").slice(0, 100),
           id: e.id,
+          uuid: e.uuid,
           type: e.type?.slice(0, 100),
           kind: e.kind?.slice(0, 100),
           position: e.position,

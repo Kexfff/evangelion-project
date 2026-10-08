@@ -6,6 +6,12 @@ import { z } from "zod";
 import { pointSchema, type MinecraftJob } from "../src/shared/minecraft";
 import { minecraftGameplayTools } from "../src/shared/minecraft-gameplay";
 import { MinecraftActionError as ActionError } from "./minecraft-action-error";
+import { resourcePlan } from "./minecraft-resources";
+import {
+  itemEnchantments,
+  itemCustomName,
+  itemFingerprint,
+} from "./minecraft-items";
 import {
   approachLabels,
   type ApproachDiagnostic,
@@ -48,6 +54,8 @@ const summaryItem = (i: Bot["heldItem"] | undefined) =>
         count: i.count,
         slot: i.slot,
         durabilityUsed: i.durabilityUsed,
+        enchants: itemEnchantments(i),
+        customName: itemCustomName(i)?.slice(0, 200),
       }
     : null;
 
@@ -194,6 +202,658 @@ export class MinecraftActions {
     );
   }
   async call(name: string, raw: unknown): Promise<unknown> {
+    if (name === "enchant_item") {
+      const a = z
+        .object({
+          position: blockPoint,
+          item: itemName,
+          slot: z.number().int().min(0).max(45).optional(),
+          action: z.enum(["inspect", "enchant"]),
+          choice: z.number().int().min(0).max(2).optional(),
+        })
+        .strict()
+        .parse(raw);
+      if (a.action === "enchant" && a.choice === undefined)
+        throw new ActionError(
+          "Inspect enchantment offers, then choose 0, 1 or 2.",
+        );
+      return this.start(
+        "enchant",
+        async (signal) => {
+          const block = await this.approachBlock(point(a.position), signal);
+          if (block.name !== "enchanting_table")
+            throw new ActionError("The target is not an enchanting table.");
+          const item = this.inventoryItem(a.item, a.slot);
+          if (itemEnchantments(item).length)
+            throw new ActionError(
+              "Use an unenchanted item at the table; use an anvil for existing enchantments.",
+            );
+          const originalSlot = item.slot,
+            originalFingerprint = itemFingerprint(item);
+          if (originalSlot < 9 || originalSlot > 44)
+            throw new ActionError(
+              "Move the item into the main inventory or hotbar first.",
+            );
+          const original = this.bot.inventory
+            .items()
+            .map((i) => ({ fingerprint: itemFingerprint(i), count: i.count }));
+          const w = await this.step(
+            () => this.bot.openEnchantmentTable(block),
+            signal,
+            "Opening enchanting table",
+            10000,
+            async (w) => {
+              if (this.bot.currentWindow === w) await w.close();
+            },
+          );
+          try {
+            const mapped = w.slots[w.inventoryStart + originalSlot - 9];
+            if (!mapped || itemFingerprint(mapped) !== originalFingerprint)
+              throw new ActionError(
+                "Selected item changed when opening the table. Inspect inventory before retrying.",
+              );
+            await this.step(
+              () => w.putTargetItem(mapped),
+              signal,
+              "Inserting enchantment item",
+            );
+            const syncWindow = (
+              this.bot as Bot & {
+                _syncWindow?: (w: Bot["inventory"]) => Promise<void>;
+              }
+            )._syncWindow;
+            if (this.bot.supportFeature?.("stateIdUsed") && syncWindow)
+              await this.step(
+                () => syncWindow.call(this.bot, w),
+                signal,
+                "Confirming enchanting input",
+              );
+            await this.host.until(
+              () =>
+                w.enchantments.length === 3 &&
+                w.enchantments.every((e) => e.level >= 0) &&
+                w.enchantments.some((e) => e.level > 0),
+              signal,
+            );
+            if (
+              !w.targetItem() ||
+              itemFingerprint(w.targetItem()) !== originalFingerprint
+            )
+              throw new ActionError(
+                "Enchanting input does not match the selected item; nothing enchanted.",
+              );
+            const offers = w.enchantments.map((e, choice) => ({
+              choice,
+              requiredLevel: e.level,
+              levelAndLapisCost: choice + 1,
+              expected: e.expected,
+            }));
+            if (a.action === "enchant") {
+              const offer = offers[a.choice!];
+              if (!offer || offer.requiredLevel <= 0)
+                throw new ActionError("That enchantment offer is unavailable.");
+              if (this.bot.experience.level < offer.requiredLevel)
+                throw new ActionError(
+                  `Requires experience level ${offer.requiredLevel}.`,
+                );
+              // The open window owns live inventory slots until it closes.
+              const lapis = w
+                .items()
+                .find(
+                  (i) =>
+                    i.name === "lapis_lazuli" &&
+                    i.count >= offer.levelAndLapisCost,
+                );
+              if (!lapis)
+                throw new ActionError(
+                  `Need a stack with ${offer.levelAndLapisCost} lapis lazuli.`,
+                );
+              await this.step(
+                () => w.putLapis(lapis),
+                signal,
+                "Inserting lapis",
+              );
+              await this.step(() => w.enchant(a.choice!), signal, "Enchanting");
+              await this.host.until(
+                () => itemEnchantments(w.targetItem()).length > 0,
+                signal,
+              );
+            }
+            const target = w.targetItem();
+            if (!target)
+              throw new ActionError(
+                "Enchanting target disappeared; inspect inventory before retrying.",
+              );
+            const fingerprint = itemFingerprint(target);
+            const previous = original
+              .filter((i) => i.fingerprint === fingerprint)
+              .reduce((n, i) => n + i.count, 0);
+            const expectedCount =
+              previous + (a.action === "inspect" ? 0 : target.count);
+            const result = summaryItem(target);
+            await this.step(
+              () => w.takeTargetItem(),
+              signal,
+              "Returning enchantment item",
+            );
+            const sync = (
+              this.bot as Bot & {
+                _syncWindow?: (w: Bot["inventory"]) => Promise<void>;
+              }
+            )._syncWindow;
+            if (this.bot.supportFeature?.("stateIdUsed") && sync)
+              await this.step(
+                () => sync.call(this.bot, w),
+                signal,
+                "Confirming enchantment inventory",
+              );
+            await this.host.until(
+              () =>
+                w
+                  .items()
+                  .filter((i) => itemFingerprint(i) === fingerprint)
+                  .reduce((n, i) => n + i.count, 0) >= expectedCount,
+              signal,
+            );
+            return {
+              summary:
+                a.action === "inspect"
+                  ? "Enchantment offers inspected; item returned."
+                  : "Enchanted item returned to inventory; enchantments observed.",
+              offers,
+              item: result,
+            };
+          } finally {
+            if (this.bot.currentWindow === w) await w.close();
+          }
+        },
+        true,
+      );
+    }
+    if (name === "anvil_item") {
+      const a = z
+        .object({
+          position: blockPoint,
+          first: z.number().int().min(9).max(44),
+          second: z.number().int().min(9).max(44).optional(),
+          name: z.string().min(1).max(35).optional(),
+          action: z.enum(["inspect", "apply"]),
+        })
+        .strict()
+        .parse(raw);
+      if (a.second === a.first || (a.second === undefined && !a.name))
+        throw new ActionError(
+          "Choose distinct input slots for combining, or a name for renaming.",
+        );
+      return this.start(
+        "anvil",
+        async (signal) => {
+          const block = await this.approachBlock(point(a.position), signal);
+          if (!["anvil", "chipped_anvil", "damaged_anvil"].includes(block.name))
+            throw new ActionError("The target is not an anvil.");
+          if (
+            !this.bot.inventory.slots[a.first] ||
+            (a.second !== undefined && !this.bot.inventory.slots[a.second])
+          )
+            throw new ActionError(
+              "An input slot is empty; inspect inventory again.",
+            );
+          type AnvilWindow = Awaited<ReturnType<Bot["openAnvil"]>> &
+            Bot["inventory"] & { close(): Promise<void> };
+          const w = await this.step(
+            async () => (await this.bot.openAnvil(block)) as AnvilWindow,
+            signal,
+            "Opening anvil",
+            10000,
+            async (w) => {
+              if (this.bot.currentWindow === w) await w.close();
+            },
+          );
+          let levels = -1;
+          const cost = (packet: {
+            windowId: number;
+            property: number;
+            value: number;
+          }) => {
+            if (packet.windowId === w.id && packet.property === 0)
+              levels = packet.value;
+          };
+          this.bot._client.on("craft_progress_bar", cost);
+          const sync = async () => {
+            const syncWindow = (
+              this.bot as Bot & {
+                _syncWindow?: (w: Bot["inventory"]) => Promise<void>;
+              }
+            )._syncWindow;
+            if (this.bot.supportFeature?.("stateIdUsed") && syncWindow)
+              await this.step(
+                () => syncWindow.call(this.bot, w),
+                signal,
+                "Confirming anvil inventory",
+              );
+          };
+          try {
+            // Window slots differ from player inventory slots. No local Item.anvil
+            // calculation: it loses modern data components and can mutate inputs.
+            await this.step(
+              () => this.bot.moveSlotItem(w.inventoryStart + a.first - 9, 0),
+              signal,
+              "Inserting first anvil item",
+            );
+            if (a.second !== undefined)
+              await this.step(
+                () =>
+                  this.bot.moveSlotItem(w.inventoryStart + a.second! - 9, 1),
+                signal,
+                "Inserting second anvil item",
+              );
+            if (a.name !== undefined) {
+              this.host.check(signal);
+              this.bot._client.write("name_item", { name: a.name });
+            }
+            await sync();
+            await this.host.until(() => !!w.slots[2] && levels >= 0, signal);
+            const output = w.slots[2]!;
+            const result = summaryItem(output);
+            const requiredLevels = levels;
+            if (a.action === "inspect") {
+              for (const slot of [0, 1])
+                if (w.slots[slot])
+                  await this.step(
+                    () => this.bot.putAway(slot),
+                    signal,
+                    "Returning anvil input",
+                  );
+              await sync();
+              return {
+                summary:
+                  "Minecraft anvil preview; inputs returned. Reinspect inventory slots before applying.",
+                levels: requiredLevels,
+                item: result,
+              };
+            }
+            if (
+              this.bot.game.gameMode !== "creative" &&
+              (levels >= 40 || this.bot.experience.level < levels)
+            )
+              throw new ActionError(
+                `Anvil requires ${levels} levels or is too expensive in survival.`,
+              );
+            const expected = itemFingerprint(output),
+              quantity = output.count;
+            const countOutput = () =>
+              w
+                .items()
+                .filter((i) => itemFingerprint(i) === expected)
+                .reduce((n, i) => n + i.count, 0);
+            const before = countOutput();
+            await this.step(
+              () => this.bot.putAway(2),
+              signal,
+              "Taking anvil output",
+            );
+            await sync();
+            await this.host.until(
+              () => countOutput() >= before + quantity,
+              signal,
+            );
+            return {
+              summary: "Server-previewed anvil output verified in inventory.",
+              levels: requiredLevels,
+              item: result,
+            };
+          } finally {
+            this.bot._client.removeListener("craft_progress_bar", cost);
+            if (this.bot.currentWindow === w) await w.close();
+          }
+        },
+        true,
+      );
+    }
+    if (name === "fish") {
+      const a = z
+        .object({
+          water: blockPoint.optional(),
+          catches: z.number().int().min(1).max(16).default(1),
+          seconds: z.number().int().min(5).max(90).default(60),
+        })
+        .strict()
+        .parse(raw);
+      return this.start(
+        "fish",
+        async (signal) => {
+          const water = a.water
+            ? this.blockAt(point(a.water))
+            : this.bot.findBlock({
+                matching: (b) => b.name === "water",
+                maxDistance: 6,
+              });
+          if (
+            !water ||
+            water.name !== "water" ||
+            water.position.distanceTo(this.bot.entity.position) > 6
+          )
+            throw new ActionError(
+              "Stand near loaded water with a clear cast first.",
+            );
+          const gains: Record<string, number> = {};
+          for (let i = 0; i < a.catches; i++) {
+            if (!this.bot.inventory.slots.slice(9, 45).some((slot) => !slot))
+              throw new ActionError(
+                "Make a free inventory slot before fishing; an unknown catch may not stack. Nothing cast.",
+              );
+            await this.step(
+              () => this.bot.equip(this.inventoryItem("fishing_rod"), "hand"),
+              signal,
+              "Holding fishing rod",
+            );
+            await this.step(
+              () => this.bot.lookAt(water.position.offset(0.5, 0.8, 0.5), true),
+              signal,
+              "Aiming cast",
+            );
+            const before = new Map(
+              this.bot.inventory
+                .items()
+                .map((v) => [v.name, this.inventoryCount(v.name)]),
+            );
+            const oldEntities = new Set(Object.values(this.bot.entities));
+            const shore = this.bot.entity.position.clone();
+            let active = false;
+            const reel = () => {
+              if (active) {
+                active = false;
+                this.bot.activateItem();
+              }
+            };
+            signal.addEventListener("abort", reel, { once: true });
+            try {
+              await this.step(
+                async () => {
+                  active = true;
+                  try {
+                    await this.bot.fish();
+                  } finally {
+                    active = false;
+                  }
+                },
+                signal,
+                "Waiting for a fishing bite",
+                a.seconds * 1000,
+              );
+            } finally {
+              reel();
+              signal.removeEventListener("abort", reel);
+            }
+            const caught = () =>
+              [
+                ...new Set(this.bot.inventory.items().map((v) => v.name)),
+              ].filter(
+                (name) =>
+                  name !== "fishing_rod" &&
+                  this.inventoryCount(name) > (before.get(name) ?? 0),
+              );
+            try {
+              await this.host.until(() => caught().length > 0, signal, 5000);
+            } catch (error) {
+              signal.throwIfAborted();
+              const drop = Object.values(this.bot.entities)
+                .filter(
+                  (e) =>
+                    !oldEntities.has(e) &&
+                    e.name === "item" &&
+                    e.isValid !== false &&
+                    e.position.distanceTo(shore) <= 8,
+                )
+                .sort(
+                  (a, b) =>
+                    a.position.distanceTo(shore) - b.position.distanceTo(shore),
+                )[0];
+              if (drop) {
+                await this.host.navigate(drop.position.clone(), signal, 1);
+                try {
+                  await this.host.until(
+                    () => caught().length > 0,
+                    signal,
+                    5000,
+                  );
+                } catch {
+                  signal.throwIfAborted();
+                  throw new ActionError(
+                    "Fishing drop approached, but pickup remains unconfirmed; inspect before another cast.",
+                  );
+                }
+                await this.host.navigate(shore, signal, 1);
+              } else
+                throw new ActionError(
+                  "Reeled in, but no collected inventory gain or newly spawned nearby drop was confirmed. Check the water/shore and free inventory space; no automatic recast.",
+                );
+            }
+            for (const name of caught())
+              gains[name] =
+                (gains[name] ?? 0) +
+                this.inventoryCount(name) -
+                (before.get(name) ?? 0);
+            this.host.progress(
+              `Fishing: ${i + 1}/${a.catches} reels followed by inventory gain.`,
+              i + 1,
+            );
+          }
+          return {
+            summary:
+              "Fishing completed; inventory gains observed (nearby unrelated pickups cannot be excluded).",
+            gains,
+          };
+        },
+        true,
+      );
+    }
+    if (name === "steer_vehicle") {
+      const a = z
+        .object({
+          left: z.number().min(-1).max(1),
+          forward: z.number().min(-1).max(1),
+          milliseconds: z.number().int().min(100).max(5000),
+        })
+        .strict()
+        .parse(raw);
+      return this.start(
+        "vehicle",
+        async (signal) => {
+          const vehicle = this.vehicle();
+          if (!vehicle)
+            throw new ActionError("Mount a steerable vehicle first.");
+          const before = vehicle.position.clone();
+          const end = Date.now() + a.milliseconds;
+          try {
+            while (Date.now() < end) {
+              this.host.check(signal);
+              if (this.vehicle() !== vehicle)
+                throw new ActionError("The mount changed; steering stopped.");
+              this.bot.moveVehicle(a.left, a.forward);
+              await delay(
+                Math.min(100, Math.max(1, end - Date.now())),
+                undefined,
+                { signal },
+              );
+            }
+          } finally {
+            this.bot.moveVehicle(0, 0);
+          }
+          const displacement = before.distanceTo(vehicle.position);
+          if ((a.left || a.forward) && displacement < 0.1)
+            throw new ActionError(
+              "Steering input sent but no vehicle movement observed. This mount/server may need a control item or unsupported vehicle physics. No automatic retry.",
+            );
+          return {
+            summary:
+              "Steering stopped; observed displacement reported, not arrival.",
+            displacement,
+            position: vehicle.position,
+          };
+        },
+        true,
+      );
+    }
+    if (name === "trade_villager") {
+      const a = z
+        .object({
+          entityId: idSchema,
+          action: z.enum(["inspect", "trade"]),
+          index: z.number().int().min(0).max(99).optional(),
+          item: itemName.optional(),
+          input1: itemName.optional(),
+          input2: itemName.nullable().optional(),
+          count: z.number().int().min(1).max(64).optional(),
+          price1: quantity.optional(),
+          price2: z.number().int().min(0).max(1024).optional(),
+        })
+        .strict()
+        .parse(raw);
+      if (
+        a.action === "trade" &&
+        [a.index, a.item, a.input1, a.input2, a.count, a.price1, a.price2].some(
+          (v) => v === undefined,
+        )
+      )
+        throw new ActionError(
+          "Inspect offers first, then supply index, expected input1/input2 IDs (input2=null if absent), output item, operation count and both maximum unit prices.",
+        );
+      return this.start(
+        "trade",
+        async (signal) => {
+          const target = this.entity(a.entityId);
+          if (target.name !== "villager")
+            throw new ActionError("Select a currently observed villager.");
+          await this.host.navigate(target.position, signal, 2);
+          if (
+            this.entity(a.entityId) !== target ||
+            target.position.distanceTo(this.bot.entity.position) > 3
+          )
+            throw new ActionError(
+              "Villager moved out of reach; observe again.",
+            );
+          await this.step(
+            () => this.bot.lookAt(target.position.offset(0, 1, 0), true),
+            signal,
+            "Looking at villager",
+          );
+          if (this.bot.entityAtCursor(3)?.id !== target.id)
+            throw new ActionError(
+              "Villager is behind another block/entity; move to a visible approach.",
+            );
+          const window = await this.step(
+            () => this.bot.openVillager(target),
+            signal,
+            "Opening villager offers",
+            10000,
+            async (w) => {
+              if (this.bot.currentWindow === w) await w.close();
+            },
+          );
+          try {
+            const offers = () =>
+              window.trades
+                .slice(0, 100)
+                .map((t, index) => ({
+                  index,
+                  input1: {
+                    item: t.inputItem1.name,
+                    count: t.realPrice ?? t.inputItem1.count,
+                  },
+                  input2:
+                    t.hasItem2 && t.inputItem2
+                      ? { item: t.inputItem2.name, count: t.inputItem2.count }
+                      : null,
+                  output: summaryItem(t.outputItem),
+                  remaining: Math.max(0, t.maximumNbTradeUses - t.nbTradeUses),
+                  disabled: t.tradeDisabled,
+                }));
+            if (a.action === "inspect")
+              return {
+                summary: "Current villager offers inspected.",
+                offers: offers(),
+              };
+            const countOutput = (fingerprint: string) =>
+              window
+                .items()
+                .filter((i) => itemFingerprint(i) === fingerprint)
+                .reduce((n, i) => n + i.count, 0);
+            let outputGain = 0;
+            for (let n = 0; n < a.count!; n++) {
+              this.host.check(signal);
+              const t = window.trades[a.index!];
+              if (
+                !t ||
+                t.tradeDisabled ||
+                t.maximumNbTradeUses <= t.nbTradeUses ||
+                t.outputItem.name !== a.item ||
+                t.inputItem1.name !== a.input1 ||
+                (t.hasItem2 ? t.inputItem2?.name : null) !== a.input2 ||
+                (t.realPrice ?? t.inputItem1.count) > a.price1! ||
+                (t.hasItem2 ? (t.inputItem2?.count ?? Infinity) : 0) > a.price2!
+              )
+                throw new ActionError(
+                  `Offer unavailable or changed; ${n} operations verified. Inspect before retrying.`,
+                );
+              const fingerprint = itemFingerprint(t.outputItem),
+                previous = countOutput(fingerprint);
+              if (
+                [t.inputItem1, t.inputItem2].some(
+                  (i) => i && itemFingerprint(i) === fingerprint,
+                )
+              )
+                throw new ActionError(
+                  "This offer consumes identical output items; a gain cannot be verified. Nothing traded.",
+                );
+              await this.step(
+                () => this.bot.trade(window, a.index!, 1),
+                signal,
+                "Villager trade",
+                15000,
+              );
+              const sync = (
+                this.bot as Bot & {
+                  _syncWindow?: (w: Bot["inventory"]) => Promise<void>;
+                }
+              )._syncWindow;
+              if (this.bot.supportFeature?.("stateIdUsed") && sync)
+                await this.step(
+                  () => sync.call(this.bot, window),
+                  signal,
+                  "Confirming trade inventory",
+                );
+              await this.host.until(
+                () => countOutput(fingerprint) >= previous + t.outputItem.count,
+                signal,
+              );
+              outputGain += t.outputItem.count;
+              this.host.progress(
+                `Traded ${n + 1}/${a.count} operations; output gain verified.`,
+                n + 1,
+              );
+            }
+            return {
+              summary: "Trading output inventory gain and metadata verified.",
+              outputGain,
+              offers: offers(),
+            };
+          } finally {
+            if (this.bot.currentWindow === window) await window.close();
+          }
+        },
+        true,
+      );
+    }
+    if (name === "plan_resources") {
+      const a = z
+        .object({ item: itemName, count: z.number().int().min(1).max(4096) })
+        .strict()
+        .parse(raw);
+      if (!this.bot.registry.itemsByName[a.item])
+        throw new ActionError("Unknown item ID.");
+      return resourcePlan(this.bot, a.item, a.count);
+    }
     if (name === "inspect_inventory") {
       z.object({}).strict().parse(raw);
       return {
@@ -411,7 +1071,8 @@ export class MinecraftActions {
       return this.start(
         "sleep",
         async (signal) => {
-          if (this.bot.isSleeping) return { summary: "Already sleeping." };
+          if (this.bot.isSleeping)
+            return { summary: "Already sleeping.", outcome: "sleeping" };
           if (this.bot.game.dimension !== "overworld")
             throw new ActionError(
               "Beds explode in this dimension; use interact_block if you intend that, not sleep.",
@@ -438,6 +1099,7 @@ export class MinecraftActions {
           await this.host.until(() => this.bot.isSleeping, signal);
           return {
             summary: "Sleeping in bed; sleep state confirmed.",
+            outcome: "sleeping",
             position,
           };
         },
@@ -544,7 +1206,11 @@ export class MinecraftActions {
       const a = z
         .object({
           entityId: idSchema,
+          entityUuid: z.string().uuid().optional(),
           mode: z.enum(["hit", "fight"]).default("hit"),
+          equipBest: z.boolean().default(false),
+          retreatHealth: z.number().min(0).max(20).default(0),
+          retreatTo: blockPoint.optional(),
           seconds: z.number().int().min(1).max(120).default(30),
         })
         .strict()
@@ -553,6 +1219,37 @@ export class MinecraftActions {
         "combat",
         async (signal) => {
           const target = this.entity(a.entityId);
+          if (a.entityUuid && target.uuid !== a.entityUuid)
+            throw new ActionError(
+              "The target identity changed; observe again before attacking.",
+            );
+          if (a.equipBest) {
+            const tier: Record<string, number> = {
+              wooden: 1,
+              golden: 1,
+              stone: 2,
+              copper: 2,
+              iron: 3,
+              diamond: 4,
+              netherite: 5,
+            };
+            const weapon = this.bot.inventory
+              .items()
+              .filter((i) => /_(sword|axe)$/.test(i.name))
+              .sort(
+                (a, b) =>
+                  (tier[b.name.split("_")[0]] ?? 0) * 2 +
+                  Number(b.name.endsWith("_sword")) -
+                  ((tier[a.name.split("_")[0]] ?? 0) * 2 +
+                    Number(a.name.endsWith("_sword"))),
+              )[0];
+            if (weapon)
+              await this.step(
+                () => this.bot.equip(weapon, "hand"),
+                signal,
+                "Equipping a melee weapon",
+              );
+          }
           let dead = false,
             hits = 0;
           const died = (e: Bot["entity"]) => {
@@ -568,6 +1265,7 @@ export class MinecraftActions {
                 return {
                   summary: "Target death observed.",
                   entityId: target.id,
+                  entityUuid: target.uuid,
                   attacksSent: hits,
                   outcome: "dead",
                 };
@@ -578,6 +1276,16 @@ export class MinecraftActions {
                 throw new ActionError(
                   "Target disappeared from tracking; a kill is not confirmed.",
                 );
+              if (a.retreatHealth > 0 && this.bot.health <= a.retreatHealth) {
+                this.bot.pathfinder.setGoal(null);
+                if (a.retreatTo)
+                  await this.host.navigate(point(a.retreatTo), signal, 2);
+                throw new ActionError(
+                  a.retreatTo
+                    ? "Retreated at the selected low-health threshold; target defeat is not confirmed."
+                    : "Stopped fighting at the selected low-health threshold; choose a retreat or healing action.",
+                );
+              }
               if (this.bot.entity.position.distanceTo(target.position) <= 3) {
                 await this.step(
                   () =>
@@ -618,6 +1326,8 @@ export class MinecraftActions {
               return {
                 summary: "Target death observed.",
                 outcome: "dead",
+                entityId: target.id,
+                entityUuid: target.uuid,
                 attacksSent: hits,
               };
             throw new ActionError(

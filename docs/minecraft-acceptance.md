@@ -43,6 +43,26 @@ The runner copies only LLM configuration and its encrypted local-vault entry/key
 
 Companion Consciousness is disabled. The real director/coordinator and MCP validation/policy layer choose and execute three separate inventory milestones through an in-process bridge to the live engine. This is **not** a test of Electron worker IPC; `scripts/smoke-minecraft.mjs` separately checks the managed worker in an isolated desktop profile. There is a hard cap of ten provider calls per invocation, no automatic retries, and a bounded test duration. Reported cost is not a billing guarantee. Repeating the command spends a new budget and needs renewed consent.
 
+## Gameplay depth checks — v0.4.17, 2026-10-08
+
+After the disposable arena exists, run the provider-free advanced-mechanics scenario with fresh live-world consent:
+
+```sh
+EVA_MINECRAFT_LIVE=yes EVA_MC_DISPOSABLE=yes \
+EVA_MC_ARENA=-1040,200,310 EVA_MC_SCENARIO=depth \
+npm run test:minecraft:live
+```
+
+This uses the existing arena's bedrock floor and adds an enchanting table, anvil, test villager, storage chest and small fishing pool within its volume. It supplies XP and items, recreates only its tagged test villager on repeated runs, and stores surplus test swords in the chest. These additions, XP and inventory changes remain; the client returns to its starting position/mode. It does not read a real app profile or make LLM requests.
+
+The final v0.4.17 run passed: enchantment offer inspection and enchantment of a diamond sword with returned metadata verified; server-previewed anvil rename; current villager offers and two bread trades with six output items; storage of surplus equipment; automatic fishing/reeling followed by pickup and return to shore. Fishing gains included a water-bottle `potion` item; it is not a fish-only loot assertion. Prerequisite analysis correctly accounted for an existing wooden pickaxe and inventory toward a target of two.
+
+Live failures exposed and fixed 26.1 structured item/enchantment components, player-to-window slot remapping, stale anvil input slots after preview, and catches landing short of the shore. Anvils now use the server's output preview rather than the library's legacy local calculation. Fishing verifies pickup and may approach a newly observed nearby drop once; a full inventory or uncertain pickup stops further casting. Ordinary tests cover cancellation, pending-operation fencing, price changes, missing output, UUID evidence and persisted project scope.
+
+Validation: **373 core tests**, **40 browser tests**, plus a final three-test Minecraft/project UI rerun; typecheck and Linux unpacked packaging passed. Vehicle steering/low-health combat are fixture-tested, not live-certified. Anvil repair/combine, upgraded/two-input trades, wandering traders and sustained from-empty provider-driven survival remain open. This run did not use the previous paid-call allowance.
+
+Desktop smoke passed when run alone, including synthetic voice/barge-in/PTT, provider fixtures, avatar, archives, plugins and MCP. An initial attempt alongside other desktop test instances timed out in synthetic barge-in; the isolated rerun passed without voice-code changes. Packaged profile-isolation passed with the normal profile's read-only hash guard unchanged. Packaged managed-worker smoke passed LAN join, observe, inventory, landmarks and emergency disconnect; no follow was requested. Eva was disconnected at the original position `(-1030.685, 54, 319.497)` after the checks. The new stations/pool, tagged villager, supplied XP/materials and chest of test swords remain in the authorized arena.
+
 ## Recorded v0.4.16 results — 2026-10-07
 
 Validation passed: **353 core tests, 40 browser tests**, typecheck, Linux package build, isolated desktop smoke, packaged profile-isolation smoke and packaged live-worker smoke. Browser tests used the installed Chromium 1228 binary because Playwright's default 1243 binary was absent. Initial sandbox networking failures were rerun with loopback access.

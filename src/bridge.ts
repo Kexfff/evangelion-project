@@ -54,6 +54,7 @@ const preview: Bridge = {
   configureGameAutonomy: desktopOnly,
   pauseGameAutonomy: desktopOnly,
   submitGameGoal: desktopOnly,
+  saveGameProject: desktopOnly,
   controlGameGoal: desktopOnly,
   configureGameGoals: desktopOnly,
   configureMinecraft: desktopOnly,

@@ -9,6 +9,10 @@ const point = z
   })
   .strict();
 export const goalConditionSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("sleep") }).strict(),
+  z
+    .object({ kind: z.literal("defeat"), entityUuid: z.string().uuid() })
+    .strict(),
   z
     .object({
       kind: z.literal("inventory"),
@@ -44,8 +48,38 @@ export const goalInputSchema = z
     completion: z.array(goalConditionSchema).min(1).max(8),
     mode: z.enum(["queue", "replace"]).default("queue"),
     dueAt: z.string().datetime().optional(),
+    projectId: z.string().uuid().optional(),
   })
   .strict();
+export const gameProjectInputSchema = z
+  .object({
+    id: z.string().uuid().optional(),
+    title: z.string().trim().min(1).max(120),
+    objective: z.string().trim().min(1).max(600),
+    targets: z
+      .array(
+        z
+          .object({
+            item: z.string().regex(/^[a-z0-9_]{1,100}$/),
+            count: z.number().int().min(1).max(4096),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(8),
+    status: z.enum(["active", "paused", "archived"]).default("active"),
+  })
+  .strict();
+export const gameProjectSchema = gameProjectInputSchema.extend({
+  id: z.string().uuid(),
+  characterId: z.string(),
+  world: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  lastOutcome: z.string().max(600).optional(),
+  lastVerifiedAt: z.string().optional(),
+});
+export type GameProject = z.infer<typeof gameProjectSchema>;
 export const gameGoalConfigSchema = z
   .object({
     maxSteps: z.number().int().min(1).max(64).default(24),
@@ -62,6 +96,7 @@ export const gameGoalConfigSchema = z
 export const gameGoalSchema = z.object({
   id: z.string().uuid(),
   objective: z.string().max(600),
+  projectId: z.string().uuid().optional(),
   completion: z.array(goalConditionSchema).min(1).max(8),
   status: z.enum([
     "queued",
@@ -90,12 +125,22 @@ export const gameGoalSchema = z.object({
       z.object({
         tool: z.string().max(128),
         args: z.record(z.string(), z.unknown()),
-        outcome: z.string().max(600),
+        outcome: z.string().max(3000),
+        evidence: z
+          .discriminatedUnion("kind", [
+            z.object({ kind: z.literal("sleep") }),
+            z.object({
+              kind: z.literal("defeat"),
+              entityUuid: z.string().uuid(),
+            }),
+          ])
+          .optional(),
         diagnostics: z.array(approachDiagnosticSchema).max(9).optional(),
       }),
     )
     .max(64)
     .default([]),
+  verifiedEvents: z.array(goalConditionSchema).max(8).optional(),
   currentTool: z.string().optional(),
   jobId: z.string().optional(),
   wakeAt: z.number().optional(),
@@ -137,6 +182,11 @@ function definition(name: string, description: string, schema: z.ZodType) {
   return { type: "function", function: { name, description, parameters } };
 }
 export const gameGoalTools = [
+  definition(
+    "game_project",
+    "Create or update a durable resource project requested by the user in the current world. Include id only to edit an existing project. Saving does not start actions or enable autonomy. Active projects guide future autonomous milestones; paused/archived projects do not. Pausing does not stop already queued goals; use game_goal_control for that.",
+    gameProjectInputSchema,
+  ),
   definition(
     "game_goal",
     "Start a persistent Minecraft goal for this user's request. Define observable completion criteria; queue by default, replace only when requested. Continues after this chat turn, verifies each action. dueAt schedules only when game scheduling is enabled. Do not narrate bookkeeping or invent completion.",

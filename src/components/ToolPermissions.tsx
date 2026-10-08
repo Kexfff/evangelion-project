@@ -10,6 +10,7 @@ const groups: Record<string, string[]> = {
     "follow_player",
     "find_blocks",
     "look_at",
+    "steer_vehicle",
   ],
   Survive: [
     "eat_food",
@@ -18,12 +19,16 @@ const groups: Record<string, string[]> = {
     "attack_entity",
     "equip_item",
     "use_item",
+    "fish",
   ],
   "Build & craft": [
     "dig_block",
     "collect_blocks",
     "build_blocks",
     "get_recipes",
+    "plan_resources",
+    "enchant_item",
+    "anvil_item",
     "craft_item",
     "interact_block",
   ],
@@ -31,6 +36,7 @@ const groups: Record<string, string[]> = {
   "Social & controls": [
     "say_in_game",
     "interact_entity",
+    "trade_villager",
     "job_status",
     "stop_action",
   ],

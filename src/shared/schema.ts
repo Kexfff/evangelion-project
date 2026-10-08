@@ -196,6 +196,7 @@ export interface Bridge {
   ): Promise<void>;
   pauseGameAutonomy(paused: boolean): Promise<void>;
   submitGameGoal(input: unknown): Promise<unknown>;
+  saveGameProject(input: unknown): Promise<unknown>;
   controlGameGoal(
     id: string,
     action: "pause" | "resume" | "cancel",

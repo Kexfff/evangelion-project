@@ -8,6 +8,7 @@ import { minecraftPhysicsCompatibility } from "../../electron/minecraft-physics"
 import { minecraftConfigSchema } from "../../src/shared/minecraft";
 import { Vec3 } from "vec3";
 import { acceptAutonomy } from "./minecraft-autonomy";
+import { acceptGameplayDepth } from "./minecraft-depth";
 import { version } from "../../package.json";
 
 assert.equal(process.env.EVA_MINECRAFT_LIVE, "yes");
@@ -25,7 +26,7 @@ const config = minecraftConfigSchema.parse({
 const disposable = process.env.EVA_MC_DISPOSABLE === "yes";
 const scenario = process.env.EVA_MC_SCENARIO ?? "arena";
 assert.ok(
-  ["arena", "autonomy", "movement"].includes(scenario),
+  ["arena", "autonomy", "movement", "depth"].includes(scenario),
   "Unknown acceptance scenario",
 );
 const origin = process.env.EVA_MC_ARENA?.split(",").map(Number);
@@ -502,7 +503,7 @@ async function main() {
       endpoint: `127.0.0.1:${config.port}`,
     }),
   );
-  if (scenario === "autonomy" || scenario === "movement") {
+  if (["autonomy", "movement", "depth"].includes(scenario)) {
     assert.ok(disposable);
     returnPosition = bot.entity.position.clone();
     returnMode = bot.game.gameMode;
@@ -518,6 +519,11 @@ async function main() {
       buildRadius: 20,
     });
     engine.ready();
+    if (scenario === "depth") {
+      config.jobSeconds = 120;
+      await acceptGameplayDepth(bot, engine, origin!, command, action, until);
+      return;
+    }
     if (scenario === "movement") {
       await movementAndFood();
       return;

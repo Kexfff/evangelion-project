@@ -13,6 +13,7 @@ const api: Bridge = {
   pauseGameAutonomy: (paused) =>
     ipcRenderer.invoke("eva:game:autonomy:pause", paused),
   submitGameGoal: (input) => ipcRenderer.invoke("eva:game:submit", input),
+  saveGameProject: (input) => ipcRenderer.invoke("eva:game:project", input),
   controlGameGoal: (id, action) =>
     ipcRenderer.invoke("eva:game:control", { id, action }),
   configureGameGoals: (config) =>

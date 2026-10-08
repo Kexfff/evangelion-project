@@ -22,6 +22,7 @@ test("game goals queue, pause, reconcile, cancel and save independent budgets", 
           config,
           goalConfig,
           goals: [],
+          projects: [],
           jobs: [],
           landmarks: [],
           live: {
@@ -64,6 +65,23 @@ test("game goals queue, pause, reconcile, cancel and save independent budgets", 
               source: "desktop",
               history: [],
             });
+            emit();
+          },
+          saveGameProject: async (input: any) => {
+            const project = {
+              ...input,
+              id: input.id ?? "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+              world: "test",
+              characterId: "fixture",
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+            data.minecraft.projects = [
+              ...data.minecraft.projects.filter(
+                (p: any) => p.id !== project.id,
+              ),
+              project,
+            ];
             emit();
           },
           controlGameGoal: async (_id: string, action: string) => {
@@ -215,6 +233,60 @@ test("game goals queue, pause, reconcile, cancel and save independent budgets", 
     survival: true,
   });
   await page.setViewportSize({ width: 390, height: 900 });
+  await page.getByText("New world project", { exact: true }).click();
+  await page
+    .getByLabel("Project title", { exact: true })
+    .fill("Our first home");
+  await page
+    .getByLabel("Purpose / next milestone")
+    .fill("Gather the materials for our home");
+  await page
+    .getByLabel("Resource targets (up to 8, one per line)")
+    .fill("oak_log 16\ncobblestone 32");
+  await page.getByRole("button", { name: "Save project", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Our first home" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("progressbar", { name: "oak_log stock" }),
+  ).toHaveAttribute("max", "16");
+  await page
+    .getByRole("button", { name: "Work on targets", exact: true })
+    .click();
+  expect(
+    await page.evaluate(() => (window as any).goalFixture.lastSubmitted),
+  ).toMatchObject({
+    projectId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    completion: [
+      { kind: "inventory", item: "oak_log", count: 16 },
+      { kind: "inventory", item: "cobblestone", count: 32 },
+    ],
+  });
+  await expect(
+    page.getByRole("button", { name: "Goal in progress" }),
+  ).toBeDisabled();
+  await page
+    .getByRole("button", { name: "Pause project", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Archive", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Our first home" }),
+  ).toHaveCount(0);
+  await page.getByLabel("Show archived projects").check();
+  await expect(
+    page.getByRole("heading", { name: "Our first home" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Activate", exact: true }).click();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await page.getByLabel("Project title", { exact: true }).fill("Our cozy home");
+  await page.getByRole("button", { name: "Save project", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Our cozy home" }),
+  ).toBeVisible();
+  await page.screenshot({ path: "/tmp/eva-game-projects.png", fullPage: true });
+  await page
+    .locator(".game-projects")
+    .screenshot({ path: "/tmp/eva-project-cards.png" });
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth + 1,

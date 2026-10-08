@@ -233,8 +233,340 @@ function fixture() {
 }
 
 describe("Minecraft everyday gameplay", () => {
-  it("registers all 26 tools with host-valid schemas and entity-aware observation", () => {
-    expect(minecraftTools).toHaveLength(26);
+  it("can equip for combat, retreat on low health, and rejects reused target IDs", async () => {
+    const h = fixture();
+    h.add("diamond_sword", 1, 12);
+    h.bot.health = 4;
+    await expect(
+      h.actions.call("attack_entity", {
+        entityId: 2,
+        mode: "fight",
+        equipBest: true,
+        retreatHealth: 6,
+        retreatTo: p,
+      }),
+    ).rejects.toThrow("Retreated");
+    expect(h.bot.heldItem.name).toBe("diamond_sword");
+    expect(h.host.navigate).toHaveBeenCalled();
+    expect(h.bot.attack).not.toHaveBeenCalled();
+    await expect(
+      h.actions.call("attack_entity", {
+        entityId: 2,
+        entityUuid: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      }),
+    ).rejects.toThrow("identity changed");
+    expect(h.bot.attack).not.toHaveBeenCalled();
+  });
+  it("inspects enchanting offers, returns the item, and verifies changed enchantment metadata", async () => {
+    const h = fixture();
+    h.setBlock("enchanting_table");
+    h.bot.experience = { level: 30 };
+    const sword = h.add("iron_sword", 1, 12);
+    h.add("lapis_lazuli", 8, 13);
+    let target: any = null;
+    const items: any[] = [sword, h.slots[13]];
+    const w: any = {
+      inventoryStart: 2,
+      slots: Array(38).fill(null),
+      enchantments: [
+        { level: 5, expected: {} },
+        { level: 15, expected: {} },
+        { level: 30, expected: {} },
+      ],
+      items: () => items,
+      putTargetItem: vi.fn(async (item) => {
+        target = item;
+        items.splice(items.indexOf(item), 1);
+      }),
+      targetItem: () => target,
+      takeTargetItem: vi.fn(async () => {
+        items.push(target);
+        target = null;
+      }),
+      putLapis: vi.fn(async () => {}),
+      enchant: vi.fn(async () => {
+        target = { ...target, enchants: [{ name: "sharpness", lvl: 2 }] };
+      }),
+      close: vi.fn(async () => {
+        h.bot.currentWindow = null;
+      }),
+    };
+    h.bot.openEnchantmentTable = vi.fn(async () => {
+      w.slots[5] = sword;
+      h.bot.currentWindow = w;
+      return w;
+    });
+    expect(
+      await h.actions.call("enchant_item", {
+        position: p,
+        item: "iron_sword",
+        action: "inspect",
+      }),
+    ).toMatchObject({
+      offers: [
+        { requiredLevel: 5 },
+        { requiredLevel: 15 },
+        { requiredLevel: 30 },
+      ],
+    });
+    expect(w.enchant).not.toHaveBeenCalled();
+    expect(
+      await h.actions.call("enchant_item", {
+        position: p,
+        item: "iron_sword",
+        action: "enchant",
+        choice: 2,
+      }),
+    ).toMatchObject({ item: { enchants: [{ name: "sharpness", lvl: 2 }] } });
+    expect(w.close).toHaveBeenCalledTimes(2);
+    h.bot.experience.level = 0;
+    await expect(
+      h.actions.call("enchant_item", {
+        position: p,
+        item: "iron_sword",
+        action: "enchant",
+        choice: 1,
+      }),
+    ).rejects.toThrow("Requires experience level");
+    expect(w.close).toHaveBeenCalledTimes(3);
+    expect(w.enchant).toHaveBeenCalledTimes(1);
+  });
+  it("previews server anvil output, verifies returned metadata and closes on uncertain apply", async () => {
+    const h = fixture();
+    h.setBlock("anvil");
+    h.bot.experience = { level: 10 };
+    const sword = h.add("iron_sword", 1, 12);
+    const result = { ...sword, customName: "Eva's blade" };
+    const items: any[] = [];
+    const w = {
+      id: 42,
+      inventoryStart: 3,
+      slots: [null, null, result] as any[],
+      items: () => items,
+      close: vi.fn(async () => {
+        h.bot.currentWindow = null;
+      }),
+    };
+    h.bot._client = new EventEmitter();
+    h.bot._client.write = vi.fn(() => {
+      h.bot._client.emit("craft_progress_bar", {
+        windowId: 42,
+        property: 0,
+        value: 1,
+      });
+    });
+    h.bot.moveSlotItem = vi.fn(async () => {
+      w.slots[0] = sword;
+    });
+    h.bot.putAway = vi.fn(async (slot) => {
+      if (slot === 0) w.slots[0] = null;
+      else items.push(result);
+    });
+    h.bot.openAnvil = vi.fn(async () => {
+      h.bot.currentWindow = w;
+      return w;
+    });
+    const args = {
+      position: p,
+      first: 12,
+      name: "Eva's blade",
+      action: "inspect",
+    };
+    expect(await h.actions.call("anvil_item", args)).toMatchObject({
+      levels: 1,
+      item: { customName: "Eva's blade" },
+    });
+    expect(h.bot.putAway).not.toHaveBeenCalledWith(2);
+    expect(h.bot.putAway).toHaveBeenCalledWith(0);
+    expect(
+      await h.actions.call("anvil_item", { ...args, action: "apply" }),
+    ).toMatchObject({ item: { customName: "Eva's blade" } });
+    expect(w.close).toHaveBeenCalledTimes(2);
+    h.bot.putAway.mockResolvedValue(undefined);
+    await expect(
+      h.actions.call("anvil_item", { ...args, action: "apply" }),
+    ).rejects.toThrow("Expected world change");
+    expect(h.bot.putAway).toHaveBeenCalledTimes(3);
+    expect(w.close).toHaveBeenCalledTimes(3);
+    expect(h.bot._client.listenerCount("craft_progress_bar")).toBe(0);
+    expect(h.bot.moveSlotItem).toHaveBeenCalledWith(6, 0);
+  });
+  it("fishes automatically and verifies collected output before another cast", async () => {
+    const h = fixture();
+    h.setBlock("water");
+    h.add("fishing_rod", 1, 12);
+    let catches = 0;
+    h.bot.fish = vi.fn(async () => {
+      h.add("cod", ++catches, 13);
+    });
+    expect(await h.actions.call("fish", { catches: 2 })).toMatchObject({
+      gains: { cod: 2 },
+    });
+    expect(h.bot.fish).toHaveBeenCalledTimes(2);
+    expect(h.bot.activateItem).not.toHaveBeenCalled();
+    h.bot.fish.mockResolvedValue(undefined);
+    await expect(h.actions.call("fish", { catches: 3 })).rejects.toThrow(
+      "no collected inventory gain",
+    );
+    expect(h.bot.fish).toHaveBeenCalledTimes(3);
+  });
+  it("reels once on fishing cancellation, retaining the pending-operation fence", async () => {
+    vi.useFakeTimers();
+    const h = fixture();
+    h.setBlock("water");
+    h.add("fishing_rod", 1, 12);
+    let rejectFish!: (e: Error) => void;
+    h.bot.fish = vi.fn(
+      () =>
+        new Promise((_r, reject) => {
+          rejectFish = reject;
+        }),
+    );
+    const work = h.actions.call("fish", {});
+    const assertion = expect(work).rejects.toThrow("Stop fishing");
+    await vi.advanceTimersByTimeAsync(10);
+    h.controller.abort(new Error("Stop fishing"));
+    await assertion;
+    expect(h.bot.activateItem).toHaveBeenCalledTimes(1);
+    const wait = h.actions.idle(new AbortController().signal);
+    const fenced = expect(wait).rejects.toThrow("has not settled");
+    await vi.advanceTimersByTimeAsync(10100);
+    await fenced;
+    rejectFish(new Error("Bobber destroyed"));
+    await vi.advanceTimersByTimeAsync(1);
+    await h.actions.idle(new AbortController().signal);
+  });
+  it("collects only a newly observed nearby fishing drop, then returns to shore", async () => {
+    const h = fixture();
+    h.setBlock("water");
+    h.add("fishing_rod", 1, 12);
+    h.bot.entities[3] = { name: "item", position: new Vec3(0, 64, 0) };
+    h.bot.fish = vi.fn(async () => {
+      h.bot.entities[4] = { name: "item", position: new Vec3(2, 64, 0) };
+    });
+    vi.mocked(h.host.navigate).mockImplementation(async () => {
+      h.add("cod", 1, 13);
+    });
+    expect(await h.actions.call("fish", {})).toMatchObject({
+      gains: { cod: 1 },
+    });
+    expect(h.host.navigate).toHaveBeenNthCalledWith(
+      1,
+      new Vec3(2, 64, 0),
+      h.controller.signal,
+      1,
+    );
+    expect(h.host.navigate).toHaveBeenNthCalledWith(
+      2,
+      new Vec3(0, 64, 0),
+      h.controller.signal,
+      1,
+    );
+  });
+  it("neutralizes vehicle steering on completion, dismount, and cancellation", async () => {
+    vi.useFakeTimers();
+    const h = fixture();
+    h.bot.vehicle = h.target;
+    h.bot.moveVehicle = vi.fn((_left, forward) => {
+      h.target.position.x += forward;
+    });
+    const work = h.actions.call("steer_vehicle", {
+      left: 0,
+      forward: 1,
+      milliseconds: 200,
+    });
+    await vi.advanceTimersByTimeAsync(250);
+    expect(await work).toMatchObject({ displacement: expect.any(Number) });
+    expect(h.target.position.x).toBeGreaterThan(1);
+    expect(h.bot.moveVehicle).toHaveBeenLastCalledWith(0, 0);
+    const stopped = h.actions.call("steer_vehicle", {
+      left: 1,
+      forward: 0,
+      milliseconds: 5000,
+    });
+    const assertion = expect(stopped).rejects.toThrow(/Stop steering|aborted/);
+    await vi.advanceTimersByTimeAsync(10);
+    h.controller.abort(new Error("Stop steering"));
+    await assertion;
+    expect(h.bot.moveVehicle).toHaveBeenLastCalledWith(0, 0);
+  });
+  it("never reports stationary steering as movement", async () => {
+    vi.useFakeTimers();
+    const h = fixture();
+    h.bot.vehicle = h.target;
+    h.bot.moveVehicle = vi.fn();
+    const result = h.actions.call("steer_vehicle", {
+      left: 0,
+      forward: 1,
+      milliseconds: 100,
+    });
+    const assertion = expect(result).rejects.toThrow(
+      "no vehicle movement observed",
+    );
+    await vi.advanceTimersByTimeAsync(150);
+    await assertion;
+  });
+  it("inspects and trades at fresh prices, verifying each operation and closing windows", async () => {
+    const h = fixture();
+    h.target.name = "villager";
+    let output = 0;
+    const w = {
+      trades: [
+        {
+          inputItem1: { name: "emerald", count: 2 },
+          realPrice: 3,
+          outputItem: { name: "bread", count: 4 },
+          nbTradeUses: 0,
+          maximumNbTradeUses: 10,
+        },
+      ],
+      items: () => [{ name: "bread", count: output }],
+      close: vi.fn(async () => {
+        h.bot.currentWindow = null;
+      }),
+    };
+    h.bot.openVillager = vi.fn(async () => {
+      h.bot.currentWindow = w;
+      return w;
+    });
+    h.bot.trade = vi.fn(async () => {
+      output += 4;
+    });
+    expect(
+      await h.actions.call("trade_villager", {
+        entityId: 2,
+        action: "inspect",
+      }),
+    ).toMatchObject({ offers: [{ input1: { count: 3 } }] });
+    const args = {
+      entityId: 2,
+      action: "trade",
+      index: 0,
+      item: "bread",
+      input1: "emerald",
+      input2: null,
+      count: 2,
+      price1: 3,
+      price2: 0,
+    };
+    expect(await h.actions.call("trade_villager", args)).toMatchObject({
+      outputGain: 8,
+    });
+    expect(h.bot.trade).toHaveBeenCalledTimes(2);
+    await expect(
+      h.actions.call("trade_villager", { ...args, price1: 2 }),
+    ).rejects.toThrow("Offer unavailable or changed");
+    expect(h.bot.trade).toHaveBeenCalledTimes(2);
+    h.bot.trade.mockResolvedValue(undefined);
+    await expect(h.actions.call("trade_villager", args)).rejects.toThrow(
+      "Expected world change",
+    );
+    expect(h.bot.trade).toHaveBeenCalledTimes(3);
+    expect(w.close).toHaveBeenCalledTimes(4);
+    expect(h.bot.currentWindow).toBeNull();
+  });
+  it("registers all 32 tools with host-valid schemas and entity-aware observation", () => {
+    expect(minecraftTools).toHaveLength(32);
     for (const tool of minecraftTools)
       expect(
         compileMcpTool(JSON.parse(JSON.stringify(tool)), "builtin-minecraft")

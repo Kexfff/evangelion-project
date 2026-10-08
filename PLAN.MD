@@ -1,6 +1,6 @@
 # evangelion_project — development plan
 
-Updated: 2026-10-07 · Current release: **v0.4.16** · Roadmap target: **v0.5**
+Updated: 2026-10-08 · Current release: **v0.4.17** · Roadmap target: **v0.5**
 
 This is the active roadmap. Detailed implementation notes, past test results and incident records live in [development history](docs/development-history.md). Historical unchecked boxes there are not the current backlog.
 
@@ -36,8 +36,9 @@ Guides: [voice](docs/providers-and-voice.md), [memory](docs/characters-and-memor
 | v0.4.13–0.4.14 | Reach/visibility-aware station approaches, alternate tables, progress-aware timeouts, per-table diagnostics | Implemented; controlled-world station acceptance passed in v0.4.16 |
 | v0.4.15 | Configurable hold/toggle press-to-talk, Right Shift default, capture ownership/cancellation, keybind test | App-focused delivered; global acceptance deferred |
 | v0.4.16 | Live-found door/arrival fixes, server-synchronized crafting and exact output verification; repeatable opt-in gameplay/autonomy acceptance | Controlled-world core checks passed; extended acceptance below |
+| v0.4.17 | World projects/resource targets, event-verified sleep/defeat goals, recipe prerequisites, fishing, enchanting/anvils, villager trading and bounded steering/combat options | First Gameplay depth increment; live station/trade/fishing checks passed; remaining scope below |
 
-**Latest validation:** v0.4.16 typecheck, core/browser regressions, Linux package, isolated desktop smoke, packaged-isolation smoke and packaged live Minecraft worker smoke. Counts and scenarios are recorded in [acceptance results](docs/minecraft-acceptance.md). Linux unpacked build: `release/linux-unpacked/`.
+**Latest validation:** v0.4.17 typecheck, 373 core/40 browser regressions, Linux package, standalone desktop smoke, packaged profile-isolation and packaged live Minecraft worker smoke. Exact scenarios and the initial concurrent desktop-smoke timeout are recorded in [acceptance results](docs/minecraft-acceptance.md). Linux unpacked build: `release/linux-unpacked/`.
 
 **Live evidence:** v0.4.16 verified door entry/exit, obstructed stations, crafting/building, storage/smelting, combat, sleep/wake, food and follow/knockback on the authorized test world. Three real-provider autonomous intentions completed with Consciousness off in 8 requests; Stop stayed stopped. Prior operator lookup reached roughly 302 blocks. This does not establish complete survival, physical-microphone or cross-platform acceptance.
 
@@ -60,14 +61,17 @@ Goal: validate the existing Minecraft foundation end to end, fix observed reliab
 - [x] **Repeatable integration checks:** opt-in disposable-world runner plus isolated real-provider mode; packaged app-managed MCP worker join/observe/disconnect smoke. Instructions and exact evidence: [Minecraft acceptance](docs/minecraft-acceptance.md).
 - [ ] **Extended acceptance:** from-empty autonomous prerequisite gathering/survival; concurrent real desktop/voice/Telegram interaction and priority/pause/world-switch scenarios; remaining tool variants and Microsoft device-code login. Do not infer these from the bounded arena run. No further paid runs are authorized by the completed ten-request test allowance.
 
-### 3.2 Gameplay depth
+### 3.2 Gameplay depth — first increment delivered; continue here
 
 Goal: extend Eva's survival skills and longer-term projects, with stronger resource planning, recovery and verifiable outcomes.
 
-- [ ] Richer persistent multi-project records and resource targets beyond finite intentions and the bounded world journal.
-- [ ] Dedicated host-verifiable sleep/combat goal-completion criteria; those tools already exist as execution steps.
-- [ ] Deeper prerequisite/resource planning and recovery beyond the current incremental planner; improve from real-provider failures, not blind retries of uncertain actions.
-- [ ] Automatic fishing, enchanting/anvils, full villager trading, vehicle steering and richer reactive combat.
+- [x] **Persistent projects/resource targets:** character/world/account-scoped records, active/paused/archived states, current-stock cards, editing and linked goal outcomes. Active projects inform the independent director; creating one never enables autonomy or starts work by itself. UI and `game_project` chat tool; data survives restart without action replay.
+- [x] **Host-verifiable sleep/defeat criteria:** successful matching worker action evidence, UUID-bound enemy identity, durable witnesses separate from bounded step history. Lost tracking, an attack packet or old unrelated jobs cannot establish defeat.
+- [x] **Crafting prerequisite analysis:** `plan_resources` accounts for recipe output quantities, shared ingredients, carried stock and leftovers. Bounded recursive search reports acquisition leaves/table needs; planner is instructed to recompute after changes. No invented smelting, drops or blind mutation retries.
+- [x] **New mechanics:** automatic fishing/reeling with inventory checks and nearby-drop pickup/return; enchanting; server-previewed anvil rename/repair/combine; offer inspection and bounded villager trades with input/price checks and per-operation metadata/output verification. 32 bundled Minecraft tools. Basic enchanting, rename, trades and fishing passed live; limits in [Gameplay depth](docs/gameplay-depth.md).
+- [x] **Steering/combat primitives:** bounded mounted steering releases input on Stop and reports displacement; optional melee gear selection, health-triggered stopping/explicit retreat, and UUID target checks. Tested primitives, not complete vehicle physics or automatic attacker selection.
+- [ ] **Finish advanced mechanics acceptance:** anvil repair/combine and upgrade/two-input trades in the live world; wandering traders; vehicle-specific steering/physics and useful navigation; richer observed-attacker defense/shield/ranged tactics. Do not infer these from rename/ordinary-trade or mocked steering tests.
+- [ ] **Survival/project planning acceptance:** from-empty resource/tool/station acquisition and sustained multi-project progression with a real provider; refine alternatives/recovery from observed failures. Current resource planner is advisory and bounded, not an optimal reservation system or smelting/trade planner. No paid-provider requests were made in v0.4.17 acceptance.
 - [ ] Automatic discovery/use of redstone mechanisms for closed iron doors; ordinary manually openable doors are already supported.
 - [ ] Encrypted persistent Microsoft account sessions; current authentication tokens are memory-only.
 

@@ -15,6 +15,7 @@
 - [Telegram and plugins](telegram.md) — pairing, permissions, shared memory, and delivery limits.
 - [MCP connections and tools](mcp.md) — trusted local/remote servers, tool permissions, one-call approvals, cancellation, and limits.
 - [Minecraft](minecraft.md) — bundled Java LAN companion, following, bounded game jobs, and world landmarks.
+- [Gameplay depth](gameplay-depth.md) — persistent world projects, resource prerequisites and advanced gameplay tools.
 
 ## Under the hood
 

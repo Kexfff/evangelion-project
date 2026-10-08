@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { ToolPermissions } from "./ToolPermissions";
 import { GameGoals } from "./GameGoals";
+import { GameProjects } from "./GameProjects";
 import { MinecraftDiagnostics } from "./MinecraftDiagnostics";
 import { GameAutonomy } from "./GameAutonomy";
 import { bridge } from "../bridge";
@@ -165,6 +166,7 @@ export function MinecraftSettings({
       )}
       <fieldset disabled={!enabled} className="minecraft-goal-controls">
         <GameAutonomy data={data} />
+        <GameProjects data={data} />
         <GameGoals data={data} />
       </fieldset>
       <details className="integration-disclosure" open={!connection}>

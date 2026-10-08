@@ -59,6 +59,7 @@ export const directorDecisionSchema = z.discriminatedUnion("decision", [
   z
     .object({
       decision: z.literal("goal"),
+      projectId: z.string().uuid().optional(),
       objective: z.string().trim().min(1).max(600),
       completion: z.array(goalConditionSchema).min(1).max(8),
     })

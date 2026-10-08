@@ -8,6 +8,8 @@ import { minecraftGameplayTools } from "./minecraft-gameplay";
 import {
   gameGoalConfigSchema,
   gameGoalSchema,
+  gameProjectSchema,
+  type GameProject,
   type GameGoal,
   type GameGoalConfig,
 } from "./game-goals";
@@ -81,6 +83,11 @@ export const minecraftJobSchema = z.object({
     "craft",
     "container",
     "furnace",
+    "fish",
+    "trade",
+    "vehicle",
+    "enchant",
+    "anvil",
   ]),
   result: z.record(z.string(), z.unknown()).optional(),
   diagnostics: z.array(approachDiagnosticSchema).max(9).optional(),
@@ -118,6 +125,7 @@ export const minecraftStateSchema = z.object({
   ),
   enabled: z.boolean().default(true),
   goals: z.array(gameGoalSchema).max(100).default([]),
+  projects: z.array(gameProjectSchema).max(100).default([]),
   goalConfig: gameGoalConfigSchema.default(() =>
     gameGoalConfigSchema.parse({}),
   ),
@@ -162,6 +170,7 @@ export const minecraftLiveSchema = z
           name: z.string().max(100),
           position: pointSchema,
           id: z.number().int().optional(),
+          uuid: z.string().uuid().optional(),
           type: z.string().max(100).optional(),
           kind: z.string().max(100).optional(),
         }),
@@ -196,6 +205,7 @@ export interface MinecraftSnapshot {
   autonomy?: GameAutonomyState;
   enabled?: boolean;
   goals?: GameGoal[];
+  projects?: GameProject[];
   goalConfig?: GameGoalConfig;
   config: MinecraftConfig;
   live: MinecraftLive;

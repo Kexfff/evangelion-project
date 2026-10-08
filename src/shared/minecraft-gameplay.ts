@@ -31,6 +31,71 @@ function tool(
 }
 export const minecraftGameplayTools = [
   tool(
+    "enchant_item",
+    "Approach an enchanting table with an unenchanted inventory item. action=inspect returns the current three offers after inserting the item, then returns the item. action=enchant selects choice 0..2, rechecks required XP/lapis and verifies enchantments on the returned item. Choice costs 1..3 levels/lapis; offers can change. Optional slot distinguishes stacks.",
+    {
+      position: point,
+      item,
+      slot: { type: "integer", minimum: 0, maximum: 45 },
+      action: { type: "string", enum: ["inspect", "enchant"] },
+      choice: { type: "integer", minimum: 0, maximum: 2 },
+    },
+    ["position", "item", "action"],
+  ),
+  tool(
+    "anvil_item",
+    "Approach an anvil to inspect a repair/combine/rename preview or execute it. Select exact inventory slots (first and optional second); name optionally renames. Uses Minecraft's own output/XP preview and verifies returned output metadata/durability. Inputs preserve the chosen left/right order. Inspect may relocate returned input slots; re-read inspect_inventory before apply. Does not discard items deliberately; failures may be partial, so inspect before retrying.",
+    {
+      position: point,
+      first: { type: "integer", minimum: 9, maximum: 44 },
+      second: { type: "integer", minimum: 9, maximum: 44 },
+      name: { type: "string", minLength: 1, maxLength: 35 },
+      action: { type: "string", enum: ["inspect", "apply"] },
+    },
+    ["position", "first", "action"],
+  ),
+  tool(
+    "fish",
+    "Automatically cast and reel a fishing rod near water, verifying collected inventory gains after each catch. Stand on the shore with a clear cast first. Optional water is a nearby loaded water block; otherwise finds water within 6 blocks. Stops on an uncollected catch, timeout, cancellation or broken rod; no blind recast after an uncertain result.",
+    {
+      water: point,
+      catches: { type: "integer", minimum: 1, maximum: 16 },
+      seconds: { type: "integer", minimum: 5, maximum: 90 },
+    },
+  ),
+  tool(
+    "trade_villager",
+    "Approach a villager and inspect offers or execute one freshly matched offer. Results include offer indices, prices, output and availability. For trade supply index, expected input1 and input2 item IDs (input2=null if absent), output item, max unit prices (price1/price2) and count of operations. Rejects changed prices/output or disabled offers. Verifies inventory output per operation; closes the window. Villagers only; wandering trader support depends on upstream and is not claimed.",
+    {
+      entityId,
+      action: { type: "string", enum: ["inspect", "trade"] },
+      index: { type: "integer", minimum: 0, maximum: 99 },
+      item,
+      count: { type: "integer", minimum: 1, maximum: 64 },
+      price1: count,
+      price2: { type: "integer", minimum: 0, maximum: 1024 },
+      input1: item,
+      input2: { anyOf: [item, { type: "null" }] },
+    },
+    ["entityId", "action"],
+  ),
+  tool(
+    "steer_vehicle",
+    "Send bounded left/forward steering input to the currently mounted vehicle; left=-1 means right. Reports observed displacement, not arrival. Mount first; server/vehicle may not support steering (rails, saddles/control items and protocol support still apply). Always releases input on Stop or timeout; does not implement boat physics or route planning.",
+    {
+      left: { type: "number", minimum: -1, maximum: 1 },
+      forward: { type: "number", minimum: -1, maximum: 1 },
+      milliseconds: { type: "integer", minimum: 100, maximum: 5000 },
+    },
+    ["left", "forward", "milliseconds"],
+  ),
+  tool(
+    "plan_resources",
+    "Analyze crafting prerequisites for a target TOTAL carried stock. Accounts for recipe output quantities and shared ingredients; returns missing acquisition leaves and ordered craft operations, not actions. Bounded search; recompute after inventory changes or partial effects. No exploration, smelting or tool/drop assumptions.",
+    { item, count: { type: "integer", minimum: 1, maximum: 4096 } },
+    ["item", "count"],
+  ),
+  tool(
     "inspect_inventory",
     "Inspect inventory slots, equipment, held item and hunger. Use exact item names and optional slots to distinguish stacks. Does not interrupt an action.",
     {},
@@ -77,9 +142,13 @@ export const minecraftGameplayTools = [
   tool("wake", "Wake from bed without moving elsewhere.", {}),
   tool(
     "attack_entity",
-    "Approach and attack a specific currently observed entity ID with the held weapon. mode=hit sends one melee attack; mode=fight repeats with cooldown until a death event or timeout. A lost/untracked target is NOT a confirmed kill. Does not automatically attack other entities or switch equipment.",
+    "Approach and attack a specific currently observed entity ID with the held weapon. mode=hit sends one melee attack; mode=fight repeats with cooldown until a death event or timeout. A lost/untracked target is NOT a confirmed kill. Optional entityUuid prevents stale numeric-ID reuse. equipBest=true equips the strongest available material-tier sword/axe (not an enchantment optimizer). Optional retreatHealth (0 disables) stops fighting at low health; retreatTo gives an explicit retreat waypoint. Never selects other targets automatically.",
     {
       entityId,
+      entityUuid: { type: "string", minLength: 36, maxLength: 36 },
+      equipBest: { type: "boolean" },
+      retreatHealth: { type: "number", minimum: 0, maximum: 20 },
+      retreatTo: point,
       mode: { type: "string", enum: ["hit", "fight"] },
       seconds: { type: "integer", minimum: 1, maximum: 120 },
     },
@@ -167,6 +236,11 @@ export const minecraftGameplayTools = [
 ] as const;
 
 export const minecraftMovementTools = [
+  "fish",
+  "enchant_item",
+  "anvil_item",
+  "trade_villager",
+  "steer_vehicle",
   "move_to",
   "follow_player",
   "collect_blocks",

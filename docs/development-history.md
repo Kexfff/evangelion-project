@@ -2,6 +2,14 @@
 
 [← Active development plan](../PLAN.MD) · [Documentation](README.md)
 
+## v0.4.17 — Gameplay depth, first increment (2026-10-08)
+
+- Added persistent, world/character/account-scoped projects, resource targets, stock cards, edit/pause/archive controls, explicit target goals and project context for independent activity selection. `game_project` supports user-requested chat updates without implicitly starting actions.
+- Added sleep and UUID-bound defeat criteria with worker-confirmed witnesses surviving history pruning. Numeric ID reuse/disappearance cannot establish defeat. Added bounded recipe prerequisite analysis with shared-stock accounting, yields, leftovers and explicit noncrafting acquisition leaves.
+- Expanded bundled Minecraft tools from 26 to 32: resource analysis, automatic fishing, enchanting, anvil operations, villager trading and bounded mounted steering. Combat gains optional gear choice, low-health stopping/explicit retreat and identity checks, without a new permissions layer.
+- Real LAN checks found 26.1 structured metadata and station slot-mapping issues; fixed both. Anvils use server previews; fishing can approach a newly observed catch and return to shore. Final enchanting, rename, ordinary trading, storage and fishing checks passed with no paid-provider requests. Arena additions/equipment remain in the authorized test world.
+- 373 core and 40 browser tests passed, with a final three-test Minecraft/project UI rerun, typecheck and Linux package. Exact live/desktop evidence is in [Minecraft acceptance](minecraft-acceptance.md). Automatic iron-door controls, persistent Microsoft sessions, deeper vehicles/defense and extended survival acceptance remain in the active plan; the whole Gameplay depth mini-sprint is not marked complete.
+
 ## v0.4.16 — Minecraft reliability mini-sprint (2026-10-07)
 
 - Fixed live-reproduced door post-processing (waypoints on top of the leaf), diagonal doorway stalls and visibility of the upper/lower halves. Fixed interaction endpoints that left Eva just outside reach after approximate arrival.

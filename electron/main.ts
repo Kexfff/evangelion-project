@@ -396,6 +396,7 @@ else {
       handle("game:control", (raw) =>
         plugins.game.control(goalControlSchema.parse(raw)),
       );
+      handle("game:project", (raw) => plugins.game.saveProject(raw));
       handle("game:configure", (raw) => {
         const config = gameGoalConfigSchema.parse(raw);
         plugins.game.pauseAll(

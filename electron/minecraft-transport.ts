@@ -34,7 +34,7 @@ export function minecraftFactory(workerPath: string): MinecraftFactory {
       child?.kill();
     };
     const client = new Client(
-      { name: "evangelion-project", version: "0.4.16" },
+      { name: "evangelion-project", version: "0.4.17" },
       { capabilities: {}, jsonSchemaValidator: boundedSchemaValidator },
     );
     const transport: Transport = {

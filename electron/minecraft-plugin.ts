@@ -157,6 +157,18 @@ export class MinecraftPlugin {
         (g) => g.characterId === this.store.characterId,
       ),
       goalConfig: this.store.data.minecraft.goalConfig,
+      projects: this.store.data.minecraft.projects.filter(
+        (p) =>
+          p.characterId === this.store.characterId &&
+          p.world ===
+            JSON.stringify([
+              this.store.data.minecraft.config.host,
+              this.store.data.minecraft.config.port,
+              this.store.data.minecraft.config.worldId,
+              this.store.data.minecraft.config.username,
+              this.live.dimension,
+            ]),
+      ),
       autonomy: {
         ...this.store.data.minecraft.autonomy,
         memories: this.store.data.minecraft.autonomy.memories.filter(

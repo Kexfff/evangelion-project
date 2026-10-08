@@ -152,6 +152,164 @@ function fixture() {
   };
 }
 
+describe("Gameplay depth", () => {
+  it("requires matched successful worker evidence for sleep, not current sleep state", async () => {
+    const f = fixture();
+    f.submit({ objective: "Sleep tonight", completion: [{ kind: "sleep" }] });
+    f.live.sleeping = true;
+    f.decisions.push({
+      decision: "step",
+      tool: "sleep",
+      args: {},
+      reason: "Use the bed",
+    });
+    await f.game.tick();
+    expect(f.goal().status).toBe("running");
+    f.live.job.status = "succeeded";
+    f.live.job.kind = "sleep";
+    f.live.job.result = { outcome: "sleeping" };
+    f.live.sleeping = false;
+    await f.game.tick();
+    expect(f.goal().status).toBe("completed");
+    expect(f.goal().history.at(-1)?.evidence).toEqual({ kind: "sleep" });
+  });
+  it("does not treat another target or lost tracking as confirmed defeat", async () => {
+    const uuid = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const f = fixture();
+    f.submit({
+      objective: "Defeat that zombie",
+      completion: [{ kind: "defeat", entityUuid: uuid }],
+    });
+    f.decisions.push({
+      decision: "step",
+      tool: "attack_entity",
+      args: { entityId: 2, mode: "fight" },
+      reason: "Fight",
+    });
+    await f.game.tick();
+    f.live.job.status = "succeeded";
+    f.live.job.kind = "combat";
+    f.live.job.result = {
+      outcome: "dead",
+      entityUuid: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    };
+    await f.game.tick();
+    expect(f.goal().status).not.toBe("completed");
+    expect(conditionsMet([{ kind: "defeat", entityUuid: uuid }], f.live)).toBe(
+      false,
+    );
+    expect(
+      conditionsMet([{ kind: "defeat", entityUuid: uuid }], f.live, [
+        {
+          tool: "attack_entity",
+          args: {},
+          outcome: "Death confirmed",
+          evidence: { kind: "defeat", entityUuid: uuid },
+        },
+      ]),
+    ).toBe(true);
+  });
+  it("binds combat to observed UUIDs and retains verified events after history pruning", async () => {
+    const f = fixture(),
+      uuid = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    f.live.nearby = [
+      { id: 2, uuid, name: "zombie", position: { x: 1, y: 64, z: 0 } },
+    ];
+    f.submit({
+      completion: [
+        { kind: "defeat", entityUuid: uuid },
+        { kind: "inventory", item: "stone_pickaxe", count: 1 },
+      ],
+    });
+    f.decisions.push({
+      decision: "step",
+      tool: "attack_entity",
+      args: { entityId: 2, mode: "fight" },
+      reason: "Fight",
+    });
+    await f.game.tick();
+    expect(f.mcp.execute.mock.calls.at(-1)?.[1]).toMatchObject({
+      entityId: 2,
+      entityUuid: uuid,
+    });
+    Object.assign(f.live.job, {
+      status: "succeeded",
+      kind: "combat",
+      result: { outcome: "dead", entityUuid: uuid },
+    });
+    f.decisions.push({ decision: "wait", seconds: 1, reason: "Wait" });
+    await f.game.tick();
+    expect(f.goal().verifiedEvents).toEqual([
+      { kind: "defeat", entityUuid: uuid },
+    ]);
+    f.store.update((d) => {
+      d.minecraft.goals.at(-1)!.history = [];
+      d.minecraft.goals.at(-1)!.wakeAt = 0;
+    });
+    f.live.inventory = [{ name: "stone_pickaxe", count: 1 }];
+    await f.game.tick();
+    expect(f.goal().status).toBe("completed");
+  });
+  it("persists independent projects, isolates world scope and links verified outcomes", async () => {
+    const f = fixture();
+    const input = {
+      title: "Starter tools",
+      objective: "Make a pickaxe",
+      targets: [{ item: "stone_pickaxe", count: 1 }],
+    };
+    const p = f.game.saveProject(input);
+    expect(f.store.data.minecraft.projects).toHaveLength(1);
+    f.submit({ projectId: p.id });
+    expect(() => f.submit({ projectId: p.id })).toThrow(
+      "already has an active goal",
+    );
+    f.live.inventory = [{ name: "stone_pickaxe", count: 1 }];
+    await f.game.tick();
+    expect(f.store.data.minecraft.projects[0].lastVerifiedAt).toBeTruthy();
+    const paused = f.game.saveProject({ ...input, id: p.id, status: "paused" });
+    expect(paused.lastOutcome).toContain("completed");
+    expect(() => f.submit({ projectId: p.id })).toThrow("active project");
+    f.live.dimension = "the_nether";
+    expect(() => f.game.saveProject({ ...input, id: p.id })).toThrow(
+      "another character or world",
+    );
+    expect(f.store.data.minecraft.projects[0].targets).toEqual(input.targets);
+    const restored = new Store(path.dirname(f.store.file));
+    expect(restored.data.minecraft.projects[0]).toMatchObject({
+      id: p.id,
+      status: "paused",
+      targets: input.targets,
+    });
+  });
+  it("makes only active projects from this world available to independent planning", async () => {
+    const f = fixture();
+    const p = f.game.saveProject({
+      title: "Home",
+      objective: "Collect wood",
+      targets: [{ item: "oak_log", count: 16 }],
+    });
+    f.game.configureAutonomy({ ...f.game.director.config, enabled: true });
+    await f.game.tick();
+    expect(
+      f.runtime.chooseGameActivity.mock.calls[0][0].projects,
+    ).toMatchObject([{ id: p.id }]);
+    f.game.saveProject({
+      id: p.id,
+      title: p.title,
+      objective: p.objective,
+      targets: p.targets,
+      status: "paused",
+    });
+    f.game.director.change((s) => {
+      s.nextDecisionAt = 0;
+    });
+    await f.game.tick();
+    expect(f.runtime.chooseGameActivity.mock.calls.at(-1)[0].projects).toEqual(
+      [],
+    );
+  });
+});
+
 describe("Independent Minecraft director", () => {
   const intention = (item = "oak_log", count = 4) => ({
     decision: "goal",

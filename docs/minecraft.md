@@ -45,7 +45,7 @@ Following approaches server-reported coordinates outside tracking range, then sw
 
 ## Jobs and controls
 
-There are 26 tools in v0.4.7. Original tools: `observe`, `locate_player`, `move_to`, `follow_player`, `say_in_game`, `collect_blocks`, `build_blocks`, `job_status`, and `stop_action`. Observation includes position, health, food, time of day, game mode, sleeping/riding state, player locations, nearby entity IDs/types, sampled blocks, inventory and configured limits; it is not a full world map. The additional gameplay tools are described below.
+There are 32 tools in v0.4.17. Original tools: `observe`, `locate_player`, `move_to`, `follow_player`, `say_in_game`, `collect_blocks`, `build_blocks`, `job_status`, and `stop_action`. Observation includes position, health, food, time of day, game mode, sleeping/riding state, player locations, nearby entity IDs/types, sampled blocks, inventory and configured limits; it is not a full world map. The additional gameplay tools are described below.
 
 Gameplay actions return a job ID immediately. A single background action owns movement, equipment and inventory windows while ordinary chat and speech remain available. A replacement waits for the previous action's cleanup and pending protocol operations before proceeding. Read-only observation/inventory/recipe searches do not replace an action. The settings panel shows progress and recent outcomes, with expandable structured **Action result** details also available through `job_status.result`; a running action exposes **Stop game action** in the companion. Starting an action is not proof of completion: movement checks arrival, collection checks block removal and inventory gain, and building checks placed blocks and the final structure.
 
@@ -88,7 +88,7 @@ Use **World landmarks** to save the bot's current location under a short name. L
 
 The adapter is a bundled MCP server inside an Electron utility process. `minecraft-transport.ts` manages its lifetime, `minecraft-worker.ts` owns the connection, `minecraft-engine.ts` owns background actions, `minecraft-actions.ts` implements gameplay operations, and `minecraft-plugin.ts` coordinates state and persistence through the existing MCP permissions/audit layer. It receives no provider credentials. Personal conversation and semantic memory remain in the shared runtime, not in the bot process.
 
-v0.4.9 adds a main-process goal coordinator and door-aware navigation, described below. Fishing automation, enchanting, selecting/completing villager trades, vehicle steering, richer world memory and live gameplay acceptance remain on the [plan](../PLAN.MD). Entity interaction can open a trading interaction, but does not select or complete a trade.
+v0.4.17 adds [world projects, prerequisite analysis and advanced mechanics](gameplay-depth.md): fishing, enchanting/anvils, villager trading and bounded vehicle steering. `interact_entity` still only opens an interaction; use `trade_villager` to inspect and execute offers. Remaining scope is tracked in [PLAN.MD](../PLAN.MD).
 
 ## Doors and entrances
 
@@ -100,7 +100,7 @@ Digging and scaffolding have higher route costs so reachable entrances are prefe
 
 **Crafting/interaction approaches (v0.4.13):** reaching a nearby point is no longer enough—Eva plans to a position with an unobstructed, in-range view of the target block and checks the actual arrival before interacting. This also applies to furnaces, containers, beds and direct block interactions/digging. Existing door navigation and terrain permissions still apply. A crafting-table coordinate is a preferred hint; wrong/stale hints trigger discovery of loaded tables within 32 blocks. Inventory-only recipes skip the table entirely. Missing ingredients are reported before walking; the table is checked again before each crafting operation. Alternative stations are tried only for navigation failures before crafting begins, never as a retry of uncertain inventory effects.
 
-Ask “Make a stone pickaxe” or “Gather 16 oak logs.” The LLM can create a `game_goal` with concrete inventory, location, hunger or exact-block completion criteria. **Settings → Plugins & MCP → Minecraft → Game goals** also provides a simple inventory-goal form.
+Ask “Make a stone pickaxe” or “Gather 16 oak logs.” The LLM can create a `game_goal` with concrete inventory, location, hunger, exact-block, confirmed-sleep or UUID-bound confirmed-defeat criteria. **Settings → Plugins & MCP → Minecraft → Game goals** also provides a simple inventory-goal form.
 
 The coordinator observes the world, asks the configured LLM for one structured next step, executes it through the existing Minecraft MCP permissions, waits for the action's outcome, and observes again. This permits gathering and crafting prerequisites across many chat turns. Completion is checked by application code against observed state, not the model's claim. Recipe counts remain crafting operations; the target goal count is the total desired inventory quantity. Planning quality still depends on the chosen LLM and reachable resources.
 
