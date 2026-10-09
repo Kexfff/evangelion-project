@@ -1,5 +1,9 @@
 # Providers and voice
 
+v0.4.18 adds an optional bundled local Silero detector and streamed transcription responses. See [voice upgrades and exact compatibility limits](memory-presentation.md#voice-and-avatar). Energy detection remains default; streaming ASR sends a completed utterance once and displays incremental response text, not continuous realtime audio.
+
+For the configured Qwen ASR/OpenRouter + OmniVoice/VoiceStudio setup: use `https://openrouter.ai/api/v1` for ASR and `http://127.0.0.1:3900/v1` for TTS. ASR model discovery uses OpenRouter's transcription-specific catalog. Keep **Stream recognition text** off unless the gateway confirms support; model-level streaming does not establish gateway support. Line/full-response speech modes remain available for local TTS quality. Existing saved provider settings are not changed automatically.
+
 [← Documentation](README.md) · [Project home](../README.md)
 
 ## First conversation

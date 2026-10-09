@@ -15,7 +15,7 @@ An animated AI companion with natural conversation, persistent memory, and a wor
 ## Make yourself at home
 
 - **Talk naturally.** Text, images, and voice—with streaming speech and interruption.
-- **Be remembered.** Editable facts, semantic recall, and a searchable conversation archive.
+- **Be remembered.** Editable facts, conversation summaries, hybrid recall, and encrypted memory exports.
 - **Bring her to life.** An animated VRM avatar in a transparent desktop window, with settings in their own workspace.
 - **Stay connected.** Private Telegram chat shares the same character and memories.
 - **Set her rhythm.** Opt-in conversation openers, mood simulation, and approved reminders.
@@ -26,7 +26,7 @@ Use your own OpenAI-compatible LLM, ASR, and TTS services. OpenRouter is the ini
 
 ## Quick start
 
-Requires **Node.js 22.12+**, npm, and a desktop session with WebGL.
+Requires **Node.js 22.13+**, npm, and a desktop session with WebGL.
 
 ```sh
 npm install
@@ -48,7 +48,7 @@ Open **Settings → Providers**, configure your services, and save. No LLM or au
 | [Privacy & storage](docs/storage-and-privacy.md)     | Understand what stays local and what reaches providers. |
 | [Development](docs/development.md)                   | Build, test, and extend the application.                |
 
-Consciousness is a configurable behavior simulation, not actual sentience. Independent Minecraft gameplay is opt-in; desktop control and push-to-talk remain on the [roadmap](PLAN.MD).
+Consciousness is a configurable behavior simulation, not actual sentience. Independent Minecraft gameplay is opt-in. App-focused press-to-talk is available; global keyboard control and general desktop control remain on the [roadmap](PLAN.MD).
 
 ---
 

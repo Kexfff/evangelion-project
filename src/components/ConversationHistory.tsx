@@ -558,7 +558,9 @@ export function ConversationHistory({
       <div className="history-footer">
         <p>
           Starting fresh keeps earlier conversations available for recall.
-          Export a backup before deleting history; saved facts are kept.
+          Export a backup before deleting history; saved facts are kept. This
+          shortcut exports plaintext. Use Saved facts → archive controls for
+          passphrase encryption.
         </p>
         <button
           className="button secondary"

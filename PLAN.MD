@@ -1,6 +1,6 @@
 # evangelion_project — development plan
 
-Updated: 2026-10-08 · Current release: **v0.4.17** · Roadmap target: **v0.5**
+Updated: 2026-10-09 · Current release: **v0.4.18** · Roadmap target: **v0.5**
 
 This is the active roadmap. Detailed implementation notes, past test results and incident records live in [development history](docs/development-history.md). Historical unchecked boxes there are not the current backlog.
 
@@ -14,8 +14,8 @@ A local-first desktop companion with an animated VRM avatar, natural voice conve
 | --- | --- |
 | Desktop / UI | Electron; isolated preload and validated IPC; React, TypeScript, Vite |
 | Avatar | Three.js, three-vrm and VRMA; default `AvatarSample_B.vrm`; custom avatars |
-| Conversation / voice | Shared main-process runtime for desktop and Telegram; streaming chat, ASR, buffered/streaming TTS, energy VAD, barge-in, press-to-talk |
-| Memory / credentials | Character-scoped JSON store with atomic writes/backup; facts, conversation archives, cached embeddings and lexical fallback; OS vault with labeled local AES-GCM fallback |
+| Conversation / voice | Shared main-process runtime for desktop and Telegram; streaming chat, buffered/optional SSE-response ASR, buffered/streaming TTS, energy or bundled neural VAD, barge-in, press-to-talk |
+| Memory / credentials | Character-scoped JSON source with atomic backup; content-addressed attachments; SQLite FTS5/vector index, hybrid recall and conversation digests; encrypted exports; OS credential vault with labeled local AES-GCM fallback |
 | Extensions | Shared plugin lifecycle; Telegram channel; stdio/Streamable HTTP MCP tools; app-managed Minecraft worker |
 | Gameplay | `GameDirector` selects intentions; `GameCoordinator` plans/verifies steps; one worker owns physical actions; world journal, landmarks and persistent goal history |
 
@@ -37,8 +37,9 @@ Guides: [voice](docs/providers-and-voice.md), [memory](docs/characters-and-memor
 | v0.4.15 | Configurable hold/toggle press-to-talk, Right Shift default, capture ownership/cancellation, keybind test | App-focused delivered; global acceptance deferred |
 | v0.4.16 | Live-found door/arrival fixes, server-synchronized crafting and exact output verification; repeatable opt-in gameplay/autonomy acceptance | Controlled-world core checks passed; extended acceptance below |
 | v0.4.17 | World projects/resource targets, event-verified sleep/defeat goals, recipe prerequisites, fishing, enchanting/anvils, villager trading and bounded steering/combat options | First Gameplay depth increment; live station/trade/fishing checks passed; remaining scope below |
+| v0.4.18 | Attributed hybrid recall/digests, explicit consolidation and recall inspector, SQLite index/attachment migration, encrypted archives/cleanup, image resizing, semantic projection, neural VAD, streamed transcription responses, gaze/vowel shapes and portable cards | First Memory, voice and presentation increment; remaining depth and live quality checks below |
 
-**Latest validation:** v0.4.17 typecheck, 373 core/40 browser regressions, Linux package, standalone desktop smoke, packaged profile-isolation and packaged live Minecraft worker smoke. Exact scenarios and the initial concurrent desktop-smoke timeout are recorded in [acceptance results](docs/minecraft-acceptance.md). Linux unpacked build: `release/linux-unpacked/`.
+**Latest validation:** v0.4.18 typecheck, **389 core / 44 browser regressions**, Linux package, standalone desktop smoke and packaged profile-isolation passed. New desktop checks cover bundled neural inference, encrypted archive/wrong-passphrase/dedup round-trips, inactive card imports and attachment-backed history across restart. Normal profile unchanged; no paid calls or live microphone/game checks this increment. Details: [development history](docs/development-history.md#v0418--memory-voice-and-presentation-first-increment-2026-10-09). Prior live Minecraft evidence remains in [acceptance results](docs/minecraft-acceptance.md). Linux unpacked build: `release/linux-unpacked/`.
 
 **Live evidence:** v0.4.16 verified door entry/exit, obstructed stations, crafting/building, storage/smelting, combat, sleep/wake, food and follow/knockback on the authorized test world. Three real-provider autonomous intentions completed with Consciousness off in 8 requests; Stop stayed stopped. Prior operator lookup reached roughly 302 blocks. This does not establish complete survival, physical-microphone or cross-platform acceptance.
 
@@ -46,7 +47,7 @@ Previously stale Sprint 4 TODOs for task planning, observed completion, shared a
 
 ## 3. v0.5 roadmap — ordered mini-sprints
 
-User-confirmed priority: **Minecraft → Gameplay depth → Plugins, MCP and delivery → Memory, voice and presentation → Voice, providers and Telegram**. Work through these mini-sprints in order; optional items remain optional. The v0.5 goal is reliable, deeper gameplay, extensible delivery, and a more polished companion, with final real-device/provider acceptance.
+**Current priority (2026-10-08): jump to §3.4 Memory, voice and presentation.** §3.3 is skipped for now, not completed; remaining §3.1/3.2 checks stay open. CPU/GPU profiling is explicitly deferred. The earlier order resumes after this user-prioritized work unless changed again.
 
 Live checks require the user's setup or a designated test world; this plan does not authorize live connections, paid calls or world changes. Acceptance records should name the app version, scenario, observed result and remaining failure—not infer success from a “running” job or a passed fixture.
 
@@ -61,7 +62,7 @@ Goal: validate the existing Minecraft foundation end to end, fix observed reliab
 - [x] **Repeatable integration checks:** opt-in disposable-world runner plus isolated real-provider mode; packaged app-managed MCP worker join/observe/disconnect smoke. Instructions and exact evidence: [Minecraft acceptance](docs/minecraft-acceptance.md).
 - [ ] **Extended acceptance:** from-empty autonomous prerequisite gathering/survival; concurrent real desktop/voice/Telegram interaction and priority/pause/world-switch scenarios; remaining tool variants and Microsoft device-code login. Do not infer these from the bounded arena run. No further paid runs are authorized by the completed ten-request test allowance.
 
-### 3.2 Gameplay depth — first increment delivered; continue here
+### 3.2 Gameplay depth — first increment delivered; remaining work parked
 
 Goal: extend Eva's survival skills and longer-term projects, with stronger resource planning, recovery and verifiable outcomes.
 
@@ -86,18 +87,21 @@ Goal: make integrations extensible and distribution practical, with explicit tru
 - [ ] Installable, signed platform releases; test transparency, audio permissions and always-on-top behavior on each supported OS/compositor.
 - [ ] Obtain the bundled model's original source/license URL or license text **from the user/source**; retain existing embedded attribution without inventing a license.
 
-### 3.4 Memory, voice and presentation
+### 3.4 Memory, voice and presentation — active, v0.4.18 increment
 
 Goal: improve long-term recall and data management, make voice/avatar interaction more natural, and reduce resource use.
 
-- [ ] Conversation summarization/consolidation, retrieval evaluation, scalable SQLite/FTS/vector storage and task/archive retention.
-- [ ] Image resizing/compression, separate attachment storage and visual long-term retrieval. Current inline images can push archives beyond the 50 MB import cap.
-- [ ] Encrypted memory archives, retention/deletion controls and better backup management; plaintext backups may retain deleted data.
-- [ ] Streaming transcription and neural VAD; current VAD is local energy detection, not speaker recognition.
-- [ ] Richer gaze, facial mixing, phoneme visemes and gesture selection; blinking, amplitude-based mouth movement and basic emotion/one-shot gestures already exist.
-- [ ] Portable character-card import/export and richer avatar metadata.
-- [ ] Optional genuine embedding projection/similarity links; the existing fact-only constellation is intentionally artistic, as requested.
-- [ ] CPU/GPU profiling, lazy avatar loading and reduced work while windows are hidden.
+- [x] **Recall and consolidation:** hybrid keyword/semantic recall, attributed user/assistant episodes, local extractive digests, explicit one-request LLM consolidation with source hashes/deletion invalidation, bounded context, character isolation and a recall inspector. Originals remain intact. Regression cases exercise relevance, missing embeddings, visual context and isolation.
+- [x] **Storage/search foundation:** SQLite FTS5 and persistent vectors; separate content-addressed attachment files; legacy inline-image/vector migration. **Not a full database migration:** validated JSON remains authoritative, histories/vectors still materialize in memory and vector search is exact/linear. Paginated authoritative SQL storage and large-archive latency/recall benchmarks remain open.
+- [x] **Images:** desktop input compression/resizing (20 MB input, 1600 px static JPEG for large images), deduplicated separate storage, older image recall via captions/filenames/adjacent assistant descriptions. No pixel embedding/captioning model is silently invoked. True image-embedding retrieval remains open.
+- [x] **Privacy/retention:** passphrase-encrypted, compressed AES-GCM archives; larger bounded import/export; explicit age-based conversation/finished-reminder cleanup, active-session/pending-task preservation and backup/attachment/index cleanup. No automatic expiry. Local working data stays plaintext; external exports/OS snapshots cannot be erased by the app.
+- [x] **Voice increment:** opt-in SSE transcription response with provisional text/completion checks and no automatic duplicate upload; offline bundled Silero VAD alongside energy detection, existing device/lease/Stop controls. This streams text after completed-utterance upload, **not continuous realtime microphone transport**. Real-device/provider acceptance and realtime ASR transport remain open.
+- [x] **Presentation increment:** configurable smooth natural/pointer gaze, expression strength, contextual one-shot gestures and five audio-gated text-guided vowel shapes. These are approximate, **not provider-timed phoneme alignment**; actual phoneme timestamps/alignment and multilingual quality acceptance remain open.
+- [x] **Portable character cards:** versioned JSON with embedded custom VRM, personality/prompts and author/source/license/notes metadata. Inactive import with review confirmation; no credentials, memories, providers or grants. Not a third-party PNG-card interoperability claim.
+- [x] **Semantic visualization:** optional centered PCA of indexed facts with genuine original-space cosine links. Artistic fact constellation remains the default. Bounded to 80 indexed facts; 2D distances are lossy, never claimed as exact semantic distances.
+- **Configured voice stack (2026-10-09):** Qwen3-ASR-0.6B through OpenRouter, OmniVoice through VoiceStudio at `127.0.0.1:3900` (compatible API base ends in `/v1`). OpenRouter ASR discovery uses its transcription catalog. Keep ASR response streaming opt-in; gateway realtime support and VoiceStudio phoneme timing are not established. Local API documentation required authentication; no real generation/paid calls or service changes were made. See [compatibility notes](docs/memory-presentation.md#voice-and-avatar).
+- [ ] **Acceptance/remaining depth:** physical-microphone neural false-positive/barge-in testing, configured-provider streamed ASR and summary quality; larger multilingual retrieval evaluation; full paginated SQL migration, pixel-based retrieval, realtime audio transport and timestamped phonemes as detailed above. Do not equate deterministic fixtures with live quality acceptance.
+- [ ] **Deferred by user:** CPU/GPU profiling, lazy avatar loading and reduced hidden-window work.
 
 ### 3.5 Voice, providers and Telegram
 

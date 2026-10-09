@@ -126,7 +126,13 @@ const preview: Bridge = {
   clearHistory: desktopOnly,
   exportMemory: desktopOnly,
   importMemory: desktopOnly,
+  inspectMemory: desktopOnly,
+  memoryMap: desktopOnly,
+  consolidateMemory: desktopOnly,
+  maintainMemory: desktopOnly,
   importAvatar: desktopOnly,
+  exportCharacter: desktopOnly,
+  importCharacter: desktopOnly,
   openSettings: async () => {
     window.location.search = "?window=settings";
   },

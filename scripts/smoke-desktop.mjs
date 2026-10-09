@@ -1,6 +1,6 @@
 import { _electron as electron, expect } from "@playwright/test";
 import { createServer } from "node:http";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import assert from "node:assert/strict";
@@ -160,6 +160,32 @@ try {
     .windows()
     .find((window) => window.url().includes("window=companion"));
   await win.waitForFunction(() => !!window.eva);
+  const neuralAsset = (await readdir(path.resolve("dist/assets"))).find(
+    (name) => /^neural-vad-.*\.js$/.test(name),
+  );
+  assert.ok(neuralAsset, "Production neural detector chunk must be bundled");
+  const neuralFrames = await win.evaluate(async (asset) => {
+    const module = await import(
+      new URL(`./assets/${asset}`, location.href).href
+    );
+    const create = Object.values(module).find(
+      (value) => typeof value === "function",
+    );
+    const vad = await create(48000);
+    const values = [];
+    try {
+      await vad.process(new Float32Array(48000), (_frame, probability) =>
+        values.push(probability),
+      );
+    } finally {
+      await vad.close();
+    }
+    return values;
+  }, neuralAsset);
+  assert.ok(
+    neuralFrames.length > 20 && neuralFrames.every((p) => p >= 0 && p < 0.5),
+    "Packaged local model/runtime must process silence",
+  );
   await win
     .locator('.avatar-renderer[data-animation="idle_loop"]')
     .waitFor({ timeout: 60000 });
@@ -260,6 +286,52 @@ try {
     });
   }, archivePath);
   await win.evaluate(() => window.eva.importMemory());
+  const encryptedPath = path.join(profile, "encrypted-memory.json");
+  await desktop.evaluate(({ dialog }, filePath) => {
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath });
+    dialog.showOpenDialog = async () => ({
+      canceled: false,
+      filePaths: [filePath],
+    });
+  }, encryptedPath);
+  assert.equal(
+    await win.evaluate(() => window.eva.exportMemory("fixture passphrase")),
+    true,
+  );
+  const encrypted = await readFile(encryptedPath, "utf8");
+  assert.equal(JSON.parse(encrypted).format, "eva-encrypted-memory");
+  assert.equal(encrypted.includes(imageAttachment.dataUrl), false);
+  assert.equal(encrypted.includes("local-test-key"), false);
+  await assert.rejects(
+    win.evaluate(() => window.eva.importMemory("incorrect passphrase")),
+    /Wrong passphrase/,
+  );
+  await win.evaluate(() => window.eva.importMemory("fixture passphrase"));
+  assert.equal(
+    (await win.evaluate(() => window.eva.snapshot())).messages.length,
+    2,
+  );
+  const cardPath = path.join(profile, "character-card.json");
+  await desktop.evaluate(({ dialog }, filePath) => {
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath });
+    dialog.showOpenDialog = async () => ({
+      canceled: false,
+      filePaths: [filePath],
+    });
+    dialog.showMessageBox = async () => ({
+      response: 1,
+      checkboxChecked: false,
+    });
+  }, cardPath);
+  assert.equal(await win.evaluate(() => window.eva.exportCharacter()), true);
+  assert.equal(
+    (await readFile(cardPath, "utf8")).includes("local-test-key"),
+    false,
+  );
+  assert.equal(await win.evaluate(() => window.eva.importCharacter()), true);
+  const cards = await win.evaluate(() => window.eva.snapshot());
+  assert.equal(cards.settings.characters.length, 2);
+  assert.equal(cards.settings.activeCharacterId, "eva");
   assert.equal(
     (await win.evaluate(() => window.eva.snapshot())).facts.length,
     1,
@@ -366,7 +438,16 @@ try {
     await readFile(path.join(profile, "companion.json"), "utf8"),
   );
   assert.equal(persisted.messages.length, 2);
-  assert.deepEqual(persisted.messages[0].images, [imageAttachment]);
+  const storedImage = persisted.messages[0].images[0];
+  assert.equal(storedImage.name, imageAttachment.name);
+  assert.match(storedImage.dataUrl, /^eva-attachment:[a-f0-9]{64}$/);
+  assert.equal(
+    await readFile(
+      path.join(profile, "attachments", storedImage.dataUrl.slice(15)),
+      "utf8",
+    ),
+    imageAttachment.dataUrl,
+  );
   desktop = await launch();
   const reopened = await desktop.firstWindow();
   await reopened.waitForFunction(() => !!window.eva);

@@ -1,4 +1,4 @@
-import type { Provider } from "../src/shared/schema";
+import type { Provider, ProviderKind } from "../src/shared/schema";
 import {
   isOpenRouter,
   openRouterModelSchema,
@@ -6,6 +6,7 @@ import {
   type OpenRouterEndpoint,
 } from "../src/shared/openrouter";
 import type { ChatMessage } from "./memory";
+import { consumeTranscription } from "./transcription-stream";
 export type Usage = { tokens?: number; cost?: number };
 export class ProviderChatError extends Error {
   constructor(
@@ -179,12 +180,16 @@ export class OpenAICompatibleProvider {
       (a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id),
     );
   }
-  async models(provider: Provider, key: string, embedding = false) {
-    // OpenRouter exposes embedding models separately; other compatible servers use /models.
-    const route =
-      embedding && new URL(provider.baseUrl).hostname === "openrouter.ai"
+  async models(provider: Provider, key: string, kind: ProviderKind = "llm") {
+    // OpenRouter excludes transcription models from its default catalog.
+    // Other compatible servers continue to use the generic /models route.
+    const route = isOpenRouter(provider.baseUrl)
+      ? kind === "embedding"
         ? "embeddings/models"
-        : "models";
+        : kind === "asr"
+          ? "models?output_modalities=transcription"
+          : "models"
+      : "models";
     const response = await checked(
       await fetch(endpoint(provider.baseUrl, route), {
         headers: headers(key),
@@ -436,6 +441,7 @@ export class OpenAICompatibleProvider {
     mime: string,
     language: string,
     signal?: AbortSignal,
+    onText?: (text: string) => void,
   ) {
     if (!provider.enabled || !provider.model.trim())
       throw new Error("Enable the ASR provider and set its model in Settings.");
@@ -450,6 +456,7 @@ export class OpenAICompatibleProvider {
     form.append("file", new Blob([bytes], { type: mime }), `recording.${ext}`);
     form.append("model", provider.model);
     form.append("response_format", "json");
+    if (onText) form.append("stream", "true");
     if (language.trim()) form.append("language", language.trim());
     const response = await checked(
       await fetch(endpoint(provider.baseUrl, "audio/transcriptions"), {
@@ -459,6 +466,8 @@ export class OpenAICompatibleProvider {
         signal: providerSignal(signal),
       }),
     );
+    if (response.headers.get("content-type")?.includes("text/event-stream"))
+      return consumeTranscription(response, onText ?? (() => {}));
     const data = await response.json();
     if (typeof data.text !== "string" || !data.text.trim())
       throw new Error(

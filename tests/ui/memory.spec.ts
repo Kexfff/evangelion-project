@@ -235,6 +235,7 @@ test("recall settings stay explicit and archive actions retain their behavior", 
   await expect(
     page.getByText("Memories imported.", { exact: true }),
   ).toHaveCount(0);
+  await page.getByLabel("Encrypt archive with a passphrase").uncheck();
   await page.getByRole("button", { name: "Export", exact: true }).click();
   await expect(page.locator(".success-notice")).toContainText(
     "without API keys",

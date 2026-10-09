@@ -19,6 +19,12 @@ export class MicrophoneCapture {
   private deadline?: ReturnType<typeof setTimeout>;
   private voicedMs = 0;
   private vad: VoiceActivityDetector;
+  private neural?: Awaited<
+    ReturnType<typeof import("./neural-vad").createNeuralVad>
+  >;
+  private inference = Promise.resolve();
+  private pendingFrames = 0;
+  private captureRate = 16000;
   constructor(
     private voice: Settings["voice"],
     private callbacks: {
@@ -32,7 +38,9 @@ export class MicrophoneCapture {
     private pressToTalk = false,
   ) {
     this.vad = new VoiceActivityDetector(
-      voice.vadThreshold,
+      voice.vadEnabled && voice.vadEngine === "silero"
+        ? voice.neuralThreshold
+        : voice.vadThreshold,
       voice.vadMinSpeechMs,
       voice.vadSilenceMs,
     );
@@ -88,6 +96,18 @@ export class MicrophoneCapture {
         };
       const context = new AudioContext();
       this.context = context;
+      this.captureRate = context.sampleRate;
+      if (this.voice.vadEnabled && this.voice.vadEngine === "silero") {
+        const { createNeuralVad } = await import("./neural-vad");
+        if (this.closed) return;
+        const neural = await createNeuralVad(context.sampleRate);
+        if (this.closed) {
+          await neural.close();
+          return;
+        }
+        this.neural = neural;
+        this.captureRate = 16000;
+      }
       await context.audioWorklet.addModule(
         new URL("./capture-worklet.js", import.meta.url),
       );
@@ -102,7 +122,38 @@ export class MicrophoneCapture {
       node.connect(context.destination);
       node.port.onmessage = (event) => {
         if (event.data === "finished") this.drained?.();
-        else this.receive(event.data as Float32Array);
+        else if (this.neural) {
+          if (++this.pendingFrames > 40) {
+            this.callbacks.error(
+              new Error(
+                "Neural voice detection cannot keep up. Recording stopped; try the energy detector.",
+              ),
+            );
+            this.close();
+            return;
+          }
+          const samples = event.data as Float32Array;
+          this.inference = this.inference
+            .then(async () => {
+              if (!this.closed)
+                await this.neural!.process(samples, (frame, probability) =>
+                  this.receive(frame, probability),
+                );
+            })
+            .catch(() => {
+              if (!this.closed) {
+                this.callbacks.error(
+                  new Error(
+                    "Neural voice detection failed. Recording stopped; choose the energy detector to retry.",
+                  ),
+                );
+                this.close();
+              }
+            })
+            .finally(() => {
+              this.pendingFrames--;
+            });
+        } else this.receive(event.data as Float32Array);
       };
       await context.resume();
       if (this.closed) return;
@@ -120,10 +171,10 @@ export class MicrophoneCapture {
       throw error;
     }
   }
-  private receive(samples: Float32Array) {
+  private receive(samples: Float32Array, speechProbability?: number) {
     if (this.closed || !this.context) return;
     const level = rms(samples),
-      ms = (samples.length / this.context.sampleRate) * 1000;
+      ms = (samples.length / this.captureRate) * 1000;
     this.callbacks.level(level);
     if (level >= this.voice.vadThreshold) this.voicedMs += ms;
     if (!this.callbacks.acceptsSpeech()) {
@@ -143,7 +194,7 @@ export class MicrophoneCapture {
         )
           this.preRoll.shift();
       }
-      const edge = this.vad.push(level, ms);
+      const edge = this.vad.push(speechProbability ?? level, ms);
       if (edge === "start") {
         this.inSpeech = true;
         this.chunks = [...this.preRoll];
@@ -181,6 +232,7 @@ export class MicrophoneCapture {
         this.node!.port.postMessage("finish");
       });
       clearTimeout(timer);
+      await this.inference;
       this.drained = undefined;
       if (this.closed) return;
       if (!flushed) {
@@ -208,7 +260,7 @@ export class MicrophoneCapture {
     this.lengthMs = 0;
     this.vad.reset();
     if (chunks.length && enoughSpeech)
-      this.callbacks.utterance(encodeWav(chunks, this.context.sampleRate));
+      this.callbacks.utterance(encodeWav(chunks, this.captureRate));
     if (!this.voice.vadEnabled) this.close();
   }
   close() {
@@ -225,6 +277,7 @@ export class MicrophoneCapture {
       t.stop();
     });
     void this.context?.close().catch(() => {});
+    void this.inference.then(() => this.neural?.close()).catch(() => {});
     this.chunks = [];
     this.preRoll = [];
     this.callbacks.level(0);

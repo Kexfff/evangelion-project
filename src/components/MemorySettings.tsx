@@ -17,6 +17,8 @@ import { bridge } from "../bridge";
 import type { Fact, Snapshot } from "../shared/schema";
 import { MemoryConstellation } from "./MemoryConstellation";
 import { ConversationHistory } from "./ConversationHistory";
+import { MemoryLab } from "./MemoryLab";
+import type { MemoryMap } from "../shared/memory-tools";
 
 type Filter = "all" | Fact["source"];
 const sourceLabel = (fact: Fact) =>
@@ -55,6 +57,19 @@ export function MemorySettings({
     [snapshot.facts, character.id],
   );
   const [search, setSearch] = useState("");
+  const [password, setPassword] = useState("");
+  const [encrypted, setEncrypted] = useState(true);
+  const [map, setMap] = useState<MemoryMap>();
+  const projectionRevision = JSON.stringify([
+    facts.map((fact) => [fact.id, fact.updatedAt, fact.text]),
+    snapshot.settings.providers.embedding.baseUrl,
+    snapshot.settings.providers.embedding.model,
+  ]);
+  useEffect(() => setMap(undefined), [projectionRevision]);
+  useEffect(() => {
+    setMap(undefined);
+    setPassword("");
+  }, [character.id]);
   const [view, setView] = useState<"facts" | "history">("facts");
   const [filter, setFilter] = useState<Filter>("all");
   const [limit, setLimit] = useState(12);
@@ -185,6 +200,7 @@ export function MemorySettings({
               facts={facts}
               selectedId={selected?.id}
               onSelect={setSelectedId}
+              projection={map}
             />
           </section>
 
@@ -457,6 +473,43 @@ export function MemorySettings({
                 </form>
               </section>
               {children}
+              <section className="card">
+                <h2>A map of meaning</h2>
+                <p className="memory-helper">
+                  Keep the artistic constellation, or project already-indexed
+                  facts with PCA. Connections use actual cosine similarity; 2D
+                  distance loses information. No provider calls.
+                </p>
+                <div className="button-row">
+                  <button
+                    className="button secondary"
+                    disabled={working}
+                    onClick={() =>
+                      void perform(async () => {
+                        const next = await bridge.memoryMap();
+                        if (!next.nodes.length)
+                          notice(
+                            "Index at least two facts with the embedding provider first.",
+                          );
+                        else setMap(next);
+                      })
+                    }
+                  >
+                    Show semantic map
+                  </button>
+                  <button
+                    className="text-button"
+                    onClick={() => setMap(undefined)}
+                  >
+                    Artistic view
+                  </button>
+                </div>
+              </section>
+              <MemoryLab
+                perform={perform}
+                working={working || snapshot.busy}
+                notice={notice}
+              />
               <section className="card memory-archive">
                 <div className="memory-tool-heading">
                   <span className="memory-tool-icon">
@@ -467,14 +520,39 @@ export function MemorySettings({
                     <p>Import or back up {character.name}’s memories.</p>
                   </div>
                 </div>
+                <label className="memory-helper">
+                  <input
+                    type="checkbox"
+                    checked={encrypted}
+                    onChange={(e) => setEncrypted(e.target.checked)}
+                  />{" "}
+                  Encrypt archive with a passphrase
+                </label>
+                {encrypted && (
+                  <label className="field">
+                    <span>Archive passphrase (10+ characters)</span>
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      value={password}
+                      maxLength={256}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                  </label>
+                )}
                 <div className="button-row">
                   <button
                     className="button secondary"
                     disabled={working || snapshot.busy}
                     onClick={() =>
                       void perform(async () => {
-                        if (await bridge.importMemory())
+                        if (
+                          await bridge.importMemory(
+                            encrypted && password ? password : undefined,
+                          )
+                        )
                           notice("Memories imported.");
+                        setPassword("");
                       })
                     }
                   >
@@ -483,11 +561,16 @@ export function MemorySettings({
                   </button>
                   <button
                     className="button secondary"
-                    disabled={working}
+                    disabled={working || (encrypted && password.length < 10)}
                     onClick={() =>
                       void perform(async () => {
-                        if (await bridge.exportMemory())
+                        if (
+                          await bridge.exportMemory(
+                            encrypted ? password : undefined,
+                          )
+                        )
                           notice("Memory archive exported without API keys.");
+                        setPassword("");
                       })
                     }
                   >
@@ -499,6 +582,9 @@ export function MemorySettings({
                   Imports merge into the saved active character. Archives
                   include facts, chat history and attachments, but no API keys.
                   Keep them somewhere private.
+                  {encrypted
+                    ? " Passphrases are never saved; there is no recovery if you forget yours."
+                    : " This export is readable plaintext."}
                 </p>
               </section>
             </aside>

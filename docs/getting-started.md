@@ -4,7 +4,7 @@
 
 ## Run
 
-Requires Node.js 22.12+ (or a newer supported Node release), npm, and a desktop session with WebGL support.
+Requires Node.js 22.13+ (or a newer supported Node release), npm, and a desktop session with WebGL support. The memory index uses Node’s built-in SQLite module; it needs no native database dependency rebuild.
 
 ```sh
 npm install

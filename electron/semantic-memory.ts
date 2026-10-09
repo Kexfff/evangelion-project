@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import { Store, atomicWrite } from "./store";
+import { Store } from "./store";
 import { OpenAICompatibleProvider } from "./providers";
+import { memoryDocuments } from "./memory-library";
+import { projectEmbeddings } from "../src/shared/memory-tools";
 
 const entrySchema = z.object({
   id: z.string(),
@@ -34,41 +36,84 @@ export class SemanticMemory {
     private key: () => string,
   ) {
     this.file = path.join(path.dirname(store.file), "memory-vectors.json");
+    let invalid = false;
+    for (const row of store.library.sql
+      .prepare("SELECT * FROM vectors")
+      .all()) {
+      try {
+        this.entries.push(
+          entrySchema.parse({ ...row, vector: JSON.parse(String(row.vector)) }),
+        );
+      } catch {
+        invalid = true; /* Invalid derived entries can be safely re-indexed. */
+      }
+    }
+    if (invalid) this.save();
     if (existsSync(this.file)) {
       try {
-        this.entries = z
+        const legacy = z
           .object({ version: z.literal(1), entries: z.array(entrySchema) })
           .parse(JSON.parse(readFileSync(this.file, "utf8"))).entries;
+        if (!this.entries.length) this.entries = legacy;
       } catch {
         /* This file is a rebuildable cache, never the source of memories. */
       }
+      this.save();
+      unlinkSync(this.file);
     }
   }
+  projection() {
+    this.prune();
+    const ids = new Set(
+      this.store.data.facts
+        .filter((f) => f.characterId === this.store.characterId)
+        .map((f) => `fact:${f.id}`),
+    );
+    return projectEmbeddings(
+      this.entries
+        .filter((e) => ids.has(e.id))
+        .map((e) => ({ id: e.id.slice(5), vector: e.vector })),
+    );
+  }
   private documents() {
-    return [
-      ...this.store.data.facts.map((f) => ({
-        id: `fact:${f.id}`,
-        characterId: f.characterId,
-        text: f.text,
-      })),
-      ...this.store.data.messages
-        .filter((m) => m.role === "user" && m.content.trim())
-        .map((m) => ({
-          id: `message:${m.id}`,
-          characterId: m.characterId,
-          text: m.content.slice(0, 4000),
-        })),
-    ].map((d) => ({ ...d, hash: hash(`${d.characterId}:${d.text}`) }));
+    return memoryDocuments(this.store.data).map((d) => ({
+      ...d,
+      hash: hash(`${d.characterId}:${d.text}`),
+    }));
   }
   private namespace() {
     const p = this.store.data.settings.providers.embedding;
     return hash(`${p.baseUrl.replace(/\/+$/, "")}:${p.model}`);
   }
   private save() {
-    atomicWrite(
-      this.file,
-      JSON.stringify({ version: 1, entries: this.entries }),
+    const sql = this.store.library.sql;
+    const old = new Map(
+      (
+        sql.prepare("SELECT id, namespace, hash FROM vectors").all() as {
+          id: string;
+          namespace: string;
+          hash: string;
+        }[]
+      ).map((e) => [e.id, e]),
     );
+    sql.exec("BEGIN IMMEDIATE");
+    try {
+      const insert = sql.prepare(
+        "INSERT OR REPLACE INTO vectors VALUES (?, ?, ?, ?)",
+      );
+      for (const e of this.entries) {
+        const previous = old.get(e.id);
+        if (previous?.namespace !== e.namespace || previous?.hash !== e.hash)
+          insert.run(e.id, e.namespace, e.hash, JSON.stringify(e.vector));
+        old.delete(e.id);
+      }
+      const remove = sql.prepare("DELETE FROM vectors WHERE id=?");
+      for (const id of old.keys()) remove.run(id);
+      sql.exec("COMMIT");
+    } catch (error) {
+      sql.exec("ROLLBACK");
+      throw error;
+    }
   }
   prune() {
     const valid = new Map(this.documents().map((d) => [d.id, d.hash]));
@@ -88,14 +133,13 @@ export class SemanticMemory {
     this.prune();
     const namespace = this.namespace();
     const docs = this.documents().filter((d) => d.characterId === characterId);
+    const cached = new Map(
+      this.entries
+        .filter((e) => e.namespace === namespace)
+        .map((e) => [e.id, e.hash]),
+    );
     const missing = docs
-      .filter(
-        (d) =>
-          !this.entries.some(
-            (e) =>
-              e.id === d.id && e.hash === d.hash && e.namespace === namespace,
-          ),
-      )
+      .filter((d) => cached.get(d.id) !== d.hash)
       .slice(0, limit);
     for (let i = 0; i < missing.length; i += 32) {
       signal?.throwIfAborted();
@@ -112,6 +156,16 @@ export class SemanticMemory {
           "Embedding configuration changed. Rebuild with the new model.",
         );
       const valid = new Map(this.documents().map((d) => [d.id, d.hash]));
+      if (
+        vectors.length !== batch.length ||
+        vectors.some(
+          (v) =>
+            !Array.isArray(v) ||
+            !v.length ||
+            v.some((x) => !Number.isFinite(x)),
+        )
+      )
+        throw new Error("Embedding provider returned incomplete vectors.");
       batch.forEach((d, n) => {
         if (valid.get(d.id) !== d.hash) return;
         this.entries = this.entries.filter((e) => e.id !== d.id);
@@ -121,16 +175,12 @@ export class SemanticMemory {
           namespace,
           vector: vectors[n],
         });
+        cached.set(d.id, d.hash);
       });
       this.save();
     }
     return {
-      indexed: docs.filter((d) =>
-        this.entries.some(
-          (e) =>
-            e.id === d.id && e.hash === d.hash && e.namespace === namespace,
-        ),
-      ).length,
+      indexed: docs.filter((d) => cached.get(d.id) === d.hash).length,
       total: docs.length,
     };
   }

@@ -10,12 +10,25 @@ import {
   systemPreferences,
   powerMonitor,
 } from "electron";
-import { readFileSync, mkdirSync, copyFileSync } from "node:fs";
+import {
+  readFileSync,
+  mkdirSync,
+  copyFileSync,
+  writeFileSync,
+  statSync,
+} from "node:fs";
+import { characterCardSchema, cardAvatar } from "./character-card";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { z } from "zod";
 import { Store, atomicWrite } from "./store";
+import {
+  archivePassword,
+  encryptArchive,
+  decryptArchive,
+} from "./memory-archive";
+import { memoryMaintenanceSchema } from "../src/shared/memory-tools";
 import { configureTestProfile } from "./test-profile";
 import { PttService } from "./ptt-service";
 import { bindPortalShortcut } from "./ptt-portal";
@@ -612,7 +625,7 @@ else {
           z.enum(["approve", "cancel"]).parse(action),
         ),
       );
-      handle("transcribe", (bytes, mime) => {
+      handle("transcribe", (bytes, mime, id) => {
         if (
           !(bytes instanceof ArrayBuffer) ||
           bytes.byteLength > 25 * 1024 * 1024 ||
@@ -630,6 +643,8 @@ else {
               "audio/wav",
             ])
             .parse(mime),
+          undefined,
+          z.string().uuid().optional().parse(id),
         );
       });
       handle("speak", (text) =>
@@ -649,7 +664,7 @@ else {
         return runtime.provider.models(
           store.data.settings.providers[kind],
           vault.get(kind),
-          kind === "embedding",
+          kind,
         );
       });
       handle("openrouter:providers", (model) =>
@@ -734,14 +749,17 @@ else {
         });
         runtime.broadcast();
       });
-      handle("fact:delete", (raw) => {
+      handle("fact:delete", async (raw) => {
         const id = z.string().parse(raw);
+        const characterId = store.characterId;
+        await runtime.cancel();
         store.update((d) => {
           d.facts = d.facts.filter(
-            (f) => !(f.id === id && f.characterId === store.characterId),
+            (f) => !(f.id === id && f.characterId === characterId),
           );
         });
         runtime.broadcast();
+        store.purgeDeleted();
       });
       handle("session:new", () => {
         idle();
@@ -769,39 +787,100 @@ else {
         });
         if (result.response !== 1) return;
         idle();
-        runtime.cancel();
+        await runtime.cancel();
         store.update((d) => {
           d.messages = d.messages.filter((m) => m.characterId !== characterId);
           d.sessions[characterId] = randomUUID();
         });
         runtime.broadcast();
+        store.purgeDeleted();
       });
-      handle("memory:export", async () => {
+      handle("memory:map", () => runtime.semantic.projection());
+      handle("memory:consolidate", () => runtime.consolidateMemory());
+      handle("memory:inspect", async (raw, useSemantic) => {
+        idle();
+        const query = z.string().trim().min(1).max(4000).parse(raw);
+        return runtime.inspectMemory(query, z.boolean().parse(useSemantic));
+      });
+      handle("memory:maintain", async (raw) => {
+        idle();
+        const options = memoryMaintenanceSchema.parse(raw),
+          characterId = store.characterId;
+        const cutoff = Date.now() - options.historyDays * 86400000;
+        const taskCutoff = Date.now() - options.taskDays * 86400000;
+        const result = await dialog.showMessageBox({
+          type: "warning",
+          buttons: ["Cancel", "Clean up"],
+          defaultId: 0,
+          cancelId: 0,
+          message: "Clean up this character’s memory?",
+          detail: `History: ${options.historyDays ? `older than ${options.historyDays} days (active conversation kept)` : "keep all"}. Finished reminders: ${options.taskDays ? `older than ${options.taskDays} days` : "keep all"}. Saved facts and pending reminders are kept. The rolling profile backup will be replaced and unreferenced attachments removed across the profile. Export first; this cannot be undone here. External exports and OS backups are not erased.`,
+        });
+        if (result.response !== 1) return "Nothing changed.";
+        idle();
+        await runtime.cancel();
+        let messages = 0,
+          tasks = 0;
+        store.update((d) => {
+          const before = d.messages.length;
+          if (options.historyDays)
+            d.messages = d.messages.filter(
+              (m) =>
+                m.characterId !== characterId ||
+                m.sessionId === d.sessions[characterId] ||
+                Date.parse(m.createdAt) >= cutoff,
+            );
+          messages = before - d.messages.length;
+          const beforeTasks = d.automation.tasks.length;
+          if (options.taskDays)
+            d.automation.tasks = d.automation.tasks.filter(
+              (t) =>
+                t.characterId !== characterId ||
+                !["done", "missed", "cancelled", "failed"].includes(t.status) ||
+                Math.max(Date.parse(t.createdAt), Date.parse(t.dueAt)) >=
+                  taskCutoff,
+            );
+          tasks = beforeTasks - d.automation.tasks.length;
+        });
+        runtime.broadcast();
+        const attachments = store.purgeDeleted();
+        return `Removed ${messages} messages, ${tasks} finished reminders and ${attachments} unused attachments. Rolling backup refreshed.`;
+      });
+      handle("memory:export", async (raw) => {
+        const password = archivePassword.optional().parse(raw);
         const characterId = store.characterId;
         const result = await dialog.showSaveDialog({
-          defaultPath: "eva-memories.json",
+          defaultPath: password
+            ? "eva-memories.encrypted.json"
+            : "eva-memories.json",
           filters: [{ name: "Memory archive", extensions: ["json"] }],
         });
         if (!result.filePath) return false;
+        const plaintext = JSON.stringify(
+          {
+            version: 1,
+            facts: store.data.facts.filter(
+              (f) => f.characterId === characterId,
+            ),
+            messages: store.data.messages.filter(
+              (m) => m.characterId === characterId,
+            ),
+          },
+          null,
+          2,
+        );
+        if (Buffer.byteLength(plaintext) > 192 * 1024 * 1024)
+          throw new Error(
+            "Archive exceeds the 192 MB portable limit. Clean up older history before exporting; nothing was written.",
+          );
         atomicWrite(
           result.filePath,
-          JSON.stringify(
-            {
-              version: 1,
-              facts: store.data.facts.filter(
-                (f) => f.characterId === characterId,
-              ),
-              messages: store.data.messages.filter(
-                (m) => m.characterId === characterId,
-              ),
-            },
-            null,
-            2,
-          ),
+          password ? await encryptArchive(plaintext, password) : plaintext,
         );
         return true;
       });
-      handle("memory:import", async () => {
+      handle("memory:import", async (raw) => {
+        const password = archivePassword.optional().parse(raw);
         idle();
         const characterId = store.characterId;
         const result = await dialog.showOpenDialog({
@@ -810,33 +889,43 @@ else {
         });
         if (!result.filePaths[0]) return false;
         idle();
+        if (statSync(result.filePaths[0]).size > 256 * 1024 * 1024)
+          throw new Error("Archive exceeds 256 MB.");
         const bytes = readFileSync(result.filePaths[0]);
-        if (bytes.byteLength > 50 * 1024 * 1024)
-          throw new Error("Archive exceeds 50 MB.");
         const archive = memoryExportSchema.parse(
-          JSON.parse(bytes.toString("utf8")),
+          await decryptArchive(JSON.parse(bytes.toString("utf8")), password),
         );
+        idle();
         store.update((d) => {
-          for (const f of archive.facts)
-            if (
-              !d.facts.some(
-                (x) => x.characterId === characterId && x.text === f.text,
+          const knownFacts = new Set(
+            d.facts
+              .filter((f) => f.characterId === characterId)
+              .map((f) => f.text),
+          );
+          const messageKey = (m: (typeof d.messages)[number]) =>
+            createHash("sha256")
+              .update(
+                JSON.stringify([
+                  m.role,
+                  m.createdAt,
+                  m.content,
+                  m.images ?? [],
+                ]),
               )
-            )
+              .digest("hex");
+          const knownMessages = new Set(
+            d.messages
+              .filter((m) => m.characterId === characterId)
+              .map(messageKey),
+          );
+          for (const f of archive.facts)
+            if (!knownFacts.has(f.text)) {
               d.facts.push({ ...f, id: randomUUID(), characterId });
+              knownFacts.add(f.text);
+            }
           const importedSessions = new Map<string, string>();
           for (const m of archive.messages)
-            if (
-              !d.messages.some(
-                (x) =>
-                  x.characterId === characterId &&
-                  x.content === m.content &&
-                  JSON.stringify(x.images ?? []) ===
-                    JSON.stringify(m.images ?? []) &&
-                  x.createdAt === m.createdAt &&
-                  x.role === m.role,
-              )
-            ) {
+            if (!knownMessages.has(messageKey(m))) {
               if (!importedSessions.has(m.sessionId))
                 importedSessions.set(m.sessionId, randomUUID());
               d.messages.push({
@@ -845,7 +934,91 @@ else {
                 characterId,
                 sessionId: importedSessions.get(m.sessionId)!,
               });
+              knownMessages.add(messageKey(m));
             }
+        });
+        runtime.broadcast();
+        return true;
+      });
+      handle("character:export", async () => {
+        const {
+          id: _id,
+          avatar,
+          ...character
+        } = store.data.settings.characters.find(
+          (c) => c.id === store.characterId,
+        )!;
+        const result = await dialog.showSaveDialog({
+          defaultPath: "eva-character.json",
+          filters: [{ name: "Character card", extensions: ["json"] }],
+        });
+        if (!result.filePath) return false;
+        const payload = {
+          format: "evangelion-character",
+          version: 1,
+          character,
+          avatar:
+            avatar === "builtin:eva"
+              ? { kind: "builtin" }
+              : {
+                  kind: "embedded",
+                  vrm: readFileSync(
+                    path.join(
+                      dataDirectory,
+                      "avatars",
+                      `${avatar.slice(7)}.vrm`,
+                    ),
+                  ).toString("base64"),
+                },
+        };
+        atomicWrite(
+          result.filePath,
+          JSON.stringify(characterCardSchema.parse(payload)),
+        );
+        return true;
+      });
+      handle("character:import", async () => {
+        idle();
+        const result = await dialog.showOpenDialog({
+          filters: [{ name: "Character card", extensions: ["json"] }],
+          properties: ["openFile"],
+        });
+        if (!result.filePaths[0]) return false;
+        if (statSync(result.filePaths[0]).size > 281 * 1024 * 1024)
+          throw new Error("Character card exceeds 281 MB.");
+        const card = characterCardSchema.parse(
+          JSON.parse(readFileSync(result.filePaths[0], "utf8")),
+        );
+        const bytes = cardAvatar(card);
+        const confirm = await dialog.showMessageBox({
+          type: "question",
+          buttons: ["Cancel", "Import inactive card"],
+          defaultId: 0,
+          cancelId: 0,
+          message: `Import ${card.character.name}?`,
+          detail:
+            "Cards contain prompts written by their author. Review the personality and system prompt before selecting this character. No providers, secrets, memories, plugins or permissions are imported.",
+        });
+        if (confirm.response !== 1) return false;
+        idle();
+        if (store.data.settings.characters.length >= 30)
+          throw new Error("The character limit is 30.");
+        const id = randomUUID();
+        if (bytes) {
+          const dir = path.join(dataDirectory, "avatars");
+          mkdirSync(dir, { recursive: true, mode: 0o700 });
+          writeFileSync(path.join(dir, `${id}.vrm`), bytes, {
+            mode: 0o600,
+            flag: "wx",
+          });
+        }
+        store.update((d) => {
+          d.settings.characters.push({
+            ...card.character,
+            id,
+            avatar: bytes ? `custom:${id}` : "builtin:eva",
+          });
+          d.sessions[id] = randomUUID();
         });
         runtime.broadcast();
         return true;

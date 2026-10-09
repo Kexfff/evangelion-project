@@ -51,8 +51,8 @@ const api: Bridge = {
   setBehavior: (levels) => ipcRenderer.invoke("eva:autonomy:state", levels),
   createTask: (task) => ipcRenderer.invoke("eva:task:create", task),
   taskAction: (id, action) => ipcRenderer.invoke("eva:task:action", id, action),
-  transcribe: (bytes, mime) =>
-    ipcRenderer.invoke("eva:transcribe", bytes, mime),
+  transcribe: (bytes, mime, id) =>
+    ipcRenderer.invoke("eva:transcribe", bytes, mime, id),
   speak: (text) => ipcRenderer.invoke("eva:speak", text),
   openSpeech: (text) => ipcRenderer.invoke("eva:speech:open", text),
   readSpeech: (id) => ipcRenderer.invoke("eva:speech:read", id),
@@ -66,9 +66,17 @@ const api: Bridge = {
   deleteFact: (id) => ipcRenderer.invoke("eva:fact:delete", id),
   newSession: () => ipcRenderer.invoke("eva:session:new"),
   clearHistory: () => ipcRenderer.invoke("eva:history:clear"),
-  exportMemory: () => ipcRenderer.invoke("eva:memory:export"),
-  importMemory: () => ipcRenderer.invoke("eva:memory:import"),
+  exportMemory: (password) => ipcRenderer.invoke("eva:memory:export", password),
+  importMemory: (password) => ipcRenderer.invoke("eva:memory:import", password),
+  inspectMemory: (query, semantic) =>
+    ipcRenderer.invoke("eva:memory:inspect", query, semantic),
+  memoryMap: () => ipcRenderer.invoke("eva:memory:map"),
+  consolidateMemory: () => ipcRenderer.invoke("eva:memory:consolidate"),
+  maintainMemory: (options) =>
+    ipcRenderer.invoke("eva:memory:maintain", options),
   importAvatar: () => ipcRenderer.invoke("eva:avatar:import"),
+  exportCharacter: () => ipcRenderer.invoke("eva:character:export"),
+  importCharacter: () => ipcRenderer.invoke("eva:character:import"),
   openSettings: () => ipcRenderer.invoke("eva:window:settings"),
   windowAction: (action) => ipcRenderer.invoke("eva:window:action", action),
   onEvent: (listener) => {

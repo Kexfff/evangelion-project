@@ -9,6 +9,7 @@ import {
 import { bridge } from "../bridge";
 import type { Settings } from "../shared/schema";
 import type { Levels } from "../shared/autonomy";
+import { selectGesture, type Viseme } from "../audio/visemes";
 
 export function Avatar({
   avatar,
@@ -17,6 +18,8 @@ export function Avatar({
   amplitude = 0,
   behavior,
   gesture,
+  gestureText = "",
+  viseme,
 }: {
   avatar: string;
   settings: Settings["vrm"];
@@ -24,10 +27,28 @@ export function Avatar({
   amplitude?: number;
   behavior?: Levels;
   gesture?: string;
+  gestureText?: string;
+  viseme?: Viseme;
 }) {
   const host = useRef<HTMLDivElement>(null);
-  const live = useRef({ settings, speaking, amplitude, behavior, gesture });
-  live.current = { settings, speaking, amplitude, behavior, gesture };
+  const live = useRef({
+    settings,
+    speaking,
+    amplitude,
+    behavior,
+    gesture,
+    gestureText,
+    viseme,
+  });
+  live.current = {
+    settings,
+    speaking,
+    amplitude,
+    behavior,
+    gesture,
+    gestureText,
+    viseme,
+  };
   const [status, setStatus] = useState("Loading avatar…");
   const [error, setError] = useState("");
   useEffect(() => {
@@ -41,6 +62,21 @@ export function Avatar({
       animationVersion = 0;
     const clips = new Map<string, THREE.AnimationClip>();
     const scene = new THREE.Scene();
+    const gazeTarget = new THREE.Object3D();
+    scene.add(gazeTarget);
+    const pointer = { x: 0, y: 0 };
+    const movePointer = (event: PointerEvent) => {
+      const rect = element.getBoundingClientRect();
+      pointer.x = Math.max(
+        -1,
+        Math.min(1, ((event.clientX - rect.left) / rect.width) * 2 - 1),
+      );
+      pointer.y = Math.max(
+        -1,
+        Math.min(1, ((event.clientY - rect.top) / rect.height) * 2 - 1),
+      );
+    };
+    window.addEventListener("pointermove", movePointer);
     const camera = new THREE.PerspectiveCamera(29, 1, 0.05, 100);
     let renderer: THREE.WebGLRenderer;
     setError("");
@@ -52,6 +88,7 @@ export function Avatar({
         powerPreference: "high-performance",
       });
     } catch {
+      window.removeEventListener("pointermove", movePointer);
       setError(
         "WebGL is unavailable. Enable GPU acceleration to render the avatar.",
       );
@@ -132,6 +169,7 @@ export function Avatar({
           throw new Error("The file is not a supported VRM avatar.");
         }
         vrm = loaded;
+        if (vrm.lookAt) vrm.lookAt.target = gazeTarget;
         VRMUtils.rotateVRM0(vrm);
         vrm.scene.traverse((object) => {
           object.frustumCulled = false;
@@ -170,6 +208,7 @@ export function Avatar({
       gestureUntil = 0,
       gestureName = "greeting";
     const emotion = { happy: 0, sad: 0, relaxed: 0 };
+    const mouth = { aa: 0, ih: 0, ou: 0, ee: 0, oh: 0 };
     const animate = () => {
       if (disposed) return;
       frame = requestAnimationFrame(animate);
@@ -184,6 +223,22 @@ export function Avatar({
         s.zoom;
       camera.position.set(0, centerY, distance);
       camera.lookAt(0, centerY, 0);
+      const gazeX =
+        s.gaze === "pointer"
+          ? pointer.x * 0.65
+          : s.gaze === "natural"
+            ? Math.sin(elapsed * 0.43) * 0.22
+            : 0;
+      const gazeY =
+        s.gaze === "pointer"
+          ? -pointer.y * 0.4
+          : s.gaze === "natural"
+            ? Math.sin(elapsed * 0.27) * 0.08
+            : 0;
+      gazeTarget.position.lerp(
+        new THREE.Vector3(gazeX + s.x, height * 0.86 + gazeY + s.y, 2),
+        Math.min(1, dt * 3),
+      );
       if (vrm) {
         vrm.scene.position.set(s.x, s.y, 0);
         vrm.scene.rotation.y =
@@ -194,7 +249,9 @@ export function Avatar({
           gestureUntil = 0;
         else if (live.current.gesture !== lastGesture) {
           lastGesture = live.current.gesture;
-          gestureName = mood.mood > 75 ? "peaceSign" : "greeting";
+          gestureName =
+            selectGesture(live.current.gestureText, mood.mood, mood.energy) ??
+            "greeting";
           gestureUntil = elapsed + (mood.energy >= 30 ? 3 : 0);
         }
         const desired = elapsed < gestureUntil ? gestureName : s.animation;
@@ -214,10 +271,13 @@ export function Avatar({
             : 0;
         if (elapsed - blinkStart > 0.16) blinkStart = -1;
         vrm.expressionManager?.setValue("blink", blink);
-        vrm.expressionManager?.setValue(
-          "aa",
-          talking ? Math.min(1, level * 4) : 0,
-        );
+        for (const name of ["aa", "ih", "ou", "ee", "oh"] as const) {
+          const chosen = s.lipSync === "amplitude" ? "aa" : live.current.viseme;
+          const target =
+            talking && chosen === name ? Math.min(0.9, level * 4) : 0;
+          mouth[name] += (target - mouth[name]) * Math.min(1, dt * 22);
+          vrm.expressionManager?.setValue(name, mouth[name]);
+        }
         const targets = {
           happy: mood ? Math.max(0, (mood.mood - 50) / 140) : 0,
           sad: mood ? Math.max(0, (40 - mood.mood) / 160) : 0,
@@ -226,7 +286,10 @@ export function Avatar({
         for (const name of ["happy", "sad", "relaxed"] as const) {
           emotion[name] +=
             (targets[name] - emotion[name]) * Math.min(1, dt * 4);
-          vrm.expressionManager?.setValue(name, emotion[name]);
+          vrm.expressionManager?.setValue(
+            name,
+            emotion[name] * s.expressionStrength,
+          );
         }
         element.dataset.mood = mood ? `${Math.round(mood.mood)}` : "off";
         vrm.update(dt);
@@ -236,6 +299,7 @@ export function Avatar({
     animate();
     return () => {
       disposed = true;
+      window.removeEventListener("pointermove", movePointer);
       cancelAnimationFrame(frame);
       resize.disconnect();
       mixer?.stopAllAction();

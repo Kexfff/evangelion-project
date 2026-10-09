@@ -53,6 +53,14 @@ export const characterSchema = z.object({
   tagline: z.string().max(160),
   personality: z.string().max(5000),
   systemPrompt: z.string().max(10000),
+  avatarMetadata: z
+    .object({
+      author: z.string().max(300).default(""),
+      source: z.string().max(1000).default(""),
+      license: z.string().max(2000).default(""),
+      notes: z.string().max(2000).default(""),
+    })
+    .optional(),
   avatar: z
     .string()
     .max(300)
@@ -78,6 +86,9 @@ export const settingsSchema = z
       outputDeviceId: z.string().max(500).default(""),
       inputGain: z.number().min(0.1).max(5).default(1),
       vadEnabled: z.boolean().default(false),
+      vadEngine: z.enum(["energy", "silero"]).default("energy"),
+      neuralThreshold: z.number().min(0.1).max(0.95).default(0.5),
+      transcriptionStreaming: z.boolean().default(false),
       vadThreshold: z.number().min(0.005).max(0.3).default(0.035),
       vadSilenceMs: z.number().int().min(300).max(3000).default(900),
       vadMinSpeechMs: z.number().int().min(100).max(1000).default(200),
@@ -109,6 +120,9 @@ export const settingsSchema = z
         "squat",
       ]),
       autoBlink: z.boolean(),
+      gaze: z.enum(["forward", "natural", "pointer"]).default("natural"),
+      expressionStrength: z.number().min(0).max(1).default(0.6),
+      lipSync: z.enum(["amplitude", "text"]).default("text"),
     }),
     memory: z.object({
       contextMessages: z.number().int().min(4).max(80),
@@ -175,6 +189,7 @@ export interface Snapshot {
   minecraft?: import("./minecraft").MinecraftSnapshot;
 }
 export type RuntimeEvent =
+  | { type: "transcription"; id: string; text: string }
   | { type: "ptt-action"; action: PttAction }
   | { type: "ptt-status"; status: PttStatus }
   | { type: "autonomous-start"; id: string }
@@ -250,7 +265,7 @@ export interface Bridge {
   setBehavior(levels: Levels): Promise<void>;
   createTask(task: TaskInput): Promise<void>;
   taskAction(id: string, action: "approve" | "cancel"): Promise<void>;
-  transcribe(bytes: ArrayBuffer, mime: string): Promise<string>;
+  transcribe(bytes: ArrayBuffer, mime: string, id?: string): Promise<string>;
   speak(text: string): Promise<ArrayBuffer>;
   openSpeech(text: string): Promise<{ id: string; mime: string }>;
   readSpeech(id: string): Promise<{ done: boolean; bytes: ArrayBuffer }>;
@@ -263,9 +278,20 @@ export interface Bridge {
   deleteFact(id: string): Promise<void>;
   newSession(): Promise<void>;
   clearHistory(): Promise<void>;
-  exportMemory(): Promise<boolean>;
-  importMemory(): Promise<boolean>;
+  exportMemory(password?: string): Promise<boolean>;
+  importMemory(password?: string): Promise<boolean>;
+  inspectMemory(
+    query: string,
+    semantic: boolean,
+  ): Promise<import("./memory-tools").RecallResult[]>;
+  consolidateMemory(): Promise<string>;
+  memoryMap(): Promise<import("./memory-tools").MemoryMap>;
+  maintainMemory(
+    options: import("./memory-tools").MemoryMaintenance,
+  ): Promise<string>;
   importAvatar(): Promise<string | null>;
+  exportCharacter(): Promise<boolean>;
+  importCharacter(): Promise<boolean>;
   openSettings(): Promise<void>;
   windowAction(action: "minimize" | "close" | "companion"): Promise<void>;
   onEvent(listener: (event: RuntimeEvent) => void): () => void;
@@ -320,6 +346,9 @@ export const defaultSettings: Settings = {
     outputDeviceId: "",
     inputGain: 1,
     vadEnabled: false,
+    vadEngine: "energy",
+    neuralThreshold: 0.5,
+    transcriptionStreaming: false,
     vadThreshold: 0.035,
     vadSilenceMs: 900,
     vadMinSpeechMs: 200,
@@ -340,6 +369,9 @@ export const defaultSettings: Settings = {
     lightColor: "#fff3ef",
     animation: "idle_loop",
     autoBlink: true,
+    gaze: "natural",
+    expressionStrength: 0.6,
+    lipSync: "text",
   },
   memory: {
     contextMessages: 20,

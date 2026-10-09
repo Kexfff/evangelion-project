@@ -74,9 +74,9 @@ test("rejects unsupported/oversized/too many images without discarding the exist
   await input.setInputFiles({
     ...file,
     name: "large.png",
-    buffer: Buffer.alloc(2 * 1024 * 1024 + 1),
+    buffer: Buffer.alloc(20 * 1024 * 1024 + 1),
   });
-  await expect(page.getByRole("alert")).toContainText("2 MB");
+  await expect(page.getByRole("alert")).toContainText("20 MB");
   await input.setInputFiles([file, file, file, file]);
   await expect(page.getByRole("alert")).toContainText("up to 4 images");
   await expect(page.getByAltText("Attached: pixel.png")).toHaveCount(1);

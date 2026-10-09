@@ -160,6 +160,8 @@ export function Companion() {
           settings={settings.vrm}
           speaking={app.phase === "speaking"}
           amplitude={app.amplitude}
+          viseme={app.viseme}
+          gestureText={last?.role === "assistant" ? last.content : ""}
           behavior={
             settings.autonomy.expressive ? app.state.autonomy?.state : undefined
           }
@@ -174,6 +176,11 @@ export function Companion() {
         />
       </div>
       <div className="conversation-overlay">
+        {app.transcript && (
+          <div className="success-notice" role="status">
+            Hearing: {app.transcript}
+          </div>
+        )}
         {history && (
           <section className="history-panel">
             <div className="panel-heading">
@@ -340,7 +347,7 @@ export function Companion() {
             type="button"
             className="icon-button"
             aria-label="Attach images"
-            title="Attach images (PNG, JPEG, WebP, GIF; up to 4, 2 MB each)"
+            title="Attach images (up to 4, 20 MB input each; large images resized to a static JPEG)"
             disabled={readingImages || images.length >= MAX_IMAGES}
             onClick={() => fileInput.current?.click()}
           >

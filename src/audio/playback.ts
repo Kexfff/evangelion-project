@@ -1,5 +1,6 @@
 import { bridge } from "../bridge";
 import type { Settings } from "../shared/schema";
+import { visemeAt, type Viseme } from "./visemes";
 
 /** Removing a source can emit a media error; disconnect callbacks before touching it. */
 export function releasePlayer(player: HTMLAudioElement) {
@@ -31,6 +32,7 @@ export async function playSpeech(
   signal: AbortSignal,
   onLevel: (value: number) => void,
   onPlaying: () => void,
+  onViseme?: (value: Viseme | undefined) => void,
 ) {
   signal.throwIfAborted();
   const player = new Audio();
@@ -91,6 +93,11 @@ export async function playSpeech(
     analyser.connect(context.destination);
     const values = new Uint8Array(analyser.fftSize);
     const sample = () => {
+      const duration =
+        Number.isFinite(player.duration) && player.duration > 0
+          ? player.duration
+          : Math.max(0.3, [...text].length / (13 * voice.speed));
+      onViseme?.(visemeAt(text, player.currentTime, duration));
       analyser.getByteTimeDomainData(values);
       onLevel(
         Math.sqrt(
@@ -171,6 +178,7 @@ export async function playSpeech(
     }
     await ended;
   } finally {
+    onViseme?.(undefined);
     signal.removeEventListener("abort", abort);
     releasePlayer(player);
     if (id) await bridge.closeSpeech(id).catch(() => {});

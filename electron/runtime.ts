@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Store } from "./store";
-import { buildContext } from "./memory";
+import { buildContext, retrieveMemory } from "./memory";
 import { OpenAICompatibleProvider, ProviderChatError } from "./providers";
 import {
   parseMemoryFacts,
@@ -8,6 +8,7 @@ import {
   memoryFailureReason,
 } from "./memory-extraction";
 import { SemanticMemory } from "./semantic-memory";
+import { consolidateMemory } from "./consolidation";
 import { Autonomy } from "./autonomy";
 import { PluginEvents } from "./plugin-events";
 import { schedulingTools, executeScheduleTool } from "./scheduling-tools";
@@ -171,7 +172,12 @@ export class CompanionRuntime {
           });
         }
       }
-      const context = buildContext(this.store.data, text, scores);
+      const context = buildContext(
+        this.store.data,
+        text,
+        scores,
+        this.store.library.search(characterId, text),
+      );
       context[0].content += `\n\n${this.behaviorPrompt()}`;
       context[0].content += this.gameContext?.() ?? "";
       const tools = [
@@ -601,7 +607,12 @@ export class CompanionRuntime {
     });
     this.broadcast();
   }
-  async transcribe(bytes: ArrayBuffer, mime: string, signal?: AbortSignal) {
+  async transcribe(
+    bytes: ArrayBuffer,
+    mime: string,
+    signal?: AbortSignal,
+    id?: string,
+  ) {
     const c = new AbortController();
     this.audio.add(c);
     try {
@@ -612,6 +623,12 @@ export class CompanionRuntime {
         mime,
         this.store.data.settings.voice.language,
         signal ? AbortSignal.any([signal, c.signal]) : c.signal,
+        id && this.store.data.settings.voice.transcriptionStreaming
+          ? (text) => {
+              if (!c.signal.aborted && !signal?.aborted)
+                this.emit({ type: "transcription", id, text });
+            }
+          : undefined,
       );
     } finally {
       this.audio.delete(c);
@@ -624,6 +641,47 @@ export class CompanionRuntime {
     this.indexing = c;
     try {
       return await this.semantic.reindex(c.signal);
+    } finally {
+      if (this.indexing === c) this.indexing = undefined;
+    }
+  }
+  async consolidateMemory() {
+    if (this.busy || this.indexing || this.extraction)
+      throw new Error("Wait for the current operation to finish.");
+    const c = new AbortController();
+    this.indexing = c;
+    try {
+      const result = await consolidateMemory(
+        this.store,
+        this.provider,
+        this.getKey("llm"),
+        c.signal,
+      );
+      this.broadcast();
+      return result;
+    } finally {
+      if (this.indexing === c) this.indexing = undefined;
+    }
+  }
+  async inspectMemory(query: string, useSemantic: boolean) {
+    if (this.busy || this.indexing || this.extraction)
+      throw new Error("Wait for the current operation to finish.");
+    const c = new AbortController(),
+      characterId = this.store.characterId;
+    this.indexing = c;
+    try {
+      const scores = useSemantic
+        ? await this.semantic.recall(query, c.signal)
+        : undefined;
+      c.signal.throwIfAborted();
+      if (this.store.characterId !== characterId)
+        throw new Error("Character changed; run recall again.");
+      return retrieveMemory(
+        this.store.data,
+        query,
+        scores,
+        this.store.library.search(characterId, query),
+      );
     } finally {
       if (this.indexing === c) this.indexing = undefined;
     }

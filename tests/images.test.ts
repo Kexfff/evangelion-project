@@ -162,7 +162,10 @@ it("does not embed image bytes and rejects invalid sends before changing history
   expect(chat).not.toHaveBeenCalled();
   await runtime.send("My cat", [image]);
   await runtime.send("", [image]);
-  const embed = vi.spyOn(runtime.provider, "embed").mockResolvedValue([[1, 0]]);
-  expect(await runtime.semantic.reindex()).toEqual({ indexed: 1, total: 1 });
-  expect(embed.mock.calls[0][2]).toEqual(["My cat"]);
+  const embed = vi
+    .spyOn(runtime.provider, "embed")
+    .mockImplementation(async (_p, _k, texts) => texts.map(() => [1, 0]));
+  expect(await runtime.semantic.reindex()).toEqual({ indexed: 2, total: 2 });
+  expect(embed.mock.calls[0][2][0]).toContain("My cat");
+  expect(JSON.stringify(embed.mock.calls)).not.toContain("data:image");
 });

@@ -3481,3 +3481,40 @@ nav button.active:before {
 .game-projects .toggle-row > span {
   flex: 1;
 }
+/* Recall inspector and deliberate privacy controls. */
+.memory-lab form {
+  display: grid;
+  gap: 12px;
+}
+.recall-results {
+  max-height: 400px;
+  overflow: auto;
+  margin-top: 16px;
+}
+.recall-results article {
+  border-left: 2px solid #a590ce;
+  padding: 8px 14px;
+  margin: 12px 0;
+  background: #a590ce0b;
+  border-radius: 0 12px 12px 0;
+}
+.recall-results p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.recall-results small {
+  opacity: 0.65;
+}
+.memory-maintenance {
+  border-top: 1px solid #a590ce30;
+  margin-top: 20px;
+  padding-top: 16px;
+}
+.memory-maintenance summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

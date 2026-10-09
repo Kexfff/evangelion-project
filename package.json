@@ -1,6 +1,6 @@
 {
   "name": "evangelion_project",
-  "version": "0.4.17",
+  "version": "0.4.18",
   "private": true,
   "description": "A local-first desktop companion with voice, memory, and a VRM avatar.",
   "type": "module",
@@ -22,6 +22,7 @@
     "@modelcontextprotocol/sdk": "^1.31.0",
     "@pixiv/three-vrm": "^3.4.0",
     "@pixiv/three-vrm-animation": "^3.4.0",
+    "@ricky0123/vad-web": "^0.0.31",
     "ajv": "^8.20.0",
     "dbus-next": "npm:@holusion/dbus-next@^0.11.2",
     "lucide-react": "^0.577.0",

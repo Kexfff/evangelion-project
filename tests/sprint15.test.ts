@@ -263,14 +263,9 @@ describe("provider discovery and semantic memory", () => {
       d.facts = [];
     });
     again.prune();
-    expect(
-      JSON.parse(
-        readFileSync(
-          path.join(path.dirname(store.file), "memory-vectors.json"),
-          "utf8",
-        ),
-      ).entries,
-    ).toEqual([]);
+    expect(store.library.sql.prepare("SELECT * FROM vectors").all()).toEqual(
+      [],
+    );
     expect(cosine([1, 0], [0, 1])).toBe(0);
   });
   it("invalidates the semantic cache after changing embedding models or editing a fact", async () => {

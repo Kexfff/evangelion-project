@@ -4,6 +4,7 @@ import type { Phase, Snapshot } from "./shared/schema";
 import type { ImageAttachment } from "./shared/images";
 import { createSpeechBuffer } from "./audio/sentences";
 import { playSpeech } from "./audio/playback";
+import type { Viseme } from "./audio/visemes";
 import { MicrophoneCapture } from "./audio/microphone";
 import { PttEdges, pttKey, pttMatches, type PttAction } from "./shared/ptt";
 
@@ -13,8 +14,11 @@ export function useCompanion() {
   const [partial, setPartial] = useState("");
   const [error, setError] = useState("");
   const [amplitude, setAmplitude] = useState(0);
+  const [viseme, setViseme] = useState<Viseme>();
   const [micLevel, setMicLevel] = useState(0);
   const [micOn, setMicOn] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const transcriptionId = useRef("");
   const latest = useRef<Snapshot | undefined>(undefined);
   const generation = useRef(0);
   const active = useRef(true);
@@ -99,6 +103,8 @@ export function useCompanion() {
     void bridge.pttSettled().catch(() => {});
   }
   function interrupt(closeMic = false) {
+    transcriptionId.current = "";
+    setTranscript("");
     ++generation.current;
     accepting.current = false;
     autonomous.current = null;
@@ -115,6 +121,7 @@ export function useCompanion() {
     if (closeMic) closeMicrophone();
     setPartial("");
     setAmplitude(0);
+    setViseme(undefined);
     restingPhase();
     interrupting.current = bridge.cancel().catch(report);
     return interrupting.current;
@@ -141,6 +148,10 @@ export function useCompanion() {
           },
           () => {
             if (token === generation.current) restingPhase();
+          },
+          (value) => {
+            if (token === generation.current && active.current)
+              setViseme(value);
           },
         );
       } catch (err) {
@@ -182,7 +193,12 @@ export function useCompanion() {
       })
       .catch(report);
     const off = bridge.onEvent((event) => {
-      if (event.type === "ptt-action") {
+      if (
+        event.type === "transcription" &&
+        event.id === transcriptionId.current
+      ) {
+        setTranscript(event.text);
+      } else if (event.type === "ptt-action") {
         pttAction(event.action);
       } else if (event.type === "ptt-status") {
         shortcutTest.current = event.status.testing;
@@ -485,8 +501,13 @@ export function useCompanion() {
             try {
               await interrupting.current;
               if (token !== generation.current) return;
-              const text = await bridge.transcribe(wav, "audio/wav");
+              const id = crypto.randomUUID();
+              transcriptionId.current = id;
+              setTranscript("");
+              const text = await bridge.transcribe(wav, "audio/wav", id);
               if (token !== generation.current || !active.current) return;
+              transcriptionId.current = "";
+              setTranscript("");
               transcribing.current = false;
               if (text.trim()) await send(text);
               else {
@@ -495,6 +516,8 @@ export function useCompanion() {
               }
             } catch (err) {
               if (token === generation.current) {
+                transcriptionId.current = "";
+                setTranscript("");
                 report(err);
                 transcribing.current = false;
                 keyboardCapture.current = false;
@@ -556,6 +579,8 @@ export function useCompanion() {
     error,
     setError,
     amplitude,
+    viseme,
+    transcript,
     micLevel,
     micOn,
     send,

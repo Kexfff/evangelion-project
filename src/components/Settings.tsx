@@ -303,7 +303,7 @@ export function Settings() {
             <ExternalLink size={14} />
           </button>
           <div className="version">
-            evangelion_project <span>v0.4.17</span>
+            evangelion_project <span>v0.4.18</span>
           </div>
         </div>
       </aside>
@@ -568,6 +568,47 @@ export function Settings() {
                   </button>
                 </Section>
                 <Section title="Identity & personality">
+                  <div className="button-row">
+                    <button
+                      className="button secondary"
+                      disabled={working || dirty}
+                      title={
+                        dirty
+                          ? "Save your edits before importing a card."
+                          : undefined
+                      }
+                      onClick={() =>
+                        void perform(async () => {
+                          if (await bridge.importCharacter()) {
+                            const refreshed = await bridge.snapshot();
+                            setSnapshot(refreshed);
+                            // Imports create an inactive card. Refresh the editable copy too,
+                            // otherwise the next Save could remove that new card again.
+                            setDraft(refreshed.settings);
+                          }
+                        })
+                      }
+                    >
+                      Import character card
+                    </button>
+                    <button
+                      className="button secondary"
+                      disabled={working}
+                      onClick={() =>
+                        void perform(async () => {
+                          await bridge.exportCharacter();
+                        })
+                      }
+                    >
+                      Export saved card
+                    </button>
+                  </div>
+                  <p className="hint">
+                    Portable cards include personality, prompts and the custom
+                    VRM, but no memories or credentials. Save edits before
+                    importing or exporting; imported cards stay inactive until
+                    selected.
+                  </p>
                   <Field label="Name">
                     <input
                       value={character.name}
@@ -613,6 +654,36 @@ export function Settings() {
                 title="Her appearance"
                 subtitle="Character cards reference their own VRM avatar."
               >
+                {(["author", "source", "license", "notes"] as const).map(
+                  (key) => (
+                    <Field key={key} label={`Avatar ${key}`}>
+                      <input
+                        value={character.avatarMetadata?.[key] ?? ""}
+                        maxLength={
+                          key === "author"
+                            ? 300
+                            : key === "source"
+                              ? 1000
+                              : 2000
+                        }
+                        onChange={(e) =>
+                          editCharacter({
+                            avatarMetadata: {
+                              ...{
+                                author: "",
+                                source: "",
+                                license: "",
+                                notes: "",
+                              },
+                              ...character.avatarMetadata,
+                              [key]: e.target.value,
+                            },
+                          })
+                        }
+                      />
+                    </Field>
+                  ),
+                )}
                 <div className="studio-preview">
                   <Avatar avatar={character.avatar} settings={draft.vrm} />
                 </div>
@@ -1002,6 +1073,52 @@ export function Settings() {
                       })
                     }
                   />
+                  <Field label="Gaze">
+                    <select
+                      value={draft.vrm.gaze}
+                      onChange={(e) =>
+                        update((d) => {
+                          d.vrm.gaze = e.target
+                            .value as AppSettings["vrm"]["gaze"];
+                        })
+                      }
+                    >
+                      <option value="natural">Natural glances</option>
+                      <option value="pointer">Follow pointer</option>
+                      <option value="forward">Look forward</option>
+                    </select>
+                  </Field>
+                  <Field
+                    label="Mouth animation"
+                    hint="Text-guided shapes are approximate, not provider-timed phonemes. Audio amplitude controls opening; silence closes the mouth."
+                  >
+                    <select
+                      value={draft.vrm.lipSync}
+                      onChange={(e) =>
+                        update((d) => {
+                          d.vrm.lipSync = e.target.value as
+                            "text" | "amplitude";
+                        })
+                      }
+                    >
+                      <option value="text">Text-guided vowel shapes</option>
+                      <option value="amplitude">Simple audio amplitude</option>
+                    </select>
+                  </Field>
+                  <Field label="Expression strength">
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={draft.vrm.expressionStrength}
+                      onChange={(e) =>
+                        update((d) => {
+                          d.vrm.expressionStrength = Number(e.target.value);
+                        })
+                      }
+                    />
+                  </Field>
                   <Toggle
                     label="Keep companion on top"
                     checked={draft.window.alwaysOnTop}

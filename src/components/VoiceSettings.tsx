@@ -289,6 +289,36 @@ export function VoiceSettings({
                 : "Click the companion microphone to enable listening. Speech is sent after a pause; click again to turn it off.",
             )}
             {range("vadSilenceMs", "Pause before sending (ms)", 300, 3000, 100)}
+            <label className="field">
+              <span>Speech detector</span>
+              <select
+                value={voice.vadEngine}
+                onChange={(e) =>
+                  change({ vadEngine: e.target.value as "energy" | "silero" })
+                }
+              >
+                <option value="energy">Audio energy · lightweight</option>
+                <option value="silero">Silero neural VAD · local</option>
+              </select>
+              <small>
+                Neural detection distinguishes speech from many noises, not one
+                person’s voice. PTT still uses an energy check for accidental
+                taps.
+              </small>
+            </label>
+            {voice.vadEngine === "silero" &&
+              range(
+                "neuralThreshold",
+                "Speech probability threshold",
+                0.1,
+                0.95,
+                0.05,
+              )}
+            {toggle(
+              "transcriptionStreaming",
+              "Stream recognition text",
+              "For ASR providers supporting SSE transcript.text.delta/done events. Uploads each completed utterance once, then displays provisional text; only a complete result is sent. Unsupported providers may reject this option—turn it off, with no automatic duplicate upload.",
+            )}
             {range(
               "vadMinSpeechMs",
               "Minimum voice duration (ms)",
@@ -313,9 +343,9 @@ export function VoiceSettings({
               <small>Optional language code: en, ru, ja…</small>
             </label>
             <p className="muted">
-              Voice activity detection runs locally using audio energy and
-              configurable timing. Each utterance is limited to 60 seconds and
-              sent as a 16 kHz mono WAV.
+              Voice activity detection runs locally using the selected detector
+              and configurable timing. Each utterance is limited to 60 seconds
+              and sent as a 16 kHz mono WAV.
             </p>
           </section>
           <section className="card">
