@@ -2,6 +2,78 @@ import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
+test("plays Gemini PCM as WAV with speech streaming both enabled and disabled", async ({
+  page,
+}) => {
+  await page.goto("/?window=companion");
+  await page.getByRole("textbox", { name: "Message Eva" }).click();
+  const result = await page.evaluate(async () => {
+    const bridgePath = "/src/bridge.ts",
+      playbackPath = "/src/audio/playback.ts",
+      schemaPath = "/src/shared/schema.ts",
+      pcmPath = "/electron/pcm-speech.ts";
+    const { bridge } = await import(bridgePath);
+    const { playSpeech } = await import(playbackPath);
+    const { defaultSettings } = await import(schemaPath);
+    const { pcmSpeechToWav } = await import(pcmPath);
+    const pcm = new Uint8Array((24000 * 2) / 5),
+      samples = new DataView(pcm.buffer);
+    for (let i = 0; i < pcm.length / 2; i++)
+      samples.setInt16(
+        i * 2,
+        Math.round(Math.sin((i / 24000) * 2 * Math.PI * 220) * 1000),
+        true,
+      );
+    const response = await pcmSpeechToWav(
+      new Response(pcm.buffer, {
+        headers: { "Content-Type": "audio/pcm;rate=24000;channels=1" },
+      }),
+    );
+    const bytes = await response.arrayBuffer();
+    let playing = 0,
+      closed = 0;
+    const types: string[] = [],
+      create = URL.createObjectURL.bind(URL);
+    URL.createObjectURL = (blob: Blob | MediaSource) => {
+      if (blob instanceof Blob) types.push(blob.type);
+      return create(blob);
+    };
+    bridge.speak = async () => bytes;
+    bridge.openSpeech = async () => ({
+      id: "pcm-fixture",
+      mime: response.headers.get("content-type")!,
+    });
+    bridge.closeSpeech = async () => {
+      closed++;
+    };
+    let read = false;
+    bridge.readSpeech = async () => {
+      if (read) return { done: true, bytes: new ArrayBuffer(0) };
+      read = true;
+      return { done: false, bytes };
+    };
+    try {
+      for (const streaming of [false, true]) {
+        await playSpeech(
+          "Hello.",
+          { ...defaultSettings.voice, streaming },
+          new AbortController().signal,
+          () => {},
+          () => {
+            playing++;
+          },
+        );
+      }
+    } finally {
+      URL.createObjectURL = create;
+    }
+    return { playing, closed, types };
+  });
+  expect(result.playing).toBe(2);
+  expect(result.closed).toBe(1);
+  expect(result.types).toEqual(["audio/wav", "audio/wav"]);
+});
+
 test("streams real MP3 before EOF and cleans up completed and interrupted players", async ({
   page,
 }) => {

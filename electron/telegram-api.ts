@@ -1,3 +1,4 @@
+import { isWaveAudio } from "../src/shared/audio";
 /** Fixed-origin Telegram transport. Errors never contain token-bearing URLs or bodies. */
 export class TelegramError extends Error {
   constructor(
@@ -70,20 +71,27 @@ export class TelegramHTTP implements TelegramAPI {
     if (!methods.has(method)) throw new TelegramError(403);
     try {
       let payload: string | FormData;
+      let requestMethod = method;
       if (method === "sendVoice") {
         const audio = body.audio;
         if (!(audio instanceof Uint8Array) || audio.length > 10 * 1024 * 1024)
           throw new TelegramError(413);
         payload = new FormData();
         payload.set("chat_id", String(body.chat_id));
+        // Telegram voice notes accept MP3/OGG/M4A, not WAV. Preserve PCM-backed
+        // replies as a playable file instead of uploading mislabeled MP3 data.
+        const wav = isWaveAudio(audio);
+        if (wav) requestMethod = "sendDocument";
         payload.set(
-          "voice",
-          new Blob([Uint8Array.from(audio).buffer], { type: "audio/mpeg" }),
-          "reply.mp3",
+          wav ? "document" : "voice",
+          new Blob([Uint8Array.from(audio).buffer], {
+            type: wav ? "audio/wav" : "audio/mpeg",
+          }),
+          wav ? "reply.wav" : "reply.mp3",
         );
       } else payload = JSON.stringify(body);
       const response = await this.request(
-        `https://api.telegram.org/bot${this.token}/${method}`,
+        `https://api.telegram.org/bot${this.token}/${requestMethod}`,
         {
           method: "POST",
           body: payload,

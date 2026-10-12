@@ -52,6 +52,35 @@ test.beforeEach(async ({ page }) => {
   await page.getByRole("button", { name: "Providers", exact: true }).click();
 });
 
+test("TTS audio format persists and stays under user control when the model changes", async ({
+  page,
+}) => {
+  const format = page.getByRole("combobox", {
+    name: /^Audio format/,
+  });
+  await expect(format).toHaveValue("mp3");
+  await format.selectOption("pcm");
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await page.reload();
+  await page.getByRole("button", { name: "Providers", exact: true }).click();
+  await expect(format).toHaveValue("pcm");
+  const tts = page
+    .locator("section")
+    .filter({
+      has: page.getByRole("heading", {
+        name: "Speak · Voice synthesis",
+        exact: true,
+      }),
+    });
+  await tts.getByLabel("Model ID", { exact: true }).fill("another/tts-model");
+  await expect(format).toHaveValue("pcm");
+  await format.selectOption("mp3");
+  await page.getByRole("button", { name: "Save changes", exact: true }).click();
+  await page.reload();
+  await page.getByRole("button", { name: "Providers", exact: true }).click();
+  await expect(format).toHaveValue("mp3");
+});
+
 test("fetches for the draft model, selects exact endpoints and retains per-model choices after reload", async ({
   page,
 }) => {

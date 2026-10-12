@@ -303,7 +303,7 @@ export function Settings() {
             <ExternalLink size={14} />
           </button>
           <div className="version">
-            evangelion_project <span>v0.4.18</span>
+            evangelion_project <span>v0.4.20</span>
           </div>
         </div>
       </aside>
@@ -847,6 +847,29 @@ export function Settings() {
                           </button>
                         </div>
                       </Field>
+                      {kind === "tts" && (
+                        <Field
+                          label="Audio format"
+                          hint={
+                            provider.responseFormat === "pcm"
+                              ? "PCM uses 16-bit little-endian audio and buffers each speech chunk. Sample rate/channels come from the response header; defaults are 24 kHz mono."
+                              : "MP3 supports streaming playback. Choose PCM if your model requires it."
+                          }
+                        >
+                          <select
+                            value={provider.responseFormat}
+                            onChange={(e) =>
+                              update((d) => {
+                                d.providers.tts.responseFormat = e.target
+                                  .value as "mp3" | "pcm";
+                              })
+                            }
+                          >
+                            <option value="mp3">MP3</option>
+                            <option value="pcm">PCM</option>
+                          </select>
+                        </Field>
+                      )}
                       {kind === "tts" && (
                         <Field
                           label="Voice ID"

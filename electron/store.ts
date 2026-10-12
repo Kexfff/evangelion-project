@@ -17,6 +17,7 @@ import { historyTotals } from "../src/shared/history";
 import { MemoryLibrary, memoryDocuments } from "./memory-library";
 import { AttachmentStore } from "./attachments";
 import { summarySchema, summaryHash } from "./consolidation";
+import { isOpenRouter } from "../src/shared/openrouter";
 import {
   defaultSettings,
   settingsSchema,
@@ -56,9 +57,19 @@ export class Store {
     this.library = new MemoryLibrary(path.join(directory, "memory.sqlite"));
     if (existsSync(this.file)) {
       // Refuse to overwrite a corrupt database; its previous version remains in .bak.
-      this.data = databaseSchema.parse(
-        this.attachments.unpack(JSON.parse(readFileSync(this.file, "utf8"))),
-      );
+      const raw = JSON.parse(readFileSync(this.file, "utf8"));
+      const legacyTts = raw?.settings?.providers?.tts;
+      // Upgrade the old implicit Gemini preference once, only when no format was
+      // ever saved. Runtime requests now use the user's explicit choice exclusively.
+      if (
+        legacyTts?.responseFormat === undefined &&
+        typeof legacyTts?.baseUrl === "string" &&
+        typeof legacyTts?.model === "string" &&
+        isOpenRouter(legacyTts.baseUrl) &&
+        /^google\/gemini-[^/]*-tts(?:$|[-:])/.test(legacyTts.model)
+      )
+        legacyTts.responseFormat = "pcm";
+      this.data = databaseSchema.parse(this.attachments.unpack(raw));
     } else {
       this.data = {
         version: 1,

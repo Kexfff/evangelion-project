@@ -1,6 +1,6 @@
 # evangelion_project — development plan
 
-Updated: 2026-10-09 · Current release: **v0.4.18** · Roadmap target: **v0.5**
+Updated: 2026-10-12 · Current release: **v0.4.20** · Roadmap target: **v0.5**
 
 This is the active roadmap. Detailed implementation notes, past test results and incident records live in [development history](docs/development-history.md). Historical unchecked boxes there are not the current backlog.
 
@@ -38,8 +38,10 @@ Guides: [voice](docs/providers-and-voice.md), [memory](docs/characters-and-memor
 | v0.4.16 | Live-found door/arrival fixes, server-synchronized crafting and exact output verification; repeatable opt-in gameplay/autonomy acceptance | Controlled-world core checks passed; extended acceptance below |
 | v0.4.17 | World projects/resource targets, event-verified sleep/defeat goals, recipe prerequisites, fishing, enchanting/anvils, villager trading and bounded steering/combat options | First Gameplay depth increment; live station/trade/fishing checks passed; remaining scope below |
 | v0.4.18 | Attributed hybrid recall/digests, explicit consolidation and recall inspector, SQLite index/attachment migration, encrypted archives/cleanup, image resizing, semantic projection, neural VAD, streamed transcription responses, gaze/vowel shapes and portable cards | First Memory, voice and presentation increment; remaining depth and live quality checks below |
+| v0.4.19 | OpenRouter Gemini TTS selects PCM and wraps it as WAV for desktop playback; Telegram WAV-file fallback | MP3-format HTTP 400 reproduced; PCM synthesis with Leda succeeded; validation in development history |
+| v0.4.20 | Saved MP3/PCM TTS selector for any model/server; replaces runtime model-name detection; preserves legacy Gemini PCM preference on migration | Format persists across restart and model changes; PCM buffering and Telegram WAV delivery retained |
 
-**Latest validation:** v0.4.18 typecheck, **389 core / 44 browser regressions**, Linux package, standalone desktop smoke and packaged profile-isolation passed. New desktop checks cover bundled neural inference, encrypted archive/wrong-passphrase/dedup round-trips, inactive card imports and attachment-backed history across restart. Normal profile unchanged; no paid calls or live microphone/game checks this increment. Details: [development history](docs/development-history.md#v0418--memory-voice-and-presentation-first-increment-2026-10-09). Prior live Minecraft evidence remains in [acceptance results](docs/minecraft-acceptance.md). Linux unpacked build: `release/linux-unpacked/`.
+**Latest validation:** v0.4.20 format selector: typecheck, **47 focused core / 7 browser tests**, and Linux package passed. Tests cover persisted selection, legacy migration, model-independent requests, WAV playback and MP3 streaming; no paid provider calls or normal-profile changes in this increment. [Selector evidence](docs/development-history.md#v0420--explicit-mp3pcm-tts-format-2026-10-12). Prior live Gemini PCM synthesis is recorded in the [v0.4.19 fix](docs/development-history.md#v0419--openrouter-gemini-tts-pcm-compatibility-2026-10-11). Previous full validation: v0.4.18 **389 core / 44 browser regressions**, desktop smoke and packaged profile-isolation passed; [memory/voice evidence](docs/development-history.md#v0418--memory-voice-and-presentation-first-increment-2026-10-09). Prior live Minecraft evidence remains in [acceptance results](docs/minecraft-acceptance.md). Linux unpacked build: `release/linux-unpacked/`.
 
 **Live evidence:** v0.4.16 verified door entry/exit, obstructed stations, crafting/building, storage/smelting, combat, sleep/wake, food and follow/knockback on the authorized test world. Three real-provider autonomous intentions completed with Consciousness off in 8 requests; Stop stayed stopped. Prior operator lookup reached roughly 302 blocks. This does not establish complete survival, physical-microphone or cross-platform acceptance.
 

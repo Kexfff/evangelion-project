@@ -7,6 +7,7 @@ import {
 } from "../src/shared/openrouter";
 import type { ChatMessage } from "./memory";
 import { consumeTranscription } from "./transcription-stream";
+import { pcmSpeechToWav } from "./pcm-speech";
 export type Usage = { tokens?: number; cost?: number };
 export class ProviderChatError extends Error {
   constructor(
@@ -503,6 +504,7 @@ export class OpenAICompatibleProvider {
   ) {
     if (!provider.enabled || !provider.model.trim())
       throw new Error("Enable the TTS provider and set its model in Settings.");
+    const pcm = provider.responseFormat === "pcm";
     const response = await checked(
       await fetch(endpoint(provider.baseUrl, "audio/speech"), {
         method: "POST",
@@ -512,7 +514,7 @@ export class OpenAICompatibleProvider {
           input,
           voice: provider.voice,
           speed,
-          response_format: "mp3",
+          response_format: pcm ? "pcm" : "mp3",
         }),
         signal: providerSignal(signal),
       }),
@@ -523,6 +525,13 @@ export class OpenAICompatibleProvider {
       );
     if (!response.body)
       throw new Error("The speech provider returned no audio stream.");
+    if (
+      pcm &&
+      /^(?:audio\/pcm|application\/octet-stream)(?:;|$)/i.test(
+        response.headers.get("content-type") ?? "application/octet-stream",
+      )
+    )
+      return pcmSpeechToWav(response, signal);
     return response;
   }
 }

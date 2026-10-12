@@ -1,6 +1,7 @@
 import { bridge } from "../bridge";
 import type { Settings } from "../shared/schema";
 import { visemeAt, type Viseme } from "./visemes";
+import { isWaveAudio } from "../shared/audio";
 
 /** Removing a source can emit a media error; disconnect callbacks before touching it. */
 export function releasePlayer(player: HTMLAudioElement) {
@@ -172,7 +173,10 @@ export async function playSpeech(
     } else {
       const bytes = await bridge.speak(text);
       signal.throwIfAborted();
-      url = URL.createObjectURL(new Blob([bytes], { type: "audio/mpeg" }));
+      const mime = isWaveAudio(new Uint8Array(bytes))
+        ? "audio/wav"
+        : "audio/mpeg";
+      url = URL.createObjectURL(new Blob([bytes], { type: mime }));
       player.src = url;
       await player.play();
     }

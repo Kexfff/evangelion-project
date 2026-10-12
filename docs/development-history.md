@@ -2,6 +2,21 @@
 
 [← Active development plan](../PLAN.MD) · [Documentation](README.md)
 
+## v0.4.20 — Explicit MP3/PCM TTS format (2026-10-12)
+
+- Added **Providers → Speak · Voice synthesis → Audio format** with saved MP3/PCM choices. The selected format controls speech requests for any model/server and remains unchanged when the model changes; runtime Gemini-name detection is removed.
+- Existing OpenRouter Gemini TTS settings without a format field migrate once to PCM, preserving v0.4.19 behavior. Other missing-format configurations default to MP3. An explicit saved choice is never overridden.
+- PCM playback retains signed 16-bit little-endian WAV wrapping, response-header sample rate/channel handling (24 kHz mono defaults), per-chunk buffering and Telegram WAV-file delivery. PCM selected with generic binary or missing content type is also supported.
+- Validation: **47 focused core tests**, **7 browser tests**, typecheck and Linux unpacked v0.4.20 package passed. Checks cover persisted selection and migration, arbitrary provider/model PCM requests, explicit Gemini MP3 requests, real Chromium WAV playback and existing MP3 streaming. The initial new UI test used an exact label that omitted the field's help text; correcting that test selector produced the passing run. No paid provider calls, live Telegram messages or normal-profile changes were needed for this increment.
+
+## v0.4.19 — OpenRouter Gemini TTS PCM compatibility (2026-10-11)
+
+- Reproduced HTTP 400 with the corrected saved key: `google/gemini-3.8-flash-lite-tts` / `Leda` rejected Eva's hardcoded MP3 request with `Gemini TTS only supports response_format="pcm". Got "mp3".` A PCM request succeeded with `audio/pcm;rate=24000;channels=1`.
+- OpenRouter Gemini TTS models now request PCM on the first attempt. The provider wraps signed 16-bit PCM as WAV, honoring sample-rate/channel headers and validating bounded size, complete frames, empty output and cancellation. Other providers/models retain MP3; no automatic extra generation/fallback occurs. PCM is buffered per speech chunk before playback.
+- Buffered desktop speech now labels WAV correctly; the existing streaming control uses its WAV buffering path. Telegram's voice-reply transport sends WAV as a document instead of pretending it is an MP3 voice note. No live Telegram message was sent.
+- Verified the patched provider against the real model: HTTP 200, valid mono 24 kHz WAV, 1.08 seconds of audio. Diagnostic reads/requests left the saved profile/credential files unchanged; generated audio was not saved. Three short diagnostic requests in this fix turn: the MP3 failure, a successful PCM request and a successful patched-adapter request.
+- Validation: typecheck, **57 focused core tests** (provider/runtime/Telegram/PCM) and **4 voice browser tests** passed. Chromium played synthetic PCM converted to WAV with streaming enabled and disabled; existing MP3 streaming and microphone checks passed. Linux unpacked v0.4.19 rebuilt successfully. The previous full suite remains recorded under v0.4.18; these targeted results do not claim a new full-suite run or physical-device quality acceptance.
+
 ## v0.4.18 — Memory, voice and presentation, first increment (2026-10-09)
 
 - Added attributed conversation episodes and extractive digests, hybrid lexical/semantic recall, bounded/deduplicated context, an inspectable recall playground and explicit one-request LLM consolidation. Summaries retain source hashes and are invalidated when their source history changes; assistant statements are not treated as verified facts. Stop/new chat can cancel semantic inspection and consolidation.
