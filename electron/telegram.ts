@@ -1,6 +1,7 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
+import { visibleAssistantText } from "../src/shared/speech-cues";
 import { imageAttachmentSchema, MAX_IMAGE_BYTES } from "../src/shared/images";
 import type { ImageAttachment } from "../src/shared/images";
 import type {
@@ -324,7 +325,11 @@ export class TelegramChannel implements ChannelPlugin {
       if (!text.trim() && !images.length)
         throw new Error("Unsupported message.");
       const reply = await this.context.send(text, images, signal);
-      await this.sendText(paired.chatId, reply, signal);
+      await this.sendText(
+        paired.chatId,
+        visibleAssistantText(reply).trim(),
+        signal,
+      );
       this.log(
         "Reply delivered; conversation and memory are shared with desktop.",
       );
@@ -433,7 +438,11 @@ export class TelegramChannel implements ChannelPlugin {
     if (!this.available())
       throw new Error("Telegram notifications unavailable.");
     this.assertGrant("channel:notify");
-    await this.sendText(this.state.get().paired!.chatId, text, signal);
+    await this.sendText(
+      this.state.get().paired!.chatId,
+      visibleAssistantText(text).trim(),
+      signal,
+    );
     this.log("Scheduled/proactive message delivered to Telegram.");
   }
 }

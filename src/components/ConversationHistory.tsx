@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { visibleAssistantText } from "../shared/speech-cues";
 import {
   Archive,
   ArrowDownToLine,
@@ -527,7 +528,13 @@ export function ConversationHistory({
                             {time(message.createdAt)}
                           </time>
                         </header>
-                        {message.content && <p>{message.content}</p>}
+                        {message.content && (
+                          <p>
+                            {message.role === "assistant"
+                              ? visibleAssistantText(message.content)
+                              : message.content}
+                          </p>
+                        )}
                         {message.images.map((image, index) => (
                           <HistoryAttachment
                             key={`${message.id}:${index}`}

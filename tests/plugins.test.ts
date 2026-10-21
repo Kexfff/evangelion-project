@@ -365,6 +365,7 @@ describe("Telegram authorization and routing", () => {
     f.db.update((d) => {
       d.telegram.config.voiceReplies = true;
     });
+    f.context.send.mockResolvedValue("<whispering> Hello from shared memory.");
     await f.channel.consume(
       f.update({
         text: undefined,
@@ -372,6 +373,15 @@ describe("Telegram authorization and routing", () => {
       }),
     );
     expect(f.context.transcribe).toHaveBeenCalledTimes(1);
+    expect(f.api.call).toHaveBeenCalledWith(
+      "sendMessage",
+      expect.objectContaining({ text: "Hello from shared memory." }),
+      expect.any(AbortSignal),
+    );
+    expect(f.context.speak).toHaveBeenCalledWith(
+      "<whispering> Hello from shared memory.",
+      expect.any(AbortSignal),
+    );
     expect(f.context.send).toHaveBeenCalledWith(
       "Remember I like tea.",
       [],
@@ -456,7 +466,7 @@ describe("Telegram authorization and routing", () => {
     await f.channel.start();
     await vi.waitFor(() => expect(f.channel.status).toBe("Connected"));
     expect(f.channel.available()).toBe(true);
-    await f.channel.notify("Reminder", signal());
+    await f.channel.notify("<speaking softly> Reminder", signal());
     expect(f.api.call).toHaveBeenCalledWith(
       "sendMessage",
       expect.objectContaining({ text: "Reminder" }),

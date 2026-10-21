@@ -1,6 +1,6 @@
 # evangelion_project — development plan
 
-Updated: 2026-10-21 · Current release: **v0.4.22** · Roadmap target: **v0.5**
+Updated: 2026-10-21 · Current release: **v0.4.23** · Roadmap target: **v0.5**
 
 This is the active roadmap. Detailed implementation notes, past test results and incident records live in [development history](docs/development-history.md). Historical unchecked boxes there are not the current backlog.
 
@@ -42,6 +42,9 @@ Guides: [voice](docs/providers-and-voice.md), [memory](docs/characters-and-memor
 | v0.4.20 | Saved MP3/PCM TTS selector for any model/server; replaces runtime model-name detection; preserves legacy Gemini PCM preference on migration | Format persists across restart and model changes; PCM buffering and Telegram WAV delivery retained |
 | v0.4.21 | Safe structured autonomy failure diagnostics and console warnings; ten-entry IPC/UI activity pages; JSON export of all retained activity | Diagnostic instrumentation only; actual reported provider failure still needs a fresh affected-machine trace |
 | v0.4.22 | Provider-compatible autonomous prompts for openers and reminders; request-only application trigger, never a fabricated saved user message | Live three-request comparison isolated trailing-system layout as the cause; regression-tested fix uses the successful layout |
+| v0.4.23 | Speech-only angle-bracket cues hidden in desktop/Telegram text; original tags preserved for TTS and saved-message replay | Streaming, archive previews, notifications, user-text preservation and literal code examples covered |
+
+**v0.4.23 validation:** 46 focused core tests, 6 browser tests, typecheck and Linux unpacked build passed. No paid TTS requests, live Telegram sends or normal-profile edits were needed.
 
 v0.4.22 typecheck and Linux unpacked build passed; restart the app to load the corrected prompt layout. Previous failure cooldowns and daily attempt counts are intentionally preserved.
 

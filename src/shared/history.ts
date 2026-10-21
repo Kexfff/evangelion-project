@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Message } from "./schema";
+import { visibleAssistantText } from "./speech-cues";
 
 export const HISTORY_PAGE_SIZE = 20;
 export const historyQuerySchema = z
@@ -85,7 +86,10 @@ function chronological(a: Message, b: Message) {
 }
 const snippet = (m: Message) =>
   (
-    m.content.trim() || (m.images?.length ? "Shared an image" : "Empty message")
+    (m.role === "assistant"
+      ? visibleAssistantText(m.content)
+      : m.content
+    ).trim() || (m.images?.length ? "Shared an image" : "Empty message")
   ).slice(0, 180);
 
 // Pure, read-only queries shared by the desktop and browser preview. Never put

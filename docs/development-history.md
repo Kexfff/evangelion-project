@@ -2,6 +2,12 @@
 
 [← Active development plan](../PLAN.MD) · [Documentation](README.md)
 
+## v0.4.23 — Hide speech cues from chat, preserve them for TTS (2026-10-21)
+
+- Added a shared display projection for plain angle-bracket speech cues such as `<whispering>` and `<speaking softly>`. Desktop bubbles, live text, conversation history and archive previews hide cues only in assistant messages. Incomplete streamed cues are held back until classified; user messages, backtick/fenced code, escaped brackets, URL/email autolinks and numeric comparisons remain literal.
+- Telegram cleans generated replies and proactive/reminder notification text before message chunking, while voice synthesis continues to receive the original tagged reply. Storage, model context, desktop speech buffering and manual replay retain the originals; no migration, history rewrite or edits to already-sent Telegram messages. The speech model must itself support the chosen cue syntax.
+- Validation: **46 focused core tests** (speech cues, Telegram/plugins, history), **6 browser tests** (history plus streamed/saved desktop text and exact tagged automatic/manual TTS input), typecheck and Linux unpacked v0.4.23 build passed. No paid provider requests, live Telegram messages or normal-profile changes.
+
 ## v0.4.22 — Autonomous prompt layout fix (2026-10-21)
 
 - Fresh diagnostics showed an empty reply after 1.378 seconds, not a timeout or HTTP rejection. Three explicitly authorized live OpenRouter requests with `deepseek/deepseek-v4.1-flash-1017`, restricted to `deepseek`, isolated the issue: the current trailing-system layout returned HTTP 200 with `finish_reason: stop`, zero answer/reasoning characters; the standard layout returned 86 answer characters, 55 completion tokens (22 reasoning), and reported $0.000236004; disabling reasoning with the original layout still returned empty. Costs for the empty responses were not reported. All three used a 700-token cap. Profile and credential hashes remained unchanged; replies were not saved.

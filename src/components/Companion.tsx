@@ -14,6 +14,7 @@ import {
 import { Avatar } from "./Avatar";
 import { bridge } from "../bridge";
 import { useCompanion } from "../useCompanion";
+import { visibleAssistantText } from "../shared/speech-cues";
 import { readImage } from "../images";
 import {
   IMAGE_ACCEPT,
@@ -203,7 +204,11 @@ export function Companion() {
                   {m.role === "user" ? "You" : character.name}
                   {m.channel === "telegram" ? " · Telegram" : ""}
                 </small>
-                <p>{m.content}</p>
+                <p>
+                  {m.role === "assistant"
+                    ? visibleAssistantText(m.content)
+                    : m.content}
+                </p>
                 <MessageImages images={m.images} />
                 {m.role === "assistant" && settings.providers.tts.enabled && (
                   <button
@@ -221,7 +226,7 @@ export function Companion() {
               <div className="chat-message assistant">
                 <small>{character.name}</small>
                 <p>
-                  {app.partial}
+                  {visibleAssistantText(app.partial, true)}
                   <span className="cursor" />
                 </p>
               </div>
@@ -241,9 +246,13 @@ export function Companion() {
                   : "A NEW CONNECTION"}
             </small>
             <p>
-              {app.partial ||
-                (last ? last.content || "Image attached" : "") ||
-                `Hey, I’m ${character.name}. What’s on your mind?`}
+              {app.partial
+                ? visibleAssistantText(app.partial, true)
+                : last
+                  ? last.role === "assistant"
+                    ? visibleAssistantText(last.content)
+                    : last.content || "Image attached"
+                  : `Hey, I’m ${character.name}. What’s on your mind?`}
             </p>
             {!app.partial && <MessageImages images={last?.images} />}
           </div>
