@@ -12,7 +12,12 @@ export type Usage = { tokens?: number; cost?: number };
 export class ProviderChatError extends Error {
   constructor(
     readonly kind:
-      "http" | "empty" | "truncated" | "blocked" | "invalid-response",
+      | "http"
+      | "empty"
+      | "truncated"
+      | "blocked"
+      | "invalid-response"
+      | "stream-error",
     message: string,
     readonly status?: number,
   ) {
@@ -93,8 +98,14 @@ export async function consumeSSE(
     const json = JSON.parse(data);
     if (json.usage) onUsage?.(usageOf(json.usage));
     if (json.error)
-      throw new Error(
+      throw new ProviderChatError(
+        "stream-error",
         "The provider reported a streaming error. Check the model and quota.",
+        Number.isInteger(json.error?.code) &&
+          json.error.code >= 100 &&
+          json.error.code <= 599
+          ? json.error.code
+          : undefined,
       );
     if (json.choices?.[0]?.finish_reason) finished = true;
     const text = json.choices?.[0]?.delta?.content;
@@ -123,11 +134,15 @@ export async function consumeSSE(
     reader.releaseLock();
   }
   if (!finished)
-    throw new Error(
+    throw new ProviderChatError(
+      "truncated",
       "The response stream ended unexpectedly. Please try again.",
     );
   if (!result.trim())
-    throw new Error("The model returned no text. Try another model.");
+    throw new ProviderChatError(
+      "empty",
+      "The model returned no text. Try another model.",
+    );
   return result;
 }
 export class OpenAICompatibleProvider {

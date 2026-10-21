@@ -264,6 +264,10 @@ export interface Bridge {
   cancel(): Promise<void>;
   presence(state: Presence): Promise<void>;
   setAutonomyPaused(paused: boolean): Promise<void>;
+  listActivity(
+    query: import("./autonomy").ActivityQuery,
+  ): Promise<import("./autonomy").ActivityPage>;
+  exportActivity(): Promise<boolean>;
   setBehavior(levels: Levels): Promise<void>;
   createTask(task: TaskInput): Promise<void>;
   taskAction(id: string, action: "approve" | "cancel"): Promise<void>;

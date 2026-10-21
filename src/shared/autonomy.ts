@@ -100,6 +100,34 @@ export const taskSchema = taskInputSchema.extend({
   outcome: z.string().max(500).default(""),
 });
 export type ScheduledTask = z.infer<typeof taskSchema>;
+export const diagnosticSchema = z.object({
+  attemptId: z.string().uuid(),
+  stage: z.enum([
+    "context",
+    "credentials",
+    "provider",
+    "save",
+    "delivery",
+    "events",
+  ]),
+  elapsedMs: z.number().nonnegative(),
+  model: z.string().max(200),
+  providerHost: z.string().max(253),
+  providerRouting: z.array(z.string().max(200)).max(100).optional(),
+  channel: z.enum(["desktop", "telegram"]),
+  taskId: z.string().uuid().optional(),
+  stream: z.boolean(),
+  maxTokens: z.number().int(),
+  messageRoles: z.array(z.enum(["system", "user", "assistant"])).max(102),
+  receivedCharacters: z.number().int().nonnegative(),
+  firstDeltaMs: z.number().nonnegative().optional(),
+  replySaved: z.boolean(),
+  deliveryCompleted: z.boolean(),
+  errorCategory: z.string().max(60).optional(),
+  httpStatus: z.number().int().min(100).max(599).optional(),
+  transportCode: z.string().max(60).optional(),
+});
+export type ActivityDiagnostic = z.infer<typeof diagnosticSchema>;
 export const activitySchema = z.object({
   id: z.string().uuid(),
   characterId: z.string(),
@@ -109,8 +137,19 @@ export const activitySchema = z.object({
   requests: z.number().int().min(0).default(0),
   tokens: z.number().nonnegative().optional(),
   cost: z.number().nonnegative().optional(),
+  diagnostic: diagnosticSchema.optional(),
 });
 export type Activity = z.infer<typeof activitySchema>;
+export const activityQuerySchema = z.object({
+  characterId: z.string().min(1).max(100),
+  before: z.string().uuid().optional(),
+});
+export type ActivityQuery = z.infer<typeof activityQuerySchema>;
+export type ActivityPage = {
+  entries: Activity[];
+  total: number;
+  hasMore: boolean;
+};
 export const automationSchema = z.object({
   states: z.record(z.string(), behaviorSchema).default({}),
   tasks: z.array(taskSchema).max(2000).default([]),
@@ -125,5 +164,7 @@ export interface AutonomySnapshot {
   state: BehaviorState;
   tasks: ScheduledTask[];
   activity: Activity[];
+  activityTotal?: number;
+  characterId?: string;
   gate: string;
 }

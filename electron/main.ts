@@ -1,3 +1,5 @@
+import { activityPage, activityExport } from "./activity-log";
+import { activityQuerySchema } from "../src/shared/autonomy";
 import {
   app,
   BrowserWindow,
@@ -609,6 +611,32 @@ else {
             !companion.isMinimized() &&
             presenceSchema.parse(raw).visible,
         });
+      });
+      handle("autonomy:activity", (raw) => {
+        const query = activityQuerySchema.parse(raw);
+        if (query.characterId !== store.characterId)
+          throw new Error("Character changed; refresh the activity log.");
+        return activityPage(
+          store.data.automation.activity,
+          query.characterId,
+          query.before,
+        );
+      });
+      handle("autonomy:export", async () => {
+        const dump = activityExport(
+          store.data.automation.activity,
+          app.getVersion(),
+          process.platform,
+          process.arch,
+        );
+        const result = await dialog.showSaveDialog({
+          title: "Export all retained activity logs",
+          defaultPath: `eva-activity-${new Date().toISOString().replace(/[:.]/g, "-")}.json`,
+          filters: [{ name: "Activity log", extensions: ["json"] }],
+        });
+        if (result.canceled || !result.filePath) return false;
+        atomicWrite(result.filePath, JSON.stringify(dump, null, 2));
+        return true;
       });
       handle("autonomy:pause", (paused) =>
         runtime.pauseAutonomy(z.boolean().parse(paused)),

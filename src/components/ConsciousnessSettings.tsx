@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { bridge } from "../bridge";
+import { ActivityLog } from "./ActivityLog";
 import {
   dimensions,
   initialBehavior,
@@ -312,30 +313,7 @@ export function ConsciousnessSettings({
             </article>
           ))}
       </section>
-      <section className="card">
-        <div className="section-heading">
-          <h2>Activity log</h2>
-          <p>
-            Latest 100 events for this character (500 retained globally). Costs
-            below are provider-reported LLM usage, not estimates;
-            audio/embedding usage is not included.
-          </p>
-        </div>
-        {!data?.activity.length && <p className="muted">No activity yet.</p>}
-        {data?.activity.map((entry) => (
-          <article className="memory-item" key={entry.id}>
-            <div>
-              <strong>{entry.kind}</strong>
-              <p>{entry.detail}</p>
-              <small>
-                {entry.at} · requests: {entry.requests} · tokens:{" "}
-                {entry.tokens ?? "not reported"} · cost:{" "}
-                {entry.cost === undefined ? "not reported" : `$${entry.cost}`}
-              </small>
-            </div>
-          </article>
-        ))}
-      </section>
+      <ActivityLog key={data?.characterId} data={data} report={report} />
     </>
   );
 }

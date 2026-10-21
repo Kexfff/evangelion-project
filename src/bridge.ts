@@ -125,6 +125,8 @@ const preview: Bridge = {
   },
   clearHistory: desktopOnly,
   exportMemory: desktopOnly,
+  listActivity: desktopOnly,
+  exportActivity: desktopOnly,
   importMemory: desktopOnly,
   inspectMemory: desktopOnly,
   memoryMap: desktopOnly,

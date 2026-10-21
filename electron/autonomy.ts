@@ -130,7 +130,9 @@ export class Autonomy {
   log(
     kind: string,
     detail: string,
-    extra: Partial<Pick<Activity, "requests" | "tokens" | "cost">> = {},
+    extra: Partial<
+      Pick<Activity, "requests" | "tokens" | "cost" | "diagnostic">
+    > = {},
     characterId = this.store.characterId,
   ) {
     this.store.update((d) => {
@@ -267,15 +269,17 @@ export class Autonomy {
     return "Ready";
   }
   snapshot() {
+    const activity = this.store.data.automation.activity.filter(
+      (e) => e.characterId === this.store.characterId,
+    );
     return {
+      characterId: this.store.characterId,
+      activityTotal: activity.length,
       state: this.state,
       tasks: this.store.data.automation.tasks.filter(
         (t) => t.characterId === this.store.characterId,
       ),
-      activity: this.store.data.automation.activity
-        .filter((e) => e.characterId === this.store.characterId)
-        .slice(-100)
-        .reverse(),
+      activity: activity.slice(-10).reverse(),
       gate: this.gate(),
     };
   }

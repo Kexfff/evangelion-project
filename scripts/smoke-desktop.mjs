@@ -819,6 +819,56 @@ try {
       checkboxChecked: false,
     });
   });
+  // Activity snapshots stay small; paging/export still reach retained history.
+  await scheduledWindow.evaluate(async () => {
+    const state = (await window.eva.snapshot()).autonomy.state;
+    for (let i = 0; i < 12; i++) await window.eva.setBehavior(state);
+  });
+  const activitySnapshot = (
+    await scheduledWindow.evaluate(() => window.eva.snapshot())
+  ).autonomy;
+  assert.equal(activitySnapshot.activity.length, 10);
+  assert.ok(activitySnapshot.activityTotal > 10);
+  const activityPage = await scheduledWindow.evaluate(
+    (before) => window.eva.listActivity({ characterId: "eva", before }),
+    activitySnapshot.activity.at(-1).id,
+  );
+  assert.ok(
+    activityPage.entries.length > 0 && activityPage.entries.length <= 10,
+  );
+  assert.ok(
+    !activityPage.entries.some((e) =>
+      activitySnapshot.activity.some((current) => current.id === e.id),
+    ),
+  );
+  const activityPath = path.join(profile, "activity-export.json");
+  await desktop.evaluate(({ dialog }, filePath) => {
+    dialog.showSaveDialog = async () => ({ canceled: false, filePath });
+  }, activityPath);
+  assert.equal(
+    await scheduledWindow.evaluate(() => window.eva.exportActivity()),
+    true,
+  );
+  const activityDump = JSON.parse(await readFile(activityPath, "utf8"));
+  assert.equal(activityDump.format, "evangelion-activity-log");
+  assert.ok(activityDump.entries.length > 10);
+  assert.ok(
+    activityDump.entries.some(
+      (e) =>
+        e.kind === "autonomous-complete" && e.diagnostic?.deliveryCompleted,
+    ),
+  );
+  assert.equal(activityDump.settings, undefined);
+  await desktop.evaluate(({ dialog }) => {
+    dialog.showSaveDialog = async () => ({
+      canceled: true,
+      filePath: undefined,
+    });
+  });
+  assert.equal(
+    await scheduledWindow.evaluate(() => window.eva.exportActivity()),
+    false,
+  );
   await scheduledWindow.evaluate(() => window.eva.clearHistory());
   const cleared = JSON.parse(
     await readFile(path.join(profile, "companion.json"), "utf8"),

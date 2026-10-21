@@ -48,6 +48,8 @@ const api: Bridge = {
   presence: (state) => ipcRenderer.invoke("eva:presence", state),
   setAutonomyPaused: (paused) =>
     ipcRenderer.invoke("eva:autonomy:pause", paused),
+  listActivity: (query) => ipcRenderer.invoke("eva:autonomy:activity", query),
+  exportActivity: () => ipcRenderer.invoke("eva:autonomy:export"),
   setBehavior: (levels) => ipcRenderer.invoke("eva:autonomy:state", levels),
   createTask: (task) => ipcRenderer.invoke("eva:task:create", task),
   taskAction: (id, action) => ipcRenderer.invoke("eva:task:action", id, action),

@@ -15,7 +15,11 @@ import {
   settingsSchema,
   type RuntimeEvent,
 } from "../src/shared/schema";
-import { OpenAICompatibleProvider, consumeSSE } from "../electron/providers";
+import {
+  OpenAICompatibleProvider,
+  ProviderChatError,
+  consumeSSE,
+} from "../electron/providers";
 import {
   executeScheduleTool,
   schedulingTools,
@@ -325,6 +329,176 @@ describe("durable behavior and scheduling policy", () => {
 });
 
 describe("runtime arbitration and scheduling protocols", () => {
+  it.each([
+    ["initiative", false],
+    ["initiative", true],
+    ["reminder", false],
+    ["reminder", true],
+  ] as const)(
+    "sends a compatible %s request with prior history=%s, without saving the app trigger",
+    async (origin, withHistory) => {
+      const t = setup();
+      t.store.update((d) => {
+        d.settings.autonomy.proactive = true;
+        d.settings.autonomy.initiative = 100;
+        if (withHistory)
+          d.messages.push({
+            id: "00000000-0000-4000-8000-000000000001",
+            characterId: t.store.characterId,
+            sessionId: t.store.sessionId,
+            role: "assistant",
+            content: "Previous reply.",
+            createdAt: new Date(start).toISOString(),
+          });
+      });
+      const original = structuredClone(t.store.data.messages);
+      const runtime = new CompanionRuntime(
+        t.store,
+        () => "fixture-key",
+        "local-file",
+        () => {},
+        t.now,
+      );
+      const requests: any[] = [];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: string, init: RequestInit) => {
+          const body = JSON.parse(String(init.body));
+          requests.push(body);
+          const compatible =
+            body.messages[0].role === "system" &&
+            body.messages.slice(1).every((m: any) => m.role !== "system") &&
+            body.messages.at(-1).role === "user";
+          // Reproduce the live provider's silent empty completion for the old layout.
+          return new Response(
+            `data: ${JSON.stringify({ choices: [{ delta: { content: compatible ? "A gentle hello." : "" }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`,
+            { headers: { "Content-Type": "text/event-stream" } },
+          );
+        }),
+      );
+      if (origin === "reminder") {
+        t.task();
+        t.advance(2000);
+      } else t.advance(3600000);
+      runtime.autonomy.setPresence({ visible: true, blocked: false });
+      await runtime.autonomy.tick();
+      expect(requests).toHaveLength(1);
+      const request = requests[0];
+      expect(request.messages[0].content).toContain("Behavior simulation");
+      expect(request.messages[0].content).toContain("You cannot act on the PC");
+      expect(request.messages.at(-1).content).toContain(
+        "not a message from the human",
+      );
+      expect(request.messages.at(-1).content).toContain(
+        origin === "reminder" ? "scheduled reminder" : "conversation opener",
+      );
+      if (origin === "reminder") {
+        expect(request.messages[0].content).toContain('"title":"Tea"');
+        expect(request.messages.at(-1).content).not.toContain("Tea");
+        expect(t.store.data.automation.tasks[0].status).toBe("done");
+      }
+      expect(request).toMatchObject({ stream: true, max_tokens: 700 });
+      expect(request.reasoning).toBeUndefined();
+      expect(t.store.data.messages.slice(0, original.length)).toEqual(original);
+      expect(t.store.data.messages).toHaveLength(original.length + 1);
+      expect(t.store.data.messages.at(-1)).toMatchObject({
+        role: "assistant",
+        content: "A gentle hello.",
+        origin,
+      });
+      expect(JSON.stringify(t.store.data.messages)).not.toContain(
+        "Application-triggered",
+      );
+      const complete = t.store.data.automation.activity.find(
+        (e) => e.kind === "autonomous-complete",
+      );
+      expect(complete?.diagnostic).toMatchObject({
+        replySaved: true,
+        deliveryCompleted: true,
+      });
+      expect(complete?.diagnostic?.messageRoles.at(-1)).toBe("user");
+    },
+  );
+  it("keeps only ten latest entries in snapshots while retaining the full log", () => {
+    const t = setup();
+    for (let n = 0; n < 25; n++) t.engine.log("policy", `event ${n}`);
+    expect(t.engine.snapshot().activity).toHaveLength(10);
+    expect(t.engine.snapshot().activityTotal).toBe(25);
+    expect(t.engine.snapshot().activity[0].detail).toBe("event 24");
+    expect(t.store.data.automation.activity).toHaveLength(25);
+  });
+  it.each(["http", "delivery", "credentials"])(
+    "records safe %s failure diagnostics and emits them to the console",
+    async (stage) => {
+      const t = setup();
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const runtime = new CompanionRuntime(
+        t.store,
+        () => {
+          if (stage === "credentials")
+            throw new Error("secret-key private credential path");
+          return "secret-key";
+        },
+        "local-file",
+        () => {},
+        t.now,
+      );
+      if (stage === "delivery")
+        runtime.remote = {
+          available: () => true,
+          notify: async () => {
+            throw new Error("private Telegram text");
+          },
+        };
+      const chat = vi
+        .spyOn(runtime.provider, "chat")
+        .mockImplementation(async (_p, _k, _m, delta) => {
+          if (stage === "http")
+            throw new ProviderChatError(
+              "http",
+              "secret-key raw upstream body",
+              400,
+            );
+          delta("private reply");
+          return "private reply";
+        });
+      t.task();
+      t.advance(2000);
+      runtime.autonomy.setPresence({ visible: true, blocked: false });
+      await runtime.autonomy.tick();
+      const entry = t.store.data.automation.activity.find(
+        (e) => e.kind === "failed",
+      )!;
+      expect(entry.diagnostic).toMatchObject({
+        stage: stage === "http" ? "provider" : stage,
+        errorCategory: stage === "http" ? "http" : "internal",
+        replySaved: stage === "delivery",
+        deliveryCompleted: false,
+        stream: true,
+        maxTokens: 700,
+      });
+      if (stage === "http") expect(entry.diagnostic?.httpStatus).toBe(400);
+      if (stage === "credentials") {
+        expect(entry.requests).toBe(0);
+        expect(chat).not.toHaveBeenCalled();
+      }
+      expect(entry.diagnostic?.messageRoles.at(-1)).toBe("user");
+      expect(entry.diagnostic?.elapsedMs).toBeGreaterThanOrEqual(0);
+      expect(JSON.stringify(entry)).not.toContain("secret-key");
+      expect(JSON.stringify(entry)).not.toContain("private reply");
+      expect(JSON.stringify(warn.mock.calls)).not.toContain("secret-key");
+      expect(warn).toHaveBeenCalledOnce();
+      expect(
+        t.store.data.automation.activity.reduce(
+          (sum, e) => sum + e.requests,
+          0,
+        ),
+      ).toBe(stage === "credentials" ? 0 : 1);
+      expect(t.store.data.automation.tasks[0].status).toBe("failed");
+      await runtime.autonomy.tick();
+      expect(chat).toHaveBeenCalledTimes(stage === "credentials" ? 0 : 1);
+    },
+  );
   it("persists a completed autonomous reply with its reminder origin in the active session", async () => {
     const t = setup(),
       events: RuntimeEvent[] = [];
