@@ -52,8 +52,11 @@ export function memoryFailureReason(error: unknown) {
       return "the model exhausted the extraction token budget after one retry";
     if (error.kind === "empty")
       return "the model returned no extraction text after one retry";
-    if (error.kind === "http")
+    if (error.kind === "http") {
+      if ([400, 422].includes(error.status ?? 0))
+        return `the extraction request was rejected (HTTP ${error.status}); check model/endpoint parameter compatibility and provider routing`;
       return `the extraction request returned HTTP ${error.status}; check provider credentials, quota and model settings`;
+    }
     if (error.kind === "blocked")
       return "the provider blocked the extraction response";
     return "the provider returned an invalid API response";

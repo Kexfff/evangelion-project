@@ -1,6 +1,6 @@
 # evangelion_project — development plan
 
-Updated: 2026-10-21 · Current release: **v0.4.23** · Roadmap target: **v0.5**
+Updated: 2026-10-22 · Current release: **v0.4.24** · Roadmap target: **v0.5**
 
 This is the active roadmap. Detailed implementation notes, past test results and incident records live in [development history](docs/development-history.md). Historical unchecked boxes there are not the current backlog.
 
@@ -43,6 +43,9 @@ Guides: [voice](docs/providers-and-voice.md), [memory](docs/characters-and-memor
 | v0.4.21 | Safe structured autonomy failure diagnostics and console warnings; ten-entry IPC/UI activity pages; JSON export of all retained activity | Diagnostic instrumentation only; actual reported provider failure still needs a fresh affected-machine trace |
 | v0.4.22 | Provider-compatible autonomous prompts for openers and reminders; request-only application trigger, never a fabricated saved user message | Live three-request comparison isolated trailing-system layout as the cause; regression-tested fix uses the successful layout |
 | v0.4.23 | Speech-only angle-bracket cues hidden in desktop/Telegram text; original tags preserved for TTS and saved-message replay | Streaming, archive previews, notifications, user-text preservation and literal code examples covered |
+| v0.4.24 | Model-portable memory extraction/consolidation defaults; bounded token-parameter fallback, strict completion checks and clearer errors | Gemini mandatory-reasoning HTTP 400 reproduced and corrected in two authorized synthetic requests; no saved test facts or profile changes |
+
+**v0.4.24 validation:** **442 core tests** (including 39 extraction cases), typecheck, Linux unpacked build and isolated desktop smoke passed. The 16 memory/presentation tests also passed after adding a consolidation-options assertion. [Compatibility fix and live evidence](docs/development-history.md#v0424--model-portable-memory-extraction-2026-10-22).
 
 **v0.4.23 validation:** 46 focused core tests, 6 browser tests, typecheck and Linux unpacked build passed. No paid TTS requests, live Telegram sends or normal-profile edits were needed.
 

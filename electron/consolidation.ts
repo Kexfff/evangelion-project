@@ -89,10 +89,9 @@ export async function consolidateMemory(
     false,
     undefined,
     {
-      temperature: 0.1,
+      temperature: null,
       maxTokens: 2048,
       requireComplete: true,
-      disableReasoning: true,
     },
   );
   signal.throwIfAborted();

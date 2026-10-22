@@ -80,6 +80,260 @@ describe("memory response parsing", () => {
 });
 
 describe("background extraction recovery", () => {
+  it("works with mandatory reasoning/fixed-temperature models without model-name rules", async () => {
+    const f = setup();
+    const request = vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      if (body.messages[0].content.startsWith("Extract")) {
+        if (body.reasoning?.enabled === false || "temperature" in body)
+          return Response.json(
+            { error: { message: "Reasoning is mandatory" } },
+            { status: 400 },
+          );
+        return completion('{"facts":["The user likes tea."]}');
+      }
+      return completion("Hello");
+    });
+    vi.stubGlobal("fetch", request);
+    await f.runtime.send("I like tea.");
+    await vi.waitFor(() => expect(f.store.data.facts).toHaveLength(1));
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(f.warnings()).toEqual([]);
+  });
+  it("recovers explicit token-parameter rejection and caches success per endpoint/model/routing", async () => {
+    const f = setup();
+    const reject = () =>
+      Response.json(
+        {
+          error: {
+            param: "max_tokens",
+            message:
+              "Unsupported parameter: max_tokens. Use max_completion_tokens instead. private-provider-detail",
+          },
+        },
+        { status: 400 },
+      );
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(completion("Hello"))
+      .mockResolvedValueOnce(reject())
+      .mockResolvedValueOnce(completion('["The user likes tea."]'))
+      .mockResolvedValueOnce(completion("Hello again"))
+      .mockResolvedValueOnce(completion("[]"))
+      .mockResolvedValueOnce(completion("Another model"))
+      .mockResolvedValueOnce(completion("[]"));
+    vi.stubGlobal("fetch", request);
+    await f.runtime.send("I like tea.");
+    await vi.waitFor(() => expect(f.runtime["extraction"]).toBeUndefined());
+    await f.runtime.send("No new facts.");
+    await vi.waitFor(() => expect(f.runtime["extraction"]).toBeUndefined());
+    f.store.update((d) => {
+      d.settings.providers.llm.model = "another/model";
+    });
+    await f.runtime.send("No new facts.");
+    await vi.waitFor(() => expect(f.runtime["extraction"]).toBeUndefined());
+    const bodies = request.mock.calls.map((args) => JSON.parse(args[1].body));
+    expect(bodies[1]).toMatchObject({ max_tokens: 2048 });
+    for (const n of [2, 4]) {
+      expect(bodies[n]).toMatchObject({ max_completion_tokens: 2048 });
+      expect(bodies[n].max_tokens).toBeUndefined();
+    }
+    expect(bodies[6]).toMatchObject({ max_tokens: 2048 });
+    expect(f.store.data.facts).toHaveLength(1);
+    expect(JSON.stringify(f.events)).not.toContain("private-provider-detail");
+    expect(f.warnings()).toEqual([]);
+  });
+  it("bounds compatibility plus content recovery to three extraction requests and preserves routing", async () => {
+    const f = setup();
+    f.store.update((d) => {
+      d.settings.providers.llm.model = "some/model";
+      d.settings.providers.llm.openrouterProviders = {
+        "some/model": ["allowed"],
+      };
+    });
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(completion("Hello"))
+      .mockResolvedValueOnce(
+        Response.json(
+          { error: { message: "Unsupported parameter: 'max_tokens'" } },
+          { status: 422 },
+        ),
+      )
+      .mockResolvedValueOnce(completion("invalid result"))
+      .mockResolvedValueOnce(completion("still invalid"));
+    vi.stubGlobal("fetch", request);
+    await f.runtime.send("Tea please");
+    await vi.waitFor(() => expect(f.warnings()).toHaveLength(1));
+    expect(request).toHaveBeenCalledTimes(4);
+    const bodies = request.mock.calls
+      .slice(1)
+      .map((args) => JSON.parse(args[1].body));
+    expect(bodies[2]).toMatchObject({ max_completion_tokens: 4096 });
+    for (const body of bodies)
+      expect(body.provider).toEqual({ only: ["allowed"] });
+    expect(f.store.data.facts).toHaveLength(0);
+    expect(
+      f.store.data.automation.activity.filter(
+        (e) => e.kind === "memory-request",
+      ),
+    ).toHaveLength(3);
+    expect(JSON.stringify(bodies[2].messages)).not.toContain("invalid result");
+  });
+  it("accepts text-part answers but never uses reasoning parts as facts", async () => {
+    const f = setup();
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(completion("Hello"))
+      .mockResolvedValueOnce(
+        Response.json({
+          choices: [
+            {
+              finish_reason: "stop",
+              message: {
+                content: [
+                  { type: "text", text: '{"facts":[' },
+                  { type: "text", text: '"The user likes tea."]}' },
+                ],
+                reasoning: '["Invented fact"]',
+              },
+            },
+          ],
+        }),
+      );
+    vi.stubGlobal("fetch", request);
+    await f.runtime.send("I like tea.");
+    await vi.waitFor(() => expect(f.store.data.facts).toHaveLength(1));
+    expect(f.store.data.facts[0].text).toBe("The user likes tea.");
+  });
+  it("accepts complete SSE extraction and records usage arriving after the finish event", async () => {
+    const f = setup();
+    const chunks = [
+      {
+        choices: [
+          {
+            delta: { content: '["The user likes tea."]' },
+            finish_reason: "stop",
+          },
+        ],
+      },
+      { choices: [], usage: { total_tokens: 123 } },
+    ].map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`);
+    chunks.push("data: [DONE]\n\n");
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const chunk = chunks.shift();
+        if (chunk) controller.enqueue(new TextEncoder().encode(chunk));
+        else controller.close();
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(completion("Hello"))
+        .mockResolvedValueOnce(
+          new Response(stream, {
+            headers: { "Content-Type": "text/event-stream" },
+          }),
+        ),
+    );
+    await f.runtime.send("I like tea.");
+    await vi.waitFor(() => expect(f.store.data.facts).toHaveLength(1));
+    expect(
+      f.store.data.automation.activity.find((e) => e.kind === "memory-usage")
+        ?.tokens,
+    ).toBe(123);
+    expect(f.warnings()).toEqual([]);
+  });
+  it("never loops when both token-limit spellings are rejected", async () => {
+    const f = setup();
+    const reject = (param: string) =>
+      Response.json(
+        { error: { param, message: "Unsupported parameter" } },
+        { status: 400 },
+      );
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(completion("Hello"))
+      .mockResolvedValueOnce(reject("max_tokens"))
+      .mockResolvedValueOnce(reject("max_completion_tokens"));
+    vi.stubGlobal("fetch", request);
+    await f.runtime.send("I like tea.");
+    await vi.waitFor(() => expect(f.warnings()).toHaveLength(1));
+    expect(request).toHaveBeenCalledTimes(3);
+    expect(f.store.data.facts).toHaveLength(0);
+    expect(f.warnings()[0]).toContain("parameter compatibility");
+  });
+  it.each([
+    {
+      message: "max_tokens exceeds the available context window",
+      param: "max_tokens",
+    },
+    {
+      message:
+        "Unsupported parameter: temperature; use max_tokens to cap output",
+    },
+    {
+      message: "Unsupported parameter: max_tokens",
+      padding: "x".repeat(16384),
+    },
+  ])(
+    "does not guess compatibility from ambiguous or oversized errors: %#",
+    async (error) => {
+      const f = setup();
+      const request = vi
+        .fn()
+        .mockResolvedValueOnce(completion("Hello"))
+        .mockResolvedValueOnce(Response.json({ error }, { status: 400 }));
+      vi.stubGlobal("fetch", request);
+      await f.runtime.send("I like tea.");
+      await vi.waitFor(() => expect(f.warnings()).toHaveLength(1));
+      expect(request).toHaveBeenCalledTimes(2);
+      expect(f.store.data.facts).toHaveLength(0);
+    },
+  );
+  it("rejects truncated SSE output even when a server ignores stream=false", async () => {
+    const f = setup();
+    const truncated = () =>
+      new Response(
+        'data: {"choices":[{"delta":{"content":"[\\"Do not save partial facts\\"]"},"finish_reason":"length"}]}\n\ndata: [DONE]\n\n',
+        { headers: { "Content-Type": "text/event-stream" } },
+      );
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(completion("Hello"))
+      .mockResolvedValueOnce(truncated())
+      .mockResolvedValueOnce(truncated());
+    vi.stubGlobal("fetch", request);
+    await f.runtime.send("I like tea.");
+    await vi.waitFor(() => expect(f.warnings()).toHaveLength(1));
+    expect(f.warnings()[0]).toContain("token budget");
+    expect(f.store.data.facts).toHaveLength(0);
+    expect(request).toHaveBeenCalledTimes(3);
+  });
+  it("does not retry refusals or save refusal text as memory", async () => {
+    const f = setup();
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(completion("Hello"))
+      .mockResolvedValueOnce(
+        Response.json({
+          choices: [
+            {
+              finish_reason: "stop",
+              message: { content: '["No"]', refusal: "refused" },
+            },
+          ],
+        }),
+      );
+    vi.stubGlobal("fetch", request);
+    await f.runtime.send("Tea please");
+    await vi.waitFor(() => expect(f.warnings()).toHaveLength(1));
+    expect(f.warnings()[0]).toContain("blocked");
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(f.store.data.facts).toHaveLength(0);
+  });
   it("retries malformed output once, then saves facts without disturbing the chat", async () => {
     const f = setup();
     const request = vi
@@ -102,11 +356,11 @@ describe("background extraction recovery", () => {
     expect(bodies[0]).toMatchObject({ temperature: 0.8, max_tokens: 700 });
     expect(bodies[0].reasoning).toBeUndefined();
     expect(bodies[1]).toMatchObject({
-      temperature: 0.1,
       max_tokens: 2048,
       stream: false,
-      reasoning: { enabled: false },
     });
+    expect(bodies[1].temperature).toBeUndefined();
+    expect(bodies[1].reasoning).toBeUndefined();
     expect(bodies[2]).toMatchObject({ max_tokens: 4096 });
     expect(JSON.stringify(bodies[2].messages)).not.toContain(
       "Here are facts but",
@@ -151,21 +405,24 @@ describe("background extraction recovery", () => {
       f.store.data.automation.activity.some((e) => e.kind === "memory-failed"),
     ).toBe(true);
   });
-  it("reports HTTP status without retrying quota/auth failures or exposing response bodies", async () => {
-    const f = setup();
-    const request = vi
-      .fn()
-      .mockResolvedValueOnce(completion("Reply saved"))
-      .mockResolvedValueOnce(
-        new Response("Authorization: secret", { status: 429 }),
-      );
-    vi.stubGlobal("fetch", request);
-    await f.runtime.send("I like tea.");
-    await vi.waitFor(() => expect(f.warnings()).toHaveLength(1));
-    expect(f.warnings()[0]).toContain("HTTP 429");
-    expect(JSON.stringify(f.events)).not.toContain("Authorization: secret");
-    expect(request).toHaveBeenCalledTimes(2);
-  });
+  it.each([400, 401, 403, 404, 422, 429, 500, 503])(
+    "reports HTTP %s without blind retries or exposing response bodies",
+    async (status) => {
+      const f = setup();
+      const request = vi
+        .fn()
+        .mockResolvedValueOnce(completion("Reply saved"))
+        .mockResolvedValueOnce(
+          new Response("Authorization: secret", { status }),
+        );
+      vi.stubGlobal("fetch", request);
+      await f.runtime.send("I like tea.");
+      await vi.waitFor(() => expect(f.warnings()).toHaveLength(1));
+      expect(f.warnings()[0]).toContain(`HTTP ${status}`);
+      expect(JSON.stringify(f.events)).not.toContain("Authorization: secret");
+      expect(request).toHaveBeenCalledTimes(2);
+    },
+  );
   it("does not force OpenRouter-only options on a local compatible server", async () => {
     const request = vi.fn().mockResolvedValue(completion('{"facts":[]}'));
     vi.stubGlobal("fetch", request);

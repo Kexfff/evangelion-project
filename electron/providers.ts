@@ -20,13 +20,16 @@ export class ProviderChatError extends Error {
       | "stream-error",
     message: string,
     readonly status?: number,
+    readonly unsupportedParameter?: "max_tokens" | "max_completion_tokens",
   ) {
     super(message);
   }
 }
 export type ChatOptions = {
-  temperature?: number;
+  temperature?: number | null;
   maxTokens?: number;
+  tokenLimitField?: "max_tokens" | "max_completion_tokens";
+  detectTokenLimitRejection?: boolean;
   requireComplete?: boolean;
   disableReasoning?: boolean;
 };
@@ -65,14 +68,64 @@ export function providerSignal(signal?: AbortSignal) {
 function headers(key: string): Record<string, string> {
   return key ? { Authorization: `Bearer ${key}` } : {};
 }
-async function checked(response: Response) {
+// Inspect only bounded error JSON to identify a known compatibility issue.
+// No raw error body, message, key, URL or prompt is retained in the exception.
+async function rejectedTokenLimit(response: Response) {
+  if (!response.body) return;
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > 16384) return;
+      chunks.push(value);
+    }
+    const bytes = new Uint8Array(size);
+    let at = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, at);
+      at += chunk.length;
+    }
+    const error = JSON.parse(new TextDecoder().decode(bytes))?.error;
+    const message = typeof error?.message === "string" ? error.message : "";
+    if (
+      !/not supported|unsupported|unknown (?:parameter|field)|unrecognized|unexpected (?:argument|keyword|field)|not (?:allowed|permitted)/i.test(
+        message,
+      )
+    )
+      return;
+    for (const field of ["max_tokens", "max_completion_tokens"] as const) {
+      if (
+        error?.param === field ||
+        new RegExp(
+          `(?:unsupported|unknown|unrecognized) (?:parameter|field)?[:\\s'\"]*${field}\\b|\\b${field}['\"]? (?:is )?(?:not supported|not allowed)`,
+          "i",
+        ).test(message)
+      )
+        return field;
+    }
+  } catch {
+    /* Unknown/oversized errors must not trigger a compatibility retry. */
+  } finally {
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+}
+async function checked(response: Response, inspectTokenLimit = false) {
   if (!response.ok) {
-    // Do not reflect upstream bodies: some gateways include credentials and internal URLs.
-    await response.body?.cancel();
+    const parameter =
+      inspectTokenLimit && [400, 422].includes(response.status)
+        ? await rejectedTokenLimit(response)
+        : undefined;
+    if (!response.bodyUsed) await response.body?.cancel();
     throw new ProviderChatError(
       "http",
       `Provider returned HTTP ${response.status}. Check its URL, model, credentials, and quota in Settings.`,
       response.status,
+      parameter,
     );
   }
   return response;
@@ -81,18 +134,23 @@ export async function consumeSSE(
   body: ReadableStream<Uint8Array>,
   onText: (text: string) => void,
   onUsage?: (usage: Usage) => void,
+  requireComplete = false,
 ) {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let pending = "",
     result = "",
-    finished = false;
+    finished = false,
+    doneMarker = false,
+    finishReason = "",
+    refused = false;
   const parse = (line: string) => {
     if (!line.startsWith("data:")) return;
     const data = line.slice(5).trim();
     if (!data) return;
     if (data === "[DONE]") {
       finished = true;
+      doneMarker = true;
       return;
     }
     const json = JSON.parse(data);
@@ -107,7 +165,11 @@ export async function consumeSSE(
           ? json.error.code
           : undefined,
       );
-    if (json.choices?.[0]?.finish_reason) finished = true;
+    if (json.choices?.[0]?.finish_reason) {
+      finished = true;
+      finishReason = json.choices[0].finish_reason;
+    }
+    if (json.choices?.[0]?.delta?.refusal) refused = true;
     const text = json.choices?.[0]?.delta?.content;
     if (typeof text === "string") {
       result += text;
@@ -125,7 +187,7 @@ export async function consumeSSE(
         if (pending.trim()) parse(pending);
         break;
       }
-      if (finished) {
+      if (finished && (!requireComplete || doneMarker)) {
         await reader.cancel();
         break;
       }
@@ -137,6 +199,21 @@ export async function consumeSSE(
     throw new ProviderChatError(
       "truncated",
       "The response stream ended unexpectedly. Please try again.",
+    );
+  if (requireComplete && finishReason === "length")
+    throw new ProviderChatError(
+      "truncated",
+      "The model reached its output token limit.",
+    );
+  if (requireComplete && (refused || finishReason === "content_filter"))
+    throw new ProviderChatError(
+      "blocked",
+      "The provider blocked the response.",
+    );
+  if (requireComplete && finishReason === "error")
+    throw new ProviderChatError(
+      "stream-error",
+      "The provider reported a streaming error.",
     );
   if (!result.trim())
     throw new ProviderChatError(
@@ -298,8 +375,10 @@ export class OpenAICompatibleProvider {
           messages,
           ...openRouterRouting(provider),
           stream,
-          temperature: options.temperature ?? 0.8,
-          max_tokens: options.maxTokens ?? 700,
+          ...(options.temperature === null
+            ? {}
+            : { temperature: options.temperature ?? 0.8 }),
+          [options.tokenLimitField ?? "max_tokens"]: options.maxTokens ?? 700,
           ...(options.disableReasoning &&
           new URL(provider.baseUrl).hostname === "openrouter.ai"
             ? { reasoning: { enabled: false } }
@@ -307,13 +386,19 @@ export class OpenAICompatibleProvider {
         }),
         signal: providerSignal(signal),
       }),
+      options.detectTokenLimitRejection,
     );
     if (
-      stream &&
+      (stream || options.requireComplete) &&
       response.headers.get("content-type")?.includes("text/event-stream") &&
       response.body
     )
-      return consumeSSE(response.body, onText, onUsage);
+      return consumeSSE(
+        response.body,
+        onText,
+        onUsage,
+        options.requireComplete,
+      );
     const data = await response.json().catch((error: unknown) => {
       if (error instanceof SyntaxError)
         throw new ProviderChatError(
@@ -323,6 +408,11 @@ export class OpenAICompatibleProvider {
       throw error;
     });
     if (data.usage) onUsage?.(usageOf(data.usage));
+    if (data.error)
+      throw new ProviderChatError(
+        "invalid-response",
+        "The provider returned an error response instead of a completion.",
+      );
     if (
       options.requireComplete &&
       data.choices?.[0]?.finish_reason === "length"
@@ -333,13 +423,21 @@ export class OpenAICompatibleProvider {
       );
     if (
       options.requireComplete &&
-      data.choices?.[0]?.finish_reason === "content_filter"
+      (data.choices?.[0]?.finish_reason === "content_filter" ||
+        data.choices?.[0]?.message?.refusal)
     )
       throw new ProviderChatError(
         "blocked",
         "The provider blocked the response.",
       );
-    const content = data.choices?.[0]?.message?.content;
+    const rawContent = data.choices?.[0]?.message?.content;
+    const content =
+      Array.isArray(rawContent) &&
+      rawContent.every(
+        (part) => part?.type === "text" && typeof part.text === "string",
+      )
+        ? rawContent.map((part) => part.text).join("")
+        : rawContent;
     if (typeof content !== "string" || !content.trim())
       throw new ProviderChatError("empty", "The model returned no text.");
     onText(content);

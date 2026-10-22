@@ -118,6 +118,11 @@ describe("memory library", () => {
     expect(s.data.summaries).toHaveLength(1);
     await consolidateMemory(s, provider, "", new AbortController().signal);
     expect(chat).toHaveBeenCalledTimes(1);
+    expect(chat.mock.calls[0][7]).toEqual({
+      temperature: null,
+      maxTokens: 2048,
+      requireComplete: true,
+    });
     s.update((d) => {
       d.messages = [];
     });
