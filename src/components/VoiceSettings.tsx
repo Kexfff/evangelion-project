@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Mic, RefreshCw, Square } from "lucide-react";
+import { ChevronRight, Mic, RefreshCw, Square, Volume2 } from "lucide-react";
 import type { Settings } from "../shared/schema";
 import { MicrophoneCapture } from "../audio/microphone";
 import { routeOutput } from "../audio/playback";
@@ -187,6 +187,31 @@ export function VoiceSettings({
       </select>
     </label>
   );
+  const msRange = (
+    key: "vadSilenceMs" | "vadMinSpeechMs",
+    label: string,
+    min: number,
+    max: number,
+    step: number,
+    hint: string,
+  ) => (
+    <label className="field">
+      <span>{label}</span>
+      <div className="range">
+        <input
+          aria-label={label}
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={voice[key]}
+          onChange={(e) => change({ [key]: Number(e.target.value) })}
+        />
+        <output>{(voice[key] / 1000).toFixed(1)} s</output>
+      </div>
+      <small>{hint}</small>
+    </label>
+  );
   return (
     <>
       {error && (
@@ -196,163 +221,71 @@ export function VoiceSettings({
       )}
       <div className="two-column">
         <div>
-          <PushToTalkSettings
-            config={voice.ptt}
-            change={(ptt) => change({ ptt })}
-          />
           <section className="card">
             <div className="section-heading">
-              <h2>Input & output devices</h2>
-              <p>
-                Refresh with microphone permission to show device names. Tests
-                use the unsaved settings on this page.
-              </p>
-            </div>
-            {deviceSelect("inputDeviceId", "audioinput", "Microphone")}
-            {deviceSelect(
-              "outputDeviceId",
-              "audiooutput",
-              "Speakers / headphones",
-            )}
-            <div className="button-row">
-              <button
-                className="button secondary"
-                onClick={() => void refresh(true)}
-              >
-                <RefreshCw size={14} />
-                Refresh devices
-              </button>
-              <button
-                className="button secondary"
-                onClick={() => void testOutput()}
-              >
-                Test output
-              </button>
-            </div>
-          </section>
-          <section className="card">
-            <div className="section-heading">
-              <h2>Microphone sensitivity</h2>
-              <p>
-                Raise input gain for a quiet microphone. Lower the voice
-                threshold to detect softer speech.
-              </p>
-            </div>
-            {range("inputGain", "Microphone gain", 0.1, 5, 0.1)}
-            {range(
-              "vadThreshold",
-              "Voice detection threshold",
-              0.005,
-              0.3,
-              0.005,
-            )}
-            <meter
-              className="mic-meter"
-              aria-label="Microphone level"
-              min={0}
-              max={0.3}
-              value={level}
-            />
-            <small>
-              Level {level.toFixed(3)} · threshold{" "}
-              {voice.vadThreshold.toFixed(3)}
-            </small>
-            <button
-              className="button secondary full"
-              onClick={() => void testMic()}
-            >
-              {testing ? <Square size={14} /> : <Mic size={14} />}{" "}
-              {testing ? "Stop microphone test" : "Test microphone"}
-            </button>
-            <p className="muted">
-              Microphone tests stay on this device and are not transcribed.
-            </p>
-            {toggle("echoCancellation", "Echo cancellation")}
-            {toggle("noiseSuppression", "Noise suppression")}
-            {toggle(
-              "autoGainControl",
-              "Automatic gain control",
-              "Leave off for predictable manual sensitivity.",
-            )}
-          </section>
-        </div>
-        <div>
-          <section className="card">
-            <div className="section-heading">
-              <h2>Natural conversation</h2>
+              <h2>How you talk to her</h2>
+              <p>Speak hands-free, or hold a key while you talk.</p>
             </div>
             {toggle(
               "vadEnabled",
               "Hands-free voice detection",
               voice.ptt.enabled
-                ? "Paused while keyboard voice control is enabled. Disable keyboard control to use hands-free listening."
-                : "Click the companion microphone to enable listening. Speech is sent after a pause; click again to turn it off.",
-            )}
-            {range("vadSilenceMs", "Pause before sending (ms)", 300, 3000, 100)}
-            <label className="field">
-              <span>Speech detector</span>
-              <select
-                value={voice.vadEngine}
-                onChange={(e) =>
-                  change({ vadEngine: e.target.value as "energy" | "silero" })
-                }
-              >
-                <option value="energy">Audio energy · lightweight</option>
-                <option value="silero">Silero neural VAD · local</option>
-              </select>
-              <small>
-                Neural detection distinguishes speech from many noises, not one
-                person’s voice. PTT still uses an energy check for accidental
-                taps.
-              </small>
-            </label>
-            {voice.vadEngine === "silero" &&
-              range(
-                "neuralThreshold",
-                "Speech probability threshold",
-                0.1,
-                0.95,
-                0.05,
-              )}
-            {toggle(
-              "transcriptionStreaming",
-              "Stream recognition text",
-              "For ASR providers supporting SSE transcript.text.delta/done events. Uploads each completed utterance once, then displays provisional text; only a complete result is sent. Unsupported providers may reject this option—turn it off, with no automatic duplicate upload.",
-            )}
-            {range(
-              "vadMinSpeechMs",
-              "Minimum voice duration (ms)",
-              100,
-              1000,
-              50,
+                ? "Paused while keyboard voice control is on below."
+                : "Click the microphone in her window to start listening. She replies after you pause; click again to stop.",
             )}
             {toggle(
               "bargeIn",
               "Interrupt when I speak",
-              "Your press-to-talk key or hands-free speech stops her reply. When off, press-to-talk waits until she finishes. Headphones reduce feedback.",
+              "Talking stops her reply. When off, press-to-talk waits until she finishes. Headphones help avoid her hearing herself.",
+            )}
+            {msRange(
+              "vadSilenceMs",
+              "Pause before sending",
+              300,
+              3000,
+              100,
+              "How long a silence ends what you’re saying.",
             )}
             <label className="field">
               <span>Recognition language</span>
               <input
                 aria-label="Recognition language"
                 value={voice.language}
-                placeholder="Auto detect"
+                placeholder="Detect automatically"
                 maxLength={20}
                 onChange={(e) => change({ language: e.target.value })}
               />
-              <small>Optional language code: en, ru, ja…</small>
+              <small>Optional language code, like en, ru or ja.</small>
             </label>
-            <p className="muted">
-              Voice activity detection runs locally using the selected detector
-              and configurable timing. Each utterance is limited to 60 seconds
-              and sent as a 16 kHz mono WAV.
-            </p>
           </section>
+          <PushToTalkSettings
+            config={voice.ptt}
+            change={(ptt) => change({ ptt })}
+          />
+        </div>
+        <div>
           <section className="card">
             <div className="section-heading">
-              <h2>Speech playback</h2>
+              <h2>Her speaking voice</h2>
+              <p>How and where she speaks her replies.</p>
             </div>
             {toggle("autoSpeak", "Speak replies automatically")}
+            {deviceSelect(
+              "outputDeviceId",
+              "audiooutput",
+              "Speakers / headphones",
+            )}
+            <div className="button-row field-actions">
+              <button
+                className="button secondary"
+                onClick={() => void testOutput()}
+              >
+                <Volume2 size={14} />
+                Play a test tone
+              </button>
+            </div>
+            {range("speed", "Voice speed", 0.5, 2, 0.05)}
+            {range("volume", "Playback volume", 0, 1, 0.05)}
             <label className="field">
               <span>Speech delivery</span>
               <select
@@ -373,20 +306,136 @@ export function VoiceSettings({
                 <option value="response">Full response</option>
               </select>
               <small>
-                Line by line keeps short sentences together until a newline,
-                which can help local TTS. Without a newline it waits for the
-                reply to finish. Full response waits for the entire reply. Audio
-                streaming works independently of this setting.
+                {voice.sentenceBuffering
+                  ? voice.speechChunking === "line"
+                    ? "Waits for each line break, keeping short sentences together. Can sound smoother with local voices; without line breaks she waits for the whole reply."
+                    : "She starts talking as soon as the first sentence is ready."
+                  : "She waits for the whole reply before speaking."}
               </small>
             </label>
+          </section>
+          <section className="card">
+            <div className="section-heading">
+              <h2>Microphone</h2>
+              <p>
+                If she misses quiet speech, raise the gain or lower the
+                detection threshold.
+              </p>
+            </div>
+            {deviceSelect("inputDeviceId", "audioinput", "Microphone")}
+            {range("inputGain", "Microphone gain", 0.1, 5, 0.1)}
+            {range(
+              "vadThreshold",
+              "Voice detection threshold",
+              0.005,
+              0.3,
+              0.005,
+            )}
+            <div className="mic-test">
+              <meter
+                className="mic-meter"
+                aria-label="Microphone level"
+                min={0}
+                max={0.3}
+                low={voice.vadThreshold}
+                optimum={0.3}
+                value={level}
+              />
+              <small>
+                {testing
+                  ? level >= voice.vadThreshold
+                    ? "Hearing you"
+                    : "Listening… speak to see the level"
+                  : "Test to see your level against the threshold"}
+              </small>
+            </div>
+            <div className="button-row">
+              <button
+                className="button secondary"
+                onClick={() => void testMic()}
+              >
+                {testing ? <Square size={14} /> : <Mic size={14} />}
+                {testing ? "Stop microphone test" : "Test microphone"}
+              </button>
+              <button
+                className="button secondary"
+                onClick={() => void refresh(true)}
+                title="Asks for microphone permission so device names can be shown"
+              >
+                <RefreshCw size={14} />
+                Refresh devices
+              </button>
+            </div>
+            <p className="muted">
+              Tests stay on this computer and use the unsaved settings on this
+              page. Nothing is transcribed.
+            </p>
+            {toggle("echoCancellation", "Echo cancellation")}
+            {toggle("noiseSuppression", "Noise suppression")}
+            {toggle(
+              "autoGainControl",
+              "Automatic gain control",
+              "Leave off for predictable manual sensitivity.",
+            )}
+          </section>
+          <details className="card fine-tuning">
+            <summary>
+              <div className="section-heading">
+                <h2>Fine-tuning</h2>
+                <p>
+                  Detection engine and streaming. The defaults suit most setups.
+                </p>
+              </div>
+              <ChevronRight size={18} />
+            </summary>
+            <label className="field">
+              <span>Speech detector</span>
+              <select
+                value={voice.vadEngine}
+                onChange={(e) =>
+                  change({ vadEngine: e.target.value as "energy" | "silero" })
+                }
+              >
+                <option value="energy">Audio energy · lightweight</option>
+                <option value="silero">Silero neural VAD · local</option>
+              </select>
+              <small>
+                The neural detector tells speech from most other noises (not one
+                voice from another). Press-to-talk still uses a quick energy
+                check to ignore accidental taps.
+              </small>
+            </label>
+            {voice.vadEngine === "silero" &&
+              range(
+                "neuralThreshold",
+                "Speech probability threshold",
+                0.1,
+                0.95,
+                0.05,
+              )}
+            {msRange(
+              "vadMinSpeechMs",
+              "Minimum voice duration",
+              100,
+              1000,
+              50,
+              "Shorter sounds than this are ignored.",
+            )}
+            {toggle(
+              "transcriptionStreaming",
+              "Stream recognition text",
+              "Shows your words while they’re recognized, if your speech service streams results (SSE). If it rejects the option, turn this off.",
+            )}
             {toggle(
               "streaming",
               "Stream speech audio",
-              "Play incoming MP3 bytes immediately when the provider streams them. Unsupported containers fall back to buffered playback.",
+              "Starts playing MP3 audio while it downloads. Other formats play once complete.",
             )}
-            {range("speed", "Voice speed", 0.5, 2, 0.05)}
-            {range("volume", "Playback volume", 0, 1, 0.05)}
-          </section>
+            <p className="muted">
+              Listening runs on this computer. Each recording is capped at 60
+              seconds and sent as 16 kHz mono audio.
+            </p>
+          </details>
         </div>
       </div>
     </>

@@ -1,0 +1,113 @@
+/* Her voice page: microphone test, press-to-talk and fine-tuning. */
+
+/* Microphone level meter */
+.mic-test {
+  display: grid;
+  gap: 6px;
+  margin: 2px 0 16px;
+}
+.mic-meter {
+  display: block;
+  width: 100%;
+  height: 10px;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+.mic-meter::-webkit-meter-bar {
+  height: 10px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+}
+/* Below the threshold the level is "suboptimum"; at or above, "optimum". */
+.mic-meter::-webkit-meter-suboptimum-value {
+  border-radius: var(--radius-pill);
+  background: var(--text-4);
+  transition: inline-size 0.08s;
+}
+.mic-meter::-webkit-meter-optimum-value {
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--mint), var(--rose));
+  transition: inline-size 0.08s;
+}
+.field-actions {
+  margin: -6px 0 18px;
+}
+
+/* Collapsible fine-tuning card */
+.fine-tuning > summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.fine-tuning > summary .section-heading {
+  margin-bottom: 0;
+}
+.fine-tuning > summary > svg {
+  margin-top: 2px;
+  color: var(--text-3);
+  transition: transform 0.15s;
+}
+.fine-tuning[open] > summary {
+  margin-bottom: 20px;
+}
+.fine-tuning[open] > summary > svg {
+  transform: rotate(90deg);
+}
+
+/* Press to talk */
+.ptt-card h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ptt-card h2 svg {
+  color: var(--rose);
+}
+.ptt-card small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.ptt-binding-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 18px 0 8px;
+}
+.ptt-binding {
+  flex: 1;
+  min-height: 48px;
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+}
+.ptt-binding.recording {
+  border-color: var(--rose);
+  color: var(--rose);
+  animation: pulse 1s infinite;
+}
+.ptt-binding-row + small {
+  margin-bottom: 18px;
+  line-height: 1.6;
+}
+.ptt-status {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 4px 0 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+.ptt-status p {
+  margin-top: 3px;
+  font-size: var(--text-sm);
+  color: var(--text-2);
+}
+.ptt-test {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--rose);
+  font-size: var(--text-sm);
+}

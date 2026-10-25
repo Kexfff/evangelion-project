@@ -10,6 +10,7 @@ import "./styles/shell.css";
 import "./styles/home.css";
 import "./styles/character.css";
 import "./styles/services.css";
+import "./styles/voice.css";
 import "./styles.css";
 const companion =
   new URLSearchParams(window.location.search).get("window") === "companion";

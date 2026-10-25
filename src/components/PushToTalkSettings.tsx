@@ -78,8 +78,8 @@ export function PushToTalkSettings({
         <div>
           <span>Keyboard voice control</span>
           <small>
-            Replaces hands-free VAD while enabled. No audio is captured before
-            you press.
+            Replaces hands-free listening while on. Nothing is recorded until
+            you press the key.
           </small>
         </div>
         <input
@@ -154,10 +154,8 @@ export function PushToTalkSettings({
         </button>
       </div>
       <small>
-        Letters, numbers, F1–F24, Space, Backquote or a left/right modifier
-        (including Right Shift). Choose a key that does not conflict with your
-        game. App mode uses physical keys; the desktop controls global layout
-        and assignments.
+        Letters, numbers, F1–F24, Space, Backquote, or a left/right modifier
+        such as Right Shift. Pick one your games don’t use.
       </small>
       <label className="field">
         <span>Key behavior</span>
@@ -224,7 +222,7 @@ export function PushToTalkSettings({
         >
           {status?.testing
             ? "End keybind test"
-            : "Test keybind (no microphone)"}
+            : "Test the key (microphone stays off)"}
         </button>
         <button
           className="button secondary"
@@ -254,11 +252,11 @@ export function PushToTalkSettings({
         </p>
       )}
       <p className="muted">
-        Global shortcuts use the Linux desktop portal and may need permission.
-        Your desktop can assign a different key; the active binding above is
-        authoritative. If unsupported, choose app-focused mode. Recordings are
-        cancelled on lock, device loss or after 60 seconds. Silence and quick
-        taps are discarded.
+        Global shortcuts go through your desktop’s shortcut service, which may
+        ask for permission or assign a different key — the active binding above
+        is what counts. If they don’t work, choose app-focused. Recording stops
+        after 60 seconds, when the screen locks or if the microphone
+        disconnects; silence and quick taps are ignored.
       </p>
     </section>
   );
