@@ -1,0 +1,63 @@
+/*
+ * Design tokens — the only place raw colors, radii and type sizes live.
+ * Palette: warm cream and rose on dark plum ("soft & cozy").
+ * Use var(--token) everywhere else; for tints use
+ * color-mix(in srgb, var(--token) N%, transparent).
+ */
+:root {
+  /* Plum surfaces, darkest to lightest */
+  --surface-deep: #140d13;
+  --surface-0: #1b1219; /* window background */
+  --surface-1: #22171f; /* cards */
+  --surface-2: #2b1e27; /* inputs, raised rows */
+  --surface-3: #352631; /* hover, selected */
+  --surface-4: #42303c; /* pressed, strong fills */
+
+  /* Lines */
+  --line: #3a2a35;
+  --line-strong: #4f3b48;
+
+  /* Text */
+  --text-1: #f8ece6; /* cream, main text */
+  --text-2: #cdb7bf; /* secondary */
+  --text-3: #9c8590; /* hints, captions */
+  --text-4: #75606b; /* disabled, decorative */
+
+  /* Accents */
+  --rose: #f2a7bf; /* primary accent */
+  --rose-strong: #e98aa8;
+  --on-rose: #2a1220; /* text on rose fills */
+  --peach: #f5c6a5;
+  --butter: #f2d99c;
+  --mint: #a9dcc6;
+  --sky: #aac7ee;
+  --lilac: #cdb8f1;
+  --danger: #ff9fa3;
+
+  /* Shape */
+  --radius-xs: 8px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --radius-pill: 999px;
+
+  /* Depth */
+  --shadow-soft: 0 1px 0 color-mix(in srgb, var(--text-1) 4%, transparent) inset,
+    0 10px 30px -14px rgb(0 0 0 / 0.55);
+  --shadow-lift: 0 1px 0 color-mix(in srgb, var(--text-1) 6%, transparent) inset,
+    0 18px 44px -16px rgb(0 0 0 / 0.65);
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--rose) 40%, transparent);
+
+  /* Type scale (14px base; nothing smaller than 12px) */
+  --font-body: "Nunito Variable", Nunito, ui-rounded, "SF Pro Rounded",
+    system-ui, sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", "SFMono-Regular", monospace;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 26px;
+  --text-3xl: 34px;
+}

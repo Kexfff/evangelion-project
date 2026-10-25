@@ -2,6 +2,8 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { Companion } from "./components/Companion";
 import { Settings } from "./components/Settings";
+import "@fontsource-variable/nunito";
+import "./styles/tokens.css";
 import "./styles.css";
 const companion =
   new URLSearchParams(window.location.search).get("window") === "companion";
