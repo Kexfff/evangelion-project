@@ -35,7 +35,6 @@ export function GameProjects({ data }: { data?: MinecraftSnapshot }) {
       <div className="integration-section-title">
         <FolderKanban size={17} />
         <h3>World projects</h3>
-        <span className="connection-badge">The bigger picture</span>
       </div>
       <p>
         Keep resource targets and a purpose for each project. Active projects

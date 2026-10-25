@@ -1,12 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  Blocks,
-  Cable,
-  Check,
-  Gamepad2,
-  Send,
-  ShieldAlert,
-} from "lucide-react";
+import { Cable, Check, Gamepad2, Send, ShieldAlert } from "lucide-react";
 import type { Snapshot } from "../shared/schema";
 import { MINECRAFT_ID } from "../shared/minecraft";
 import { bridge } from "../bridge";
@@ -17,10 +10,6 @@ import { PluginSettings } from "./PluginSettings";
 export function IntegrationSettings({ snapshot }: { snapshot: Snapshot }) {
   const pending = snapshot.mcp?.pending.length ?? 0;
   const pendingIds = snapshot.mcp?.pending.map((p) => p.id).join(",") ?? "";
-  const name =
-    snapshot.settings.characters.find(
-      (c) => c.id === snapshot.settings.activeCharacterId,
-    )?.name ?? "your companion";
   const [view, setView] = useState("minecraft");
   const previousPending = useRef("");
   const [stopping, setStopping] = useState(false);
@@ -66,14 +55,44 @@ export function IntegrationSettings({ snapshot }: { snapshot: Snapshot }) {
   ];
   return (
     <div className="integration-hub">
-      <div className="integration-intro">
-        <div>
-          <span className="integration-eyebrow">
-            <Blocks size={13} /> CONNECTED EXPERIENCES
-          </span>
-          <h2>A bigger world for {name}.</h2>
-          <p>Play, connect and choose what she can do.</p>
-        </div>
+      {error && (
+        <p className="error-notice" role="alert">
+          {error}
+        </p>
+      )}
+      {snapshot.mcp?.stopped && (
+        <p className="integration-alert" role="status">
+          <ShieldAlert size={16} /> Emergency stop is active. All MCP
+          connections are disabled. Reconnect explicitly to resume.
+        </p>
+      )}
+      <div className="integration-top">
+        <nav className="integration-nav" aria-label="Integration sections">
+          {choices.map(
+            ({ id, title, subtitle, icon: Icon, status, active }) => (
+              <button
+                key={id}
+                aria-label={title}
+                aria-pressed={view === id}
+                aria-controls={`integration-${id}`}
+                className={`integration-choice ${id}`}
+                onClick={() => setView(id)}
+              >
+                <span className="integration-icon">
+                  <Icon size={21} />
+                </span>
+                <span className="integration-choice-copy">
+                  <strong>{title}</strong>
+                  <span>{subtitle}</span>
+                  <small className={active ? "is-connected" : ""}>
+                    <i />
+                    {status}
+                  </small>
+                </span>
+              </button>
+            ),
+          )}
+        </nav>
         <button
           className="button integration-stop"
           disabled={stopping}
@@ -95,44 +114,9 @@ export function IntegrationSettings({ snapshot }: { snapshot: Snapshot }) {
           {stopping ? "Stopping tools…" : "Emergency stop tools"}
         </button>
       </div>
-      {error && (
-        <p className="error-notice" role="alert">
-          {error}
-        </p>
-      )}
-      {snapshot.mcp?.stopped && (
-        <p className="integration-alert" role="status">
-          <ShieldAlert size={16} /> Emergency stop is active. All MCP
-          connections are disabled. Reconnect explicitly to resume.
-        </p>
-      )}
-      <nav className="integration-nav" aria-label="Integration sections">
-        {choices.map(({ id, title, subtitle, icon: Icon, status, active }) => (
-          <button
-            key={id}
-            aria-label={title}
-            aria-pressed={view === id}
-            aria-controls={`integration-${id}`}
-            className={`integration-choice ${id}`}
-            onClick={() => setView(id)}
-          >
-            <span className="integration-icon">
-              <Icon size={21} />
-            </span>
-            <span className="integration-choice-copy">
-              <strong>{title}</strong>
-              <span>{subtitle}</span>
-              <small className={active ? "is-connected" : ""}>
-                <i />
-                {status}
-              </small>
-            </span>
-          </button>
-        ))}
-      </nav>
       <p className="integration-save-hint">
-        <Check size={13} /> Use each connection’s own Save button. Permissions
-        apply immediately.
+        <Check size={13} /> Each integration has its own Save button; permission
+        changes apply right away.
       </p>
       <div id="integration-minecraft" hidden={view !== "minecraft"}>
         <MinecraftSettings

@@ -13,6 +13,7 @@ import "./styles/services.css";
 import "./styles/voice.css";
 import "./styles/memory.css";
 import "./styles/inner-life.css";
+import "./styles/integrations.css";
 import "./styles.css";
 const companion =
   new URLSearchParams(window.location.search).get("window") === "companion";

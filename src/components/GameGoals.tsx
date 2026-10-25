@@ -37,7 +37,6 @@ export function GameGoals({ data }: { data?: MinecraftSnapshot }) {
       <div className="integration-section-title">
         <Flag size={17} />
         <h3>Game goals</h3>
-        <span className="connection-badge">Beyond one action</span>
       </div>
       <p>
         Queue a plan and keep chatting. Each step waits for the previous

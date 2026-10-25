@@ -164,11 +164,6 @@ export function MinecraftSettings({
           This code is temporary; sign-in is session-only.
         </p>
       )}
-      <fieldset disabled={!enabled} className="minecraft-goal-controls">
-        <GameAutonomy data={data} />
-        <GameProjects data={data} />
-        <GameGoals data={data} />
-      </fieldset>
       <details className="integration-disclosure" open={!connection}>
         <summary>World connection and optional limits</summary>
         <p>
@@ -517,6 +512,11 @@ export function MinecraftSettings({
           </details>
         </div>
       )}
+      <fieldset disabled={!enabled} className="minecraft-goal-controls">
+        <GameAutonomy data={data} />
+        <GameProjects data={data} />
+        <GameGoals data={data} />
+      </fieldset>
       <div className="integration-section-title">
         <Activity size={17} />
         <h3>Game jobs</h3>
