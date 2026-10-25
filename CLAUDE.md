@@ -20,7 +20,8 @@ npx vitest run tests/mcp.test.ts -t "name"   # single core test file / test
 npm run test:ui        # Playwright against dev:ui (tests/ui/*.spec.ts), 1 worker
 npx playwright test tests/ui/memory.spec.ts  # single UI spec
 npm run test:desktop   # build + scripts/smoke-desktop.mjs (real Electron windows, isolated temp profile)
-npm run package        # build + electron-builder --dir → release/linux-unpacked/
+npm run package        # build + electron-builder --dir → release/linux-unpacked/ (with Electron fuses)
+npm run package:smoke  # same, but keeps --inspect so Playwright smoke tests can drive it (never distribute)
 npm run format         # prettier (there is no linter)
 ```
 
@@ -33,6 +34,7 @@ npm run format         # prettier (there is no linter)
 ## Architecture
 
 **Process layout.** `scripts/build.mjs` bundles separate entry points:
+
 - `electron/main.ts` → ESM main process. A `createRequire` banner supports bundled CommonJS deps. `electron` and `dbus-next` stay external.
 - `electron/preload.ts` → `preload.cjs`. It exposes `window.eva` (the `Bridge` interface in `src/shared/schema.ts`) via `contextBridge`.
 - `electron/telegram-worker.ts` → a `worker_threads` worker for Telegram network I/O (heap-capped; it isolates work but is not a sandbox).
@@ -41,6 +43,7 @@ npm run format         # prettier (there is no linter)
 The renderer (`src/`) is one Vite/React app serving two windows. `src/main.tsx` picks `Companion` (`?window=companion`, transparent avatar window) or `Settings`.
 
 **IPC contract.** Adding a renderer↔main call touches four places that must stay in sync:
+
 1. The `Bridge` type in `src/shared/schema.ts`.
 2. `electron/preload.ts` (`ipcRenderer.invoke("eva:<channel>")`).
 3. The `handle("<channel>", …)` registration in `electron/main.ts`. This wrapper rejects callers that are not a trusted top-level frame, and arguments are parsed with zod schemas from `src/shared/*`.
@@ -51,7 +54,8 @@ State reaches the renderer as `RuntimeEvent`s (`{type: "state", state: Snapshot}
 **`src/shared/`** holds zod schemas, types and pure logic imported by both the main process and the renderer: settings, history, MCP, Minecraft, autonomy, game goals, speech cues. Validation lives here so both sides agree.
 
 **Main-process core:**
-- `CompanionRuntime` (`electron/runtime.ts`) owns conversation turns for *both* desktop and Telegram. It also owns memory extraction/indexing, autonomy (`autonomy.ts`: openers, reminders, mood) and the `OpenAICompatibleProvider` (`providers.ts`). Its `snapshot()`/`broadcast()` methods build the state pushed to the UI. Plugins attach hooks to it (`tools`, `gameContext`, `pluginSnapshot`, `remote`).
+
+- `CompanionRuntime` (`electron/runtime.ts`) owns conversation turns for _both_ desktop and Telegram. It also owns memory extraction/indexing, autonomy (`autonomy.ts`: openers, reminders, mood) and the `OpenAICompatibleProvider` (`providers.ts`). Its `snapshot()`/`broadcast()` methods build the state pushed to the UI. Plugins attach hooks to it (`tools`, `gameContext`, `pluginSnapshot`, `remote`).
 - `Store` (`electron/store.ts`) is the character-scoped JSON database, validated by zod and written atomically with a backup. Mutate it via `store.update(fn)`, then call `runtime.broadcast()`. `MemoryLibrary`/`SemanticMemory` keep the SQLite FTS5/vector index for hybrid recall. Attachments are content-addressed (`attachments.ts`). Secrets go through `CredentialVault` (OS keyring via `safeStorage`, with a labeled AES-GCM fallback).
 - `PluginHost` (`electron/plugin-host.ts`) wires the `PluginRegistry` lifecycle (`plugin-lifecycle.ts`) to `TelegramPlugin`, `McpPlugin` and `MinecraftPlugin`. Minecraft is exposed as an app-managed MCP connection, so it shares the MCP permission/grant/approval pipeline. A plugin's enabled setting is separate from its session-only connection/join state; keep them separate.
 - Gameplay layering: `GameDirector` (durable policy, budgets, intention selection; never acts) → `GameCoordinator` (plans/verifies goal steps) → the Minecraft worker, which has exclusive ownership of physical actions (`minecraft-engine.ts`, `minecraft-actions.ts`, etc.). Foreground chat takes priority for provider time but never cancels movement.

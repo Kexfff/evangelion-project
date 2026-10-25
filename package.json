@@ -16,7 +16,8 @@
     "test:minecraft:live": "node scripts/accept-minecraft.mjs",
     "test:desktop": "npm run build && node scripts/smoke-desktop.mjs",
     "format": "prettier --write src electron scripts tests docs *.ts *.json *.html *.md PLAN.MD",
-    "package": "npm run build && electron-builder --dir"
+    "package": "npm run build && electron-builder --dir",
+    "package:smoke": "npm run build && electron-builder --dir -c.electronFuses.enableNodeCliInspectArguments=true"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.31.0",
@@ -54,6 +55,13 @@
     "productName": "Evangelion Project",
     "directories": {
       "output": "release"
+    },
+    "electronFuses": {
+      "runAsNode": false,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "onlyLoadAppFromAsar": true,
+      "enableCookieEncryption": true
     },
     "files": [
       "dist/**/*",
