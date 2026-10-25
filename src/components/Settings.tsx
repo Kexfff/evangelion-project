@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { OpenRouterProviders } from "./OpenRouterProviders";
 import { isOpenRouter } from "../shared/openrouter";
 import {
@@ -183,15 +183,18 @@ function Toggle({
   checked: boolean;
   onChange: (value: boolean) => void;
 }) {
+  const hintId = useId();
   return (
     <label className="toggle-row">
       <div>
         <span>{label}</span>
-        {hint && <small>{hint}</small>}
+        {hint && <small id={hintId}>{hint}</small>}
       </div>
       <input
         className="toggle"
         type="checkbox"
+        aria-label={label}
+        aria-describedby={hint ? hintId : undefined}
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
       />

@@ -126,11 +126,13 @@ export function VoiceSettings({
     <label className="toggle-row">
       <div>
         <span>{label}</span>
-        {hint && <small>{hint}</small>}
+        {hint && <small id={`${key}-hint`}>{hint}</small>}
       </div>
       <input
         type="checkbox"
         className="toggle"
+        aria-label={label}
+        aria-describedby={hint ? `${key}-hint` : undefined}
         checked={Boolean(voice[key])}
         onChange={(e) => change({ [key]: e.target.checked })}
       />

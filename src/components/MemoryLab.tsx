@@ -48,10 +48,14 @@ export function MemoryLab({
         <label className="toggle-row">
           <div>
             <span>Search by meaning too</span>
-            <small>Sends your question to the Remember service.</small>
+            <small id="recall-semantic-hint">
+              Sends your question to the Remember service.
+            </small>
           </div>
           <input
             className="toggle"
+            aria-label="Search by meaning too"
+            aria-describedby="recall-semantic-hint"
             type="checkbox"
             checked={semantic}
             onChange={(e) => setSemantic(e.target.checked)}
