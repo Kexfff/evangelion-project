@@ -3,6 +3,7 @@ import { OpenRouterProviders } from "./OpenRouterProviders";
 import { isOpenRouter } from "../shared/openrouter";
 import {
   Activity,
+  ArrowDownToLine,
   ArrowUpFromLine,
   AudioLines,
   BookHeart,
@@ -182,19 +183,24 @@ function Range({
 function Section({
   title,
   subtitle,
+  actions,
   children,
   className = "",
 }: {
   title: string;
   subtitle?: string;
+  actions?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
   return (
     <section className={`card ${className}`}>
-      <div className="section-heading">
-        <h2>{title}</h2>
-        {subtitle && <p>{subtitle}</p>}
+      <div className={`section-heading ${actions ? "with-actions" : ""}`}>
+        <div>
+          <h2>{title}</h2>
+          {subtitle && <p>{subtitle}</p>}
+        </div>
+        {actions && <div className="button-row">{actions}</div>}
       </div>
       {children}
     </section>
@@ -492,58 +498,12 @@ export function Settings() {
           )}
 
           {tab === "character" && (
-            <div className="two-column">
-              <div>
-                <Section
-                  title="Character library"
-                  subtitle="Each character has their own conversations and memories."
-                >
-                  <div className="character-list">
-                    {draft.characters.map((c) => (
-                      <button
-                        className={
-                          c.id === character.id
-                            ? "character-option selected"
-                            : "character-option"
-                        }
-                        key={c.id}
-                        onClick={() =>
-                          update((d) => {
-                            d.activeCharacterId = c.id;
-                          })
-                        }
-                      >
-                        <span className="mini-avatar">
-                          {c.name.slice(0, 1)}
-                        </span>
-                        <span>
-                          {c.name}
-                          <small>{c.tagline}</small>
-                        </span>
-                        {c.id === character.id && <Check size={16} />}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    className="button secondary full"
-                    onClick={() =>
-                      update((d) => {
-                        const id = crypto.randomUUID();
-                        d.characters.push({
-                          ...structuredClone(defaultSettings.characters[0]),
-                          id,
-                          name: "New companion",
-                        });
-                        d.activeCharacterId = id;
-                      })
-                    }
-                  >
-                    <Plus size={15} />
-                    New character
-                  </button>
-                </Section>
-                <Section title="Identity & personality">
-                  <div className="button-row">
+            <>
+              <Section
+                title="Your characters"
+                subtitle="Each character has their own conversations and memories."
+                actions={
+                  <>
                     <button
                       className="button secondary"
                       disabled={working || dirty}
@@ -564,6 +524,7 @@ export function Settings() {
                         })
                       }
                     >
+                      <ArrowDownToLine size={15} />
                       Import character card
                     </button>
                     <button
@@ -575,15 +536,66 @@ export function Settings() {
                         })
                       }
                     >
+                      <ArrowUpFromLine size={15} />
                       Export saved card
                     </button>
-                  </div>
-                  <p className="hint">
-                    Portable cards include personality, prompts and the custom
-                    VRM, but no memories or credentials. Save edits before
-                    importing or exporting; imported cards stay inactive until
-                    selected.
-                  </p>
+                  </>
+                }
+              >
+                <div className="character-list">
+                  {draft.characters.map((c) => (
+                    <button
+                      className={
+                        c.id === character.id
+                          ? "character-option selected"
+                          : "character-option"
+                      }
+                      aria-pressed={c.id === character.id}
+                      key={c.id}
+                      onClick={() =>
+                        update((d) => {
+                          d.activeCharacterId = c.id;
+                        })
+                      }
+                    >
+                      <span className="mini-avatar">{c.name.slice(0, 1)}</span>
+                      <span>
+                        {c.name}
+                        <small>{c.tagline}</small>
+                      </span>
+                      {c.id === character.id && <Check size={16} />}
+                    </button>
+                  ))}
+                  <button
+                    className="character-option add"
+                    onClick={() =>
+                      update((d) => {
+                        const id = crypto.randomUUID();
+                        d.characters.push({
+                          ...structuredClone(defaultSettings.characters[0]),
+                          id,
+                          name: "New companion",
+                        });
+                        d.activeCharacterId = id;
+                      })
+                    }
+                  >
+                    <Plus size={18} />
+                    New character
+                  </button>
+                </div>
+                <p className="hint">
+                  Cards carry a character’s personality, prompts and custom
+                  avatar — never memories or keys. Save your edits before
+                  importing or exporting; imported cards wait until you pick
+                  them.
+                </p>
+              </Section>
+              <Section
+                title={`Who ${character.name || "she"} is`}
+                subtitle="Changes apply to new replies after you save."
+              >
+                <div className="form-grid">
                   <Field label="Name">
                     <input
                       value={character.name}
@@ -591,7 +603,7 @@ export function Settings() {
                       onChange={(e) => editCharacter({ name: e.target.value })}
                     />
                   </Field>
-                  <Field label="Tagline">
+                  <Field label="Tagline" hint="A short line shown on Home.">
                     <input
                       value={character.tagline}
                       maxLength={160}
@@ -600,89 +612,35 @@ export function Settings() {
                       }
                     />
                   </Field>
-                  <Field label="Personality">
-                    <textarea
-                      rows={5}
-                      value={character.personality}
-                      maxLength={5000}
-                      onChange={(e) =>
-                        editCharacter({ personality: e.target.value })
-                      }
-                    />
-                  </Field>
-                  <Field
-                    label="System prompt"
-                    hint="Defines how she responds. Relevant memories are added to the prompt automatically."
-                  >
-                    <textarea
-                      rows={7}
-                      value={character.systemPrompt}
-                      maxLength={10000}
-                      onChange={(e) =>
-                        editCharacter({ systemPrompt: e.target.value })
-                      }
-                    />
-                  </Field>
-                </Section>
-              </div>
-              <Section
-                title="Her appearance"
-                subtitle="Character cards reference their own VRM avatar."
-              >
-                {(["author", "source", "license", "notes"] as const).map(
-                  (key) => (
-                    <Field key={key} label={`Avatar ${key}`}>
-                      <input
-                        value={character.avatarMetadata?.[key] ?? ""}
-                        maxLength={
-                          key === "author"
-                            ? 300
-                            : key === "source"
-                              ? 1000
-                              : 2000
-                        }
-                        onChange={(e) =>
-                          editCharacter({
-                            avatarMetadata: {
-                              ...{
-                                author: "",
-                                source: "",
-                                license: "",
-                                notes: "",
-                              },
-                              ...character.avatarMetadata,
-                              [key]: e.target.value,
-                            },
-                          })
-                        }
-                      />
-                    </Field>
-                  ),
-                )}
-                <div className="studio-preview">
-                  <Avatar avatar={character.avatar} settings={draft.vrm} />
                 </div>
-                <button
-                  className="button secondary full"
-                  disabled={working}
-                  onClick={() =>
-                    void perform(async () => {
-                      const avatar = await bridge.importAvatar();
-                      if (avatar) editCharacter({ avatar });
-                    })
-                  }
+                <Field
+                  label="Personality"
+                  hint="Her temperament, interests and quirks, in a few sentences."
                 >
-                  <ArrowUpFromLine size={16} />
-                  Load VRM avatar
-                </button>
-                <button
-                  className="text-button"
-                  onClick={() => editCharacter({ avatar: "builtin:eva" })}
+                  <textarea
+                    rows={5}
+                    value={character.personality}
+                    maxLength={5000}
+                    onChange={(e) =>
+                      editCharacter({ personality: e.target.value })
+                    }
+                  />
+                </Field>
+                <Field
+                  label="System prompt"
+                  hint="Her core instructions for every reply. Relevant memories are added automatically."
                 >
-                  Use bundled avatar
-                </button>
+                  <textarea
+                    rows={8}
+                    value={character.systemPrompt}
+                    maxLength={10000}
+                    onChange={(e) =>
+                      editCharacter({ systemPrompt: e.target.value })
+                    }
+                  />
+                </Field>
               </Section>
-            </div>
+            </>
           )}
 
           {tab === "providers" && (
@@ -942,26 +900,77 @@ export function Settings() {
           {tab === "vrm" && (
             <div className="two-column studio-layout">
               <Section
-                title="Live stage"
-                subtitle="Preview changes before saving them."
+                title="Live preview"
+                subtitle="Changes show here right away; save to keep them."
               >
                 <div className="studio-preview large">
                   <Avatar avatar={character.avatar} settings={draft.vrm} />
-                  <span className="avatar-tag">{character.name} · VRM</span>
                 </div>
-                <button
-                  className="button secondary full"
-                  disabled={working}
-                  onClick={() =>
-                    void perform(async () => {
-                      const avatar = await bridge.importAvatar();
-                      if (avatar) editCharacter({ avatar });
-                    })
-                  }
-                >
-                  <ArrowUpFromLine size={16} />
-                  Load VRM
-                </button>
+                <div className="button-row studio-actions">
+                  <button
+                    className="button secondary"
+                    disabled={working}
+                    onClick={() =>
+                      void perform(async () => {
+                        const avatar = await bridge.importAvatar();
+                        if (avatar) editCharacter({ avatar });
+                      })
+                    }
+                  >
+                    <ArrowUpFromLine size={16} />
+                    Load VRM avatar
+                  </button>
+                  {character.avatar !== "builtin:eva" && (
+                    <button
+                      className="text-button"
+                      onClick={() => editCharacter({ avatar: "builtin:eva" })}
+                    >
+                      Use bundled avatar
+                    </button>
+                  )}
+                </div>
+                <details className="avatar-credits">
+                  <summary>
+                    Avatar credits
+                    <ChevronRight size={15} />
+                  </summary>
+                  <p className="hint">
+                    Optional details about where this model came from. They
+                    travel with exported character cards.
+                  </p>
+                  <div className="form-grid">
+                    {(["author", "source", "license", "notes"] as const).map(
+                      (key) => (
+                        <Field key={key} label={`Avatar ${key}`}>
+                          <input
+                            value={character.avatarMetadata?.[key] ?? ""}
+                            maxLength={
+                              key === "author"
+                                ? 300
+                                : key === "source"
+                                  ? 1000
+                                  : 2000
+                            }
+                            onChange={(e) =>
+                              editCharacter({
+                                avatarMetadata: {
+                                  ...{
+                                    author: "",
+                                    source: "",
+                                    license: "",
+                                    notes: "",
+                                  },
+                                  ...character.avatarMetadata,
+                                  [key]: e.target.value,
+                                },
+                              })
+                            }
+                          />
+                        </Field>
+                      ),
+                    )}
+                  </div>
+                </details>
               </Section>
               <div>
                 <Section title="Position & framing">
@@ -1103,20 +1112,17 @@ export function Settings() {
                       <option value="amplitude">Simple audio amplitude</option>
                     </select>
                   </Field>
-                  <Field label="Expression strength">
-                    <input
-                      type="range"
-                      min={0}
-                      max={1}
-                      step={0.05}
-                      value={draft.vrm.expressionStrength}
-                      onChange={(e) =>
-                        update((d) => {
-                          d.vrm.expressionStrength = Number(e.target.value);
-                        })
-                      }
-                    />
-                  </Field>
+                  <Range
+                    label="Expression strength"
+                    value={draft.vrm.expressionStrength}
+                    min={0}
+                    max={1}
+                    onChange={(v) =>
+                      update((d) => {
+                        d.vrm.expressionStrength = v;
+                      })
+                    }
+                  />
                   <Toggle
                     label="Keep companion on top"
                     checked={draft.window.alwaysOnTop}

@@ -8,6 +8,7 @@ import "./styles/base.css";
 import "./styles/controls.css";
 import "./styles/shell.css";
 import "./styles/home.css";
+import "./styles/character.css";
 import "./styles.css";
 const companion =
   new URLSearchParams(window.location.search).get("window") === "companion";

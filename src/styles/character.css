@@ -1,0 +1,119 @@
+/* Personality and Appearance pages. */
+.section-heading.with-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+/* ---------- Character switcher ---------- */
+.character-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+}
+.character-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 72px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  text-align: left;
+  font-weight: 750;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.character-option:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-3);
+}
+.character-option.selected {
+  border-color: color-mix(in srgb, var(--rose) 55%, var(--line));
+  background: color-mix(in srgb, var(--rose) 10%, var(--surface-2));
+}
+.character-option > span:nth-child(2) {
+  min-width: 0;
+}
+.character-option small {
+  display: block;
+  margin-top: 2px;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.character-option > svg {
+  margin-left: auto;
+  color: var(--rose);
+}
+.character-option.add {
+  justify-content: center;
+  border-style: dashed;
+  background: transparent;
+  color: var(--text-2);
+}
+.character-option.add:hover {
+  color: var(--rose);
+}
+.character-option.add > svg {
+  margin-left: 0;
+  color: inherit;
+}
+
+/* ---------- Avatar preview ---------- */
+.studio-preview {
+  position: relative;
+  height: 420px;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(
+      ellipse at 50% 40%,
+      color-mix(in srgb, var(--rose) 16%, transparent),
+      transparent 65%
+    ),
+    var(--surface-2);
+}
+.studio-preview.large {
+  height: 540px;
+}
+.studio-actions {
+  margin-top: 14px;
+}
+.studio-actions .text-button {
+  margin-top: 0;
+}
+.avatar-credits {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.avatar-credits > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 750;
+  color: var(--text-2);
+}
+.avatar-credits > summary:hover {
+  color: var(--text-1);
+}
+.avatar-credits > summary svg {
+  transition: transform 0.15s;
+}
+.avatar-credits[open] > summary svg {
+  transform: rotate(90deg);
+}
+.avatar-credits .hint {
+  margin-top: 8px;
+}
+/* Keep the preview in view while adjusting the long list of controls. */
+.studio-layout > .card:first-child {
+  position: sticky;
+  top: 24px;
+}

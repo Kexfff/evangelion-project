@@ -9,27 +9,6 @@
   height: 6px;
   margin: 6px 0 0;
 }
-.avatar-tag {
-  position: absolute;
-  bottom: 14px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: var(--text-xs);
-  letter-spacing: 1.3px;
-  background: color-mix(in srgb, var(--surface-3) 66%, transparent);
-  border: 1px solid color-mix(in srgb, var(--rose) 22%, transparent);
-  border-radius: 5px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  white-space: nowrap;
-  z-index: 2;
-}
-.avatar-tag .status-dot {
-  width: 4px;
-  height: 4px;
-}
 .integration-hub {
   --integration-accent: var(--rose);
   min-width: 0;
@@ -1009,58 +988,6 @@
   font-size: var(--text-xs);
   color: var(--text-3);
 }
-.character-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.character-option {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid var(--surface-4);
-  border-radius: 8px;
-  text-align: left;
-}
-.character-option.selected {
-  background: var(--surface-3);
-  border-color: var(--text-4);
-}
-.character-option small {
-  display: block;
-  font-size: var(--text-xs);
-  margin-top: 6px;
-}
-.character-option > svg {
-  margin-left: auto;
-}
-.studio-preview {
-  height: 410px;
-  position: relative;
-  border-radius: 9px;
-  background: radial-gradient(
-    ellipse at 50% 45%,
-    var(--line-strong),
-    var(--surface-2) 65%,
-    var(--surface-1)
-  );
-  border: 1px solid var(--line-strong);
-  overflow: hidden;
-}
-.studio-preview.large {
-  height: 540px;
-}
-.studio-layout {
-  grid-template-columns: 1fr 1fr;
-}
-.feature-illustration {
-  height: 130px;
-  display: grid;
-  place-items: center;
-  color: var(--rose);
-  background: radial-gradient(ellipse, var(--surface-4), transparent 70%);
-}
 .memory-view-switch {
   display: flex;
   flex-wrap: wrap;
@@ -1997,24 +1924,6 @@
   .memory-tools .button-row {
     flex-wrap: wrap;
   }
-}
-.future-hero {
-  text-align: center;
-  padding: 24px 25px 45px;
-  color: var(--rose);
-}
-.future-hero h2 {
-  font-size: var(--text-3xl);
-  font-weight: 500;
-  color: var(--rose);
-  margin: 19px 0 14px;
-}
-.future-hero p {
-  max-width: 520px;
-  margin: auto;
-  font-size: var(--text-sm);
-  line-height: 1.9;
-  color: var(--rose);
 }
 .avatar-renderer {
   width: 100%;
