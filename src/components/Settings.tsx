@@ -383,6 +383,8 @@ export function Settings() {
             <button
               key={id}
               className={tab === id ? "active" : ""}
+              aria-label={label}
+              title={label}
               aria-current={tab === id ? "page" : undefined}
               onClick={() => setTab(id)}
             >

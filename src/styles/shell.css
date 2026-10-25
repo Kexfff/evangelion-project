@@ -168,7 +168,8 @@
   }
 }
 
-@media (max-width: 900px) {
+/* Icon-only sidebar for narrow windows; nav buttons keep their aria-label. */
+@media (max-width: 760px) {
   .settings-shell {
     --sidebar-width: 72px;
   }
