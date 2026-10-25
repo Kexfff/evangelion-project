@@ -12,13 +12,7 @@ import {
   systemPreferences,
   powerMonitor,
 } from "electron";
-import {
-  readFileSync,
-  mkdirSync,
-  copyFileSync,
-  writeFileSync,
-  statSync,
-} from "node:fs";
+import { readFileSync, mkdirSync, writeFileSync, statSync } from "node:fs";
 import { characterCardSchema, cardAvatar } from "./character-card";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
@@ -778,7 +772,7 @@ else {
         runtime.broadcast();
       });
       handle("fact:delete", async (raw) => {
-        const id = z.string().parse(raw);
+        const id = z.string().max(100).parse(raw);
         const characterId = store.characterId;
         await runtime.cancel();
         store.update((d) => {
@@ -1057,16 +1051,19 @@ else {
           properties: ["openFile"],
         });
         if (!result.filePaths[0]) return null;
+        const invalid = "Choose a valid binary VRM file under 200 MB.";
+        if (statSync(result.filePaths[0]).size > 200 * 1024 * 1024)
+          throw new Error(invalid);
         const bytes = readFileSync(result.filePaths[0]);
-        if (
-          bytes.length > 200 * 1024 * 1024 ||
-          bytes.subarray(0, 4).toString() !== "glTF"
-        )
-          throw new Error("Choose a valid binary VRM file under 200 MB.");
+        if (bytes.subarray(0, 4).toString() !== "glTF")
+          throw new Error(invalid);
         const id = randomUUID();
         const dir = path.join(dataDirectory, "avatars");
-        mkdirSync(dir, { recursive: true });
-        copyFileSync(result.filePaths[0], path.join(dir, `${id}.vrm`));
+        mkdirSync(dir, { recursive: true, mode: 0o700 });
+        writeFileSync(path.join(dir, `${id}.vrm`), bytes, {
+          mode: 0o600,
+          flag: "wx",
+        });
         return `custom:${id}`;
       });
       handle("window:settings", showSettings);

@@ -5,6 +5,7 @@ import {
   renameSync,
   writeFileSync,
   copyFileSync,
+  rmSync,
 } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -41,9 +42,16 @@ const databaseSchema = z.object({
 });
 export type Database = z.infer<typeof databaseSchema>;
 export function atomicWrite(file: string, data: string) {
-  const temporary = `${file}.tmp`;
-  writeFileSync(temporary, data, { mode: 0o600 });
-  renameSync(temporary, file);
+  // Exports can target shared folders: a unique, exclusively created temporary
+  // file never follows a planted symlink or reuses another file's permissions.
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  try {
+    writeFileSync(temporary, data, { mode: 0o600, flag: "wx" });
+    renameSync(temporary, file);
+  } catch (error) {
+    rmSync(temporary, { force: true });
+    throw error;
+  }
 }
 export class Store {
   data: Database;

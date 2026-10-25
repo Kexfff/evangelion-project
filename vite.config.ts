@@ -6,8 +6,14 @@ export default defineConfig({
     {
       name: "dev-refresh-csp",
       apply: "serve",
+      // Dev-only CSP relaxations: React refresh's inline preamble and the HMR socket.
       transformIndexHtml: (html) =>
-        html.replace("script-src 'self'", "script-src 'self' 'unsafe-inline'"),
+        html
+          .replace("script-src 'self'", "script-src 'self' 'unsafe-inline'")
+          .replace(
+            "connect-src 'self' eva: blob:",
+            "connect-src 'self' eva: blob: ws://127.0.0.1:5173",
+          ),
     },
   ],
   base: "./",

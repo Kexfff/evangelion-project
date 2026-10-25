@@ -68,10 +68,21 @@ export function providerSignal(signal?: AbortSignal) {
 function headers(key: string): Record<string, string> {
   return key ? { Authorization: `Bearer ${key}` } : {};
 }
-// Inspect only bounded error JSON to identify a known compatibility issue.
-// No raw error body, message, key, URL or prompt is retained in the exception.
-async function rejectedTokenLimit(response: Response) {
-  if (!response.body) return;
+const JSON_LIMIT = 32 * 1024 * 1024;
+const AUDIO_LIMIT = 100 * 1024 * 1024;
+export class ResponseTooLargeError extends Error {
+  constructor() {
+    super("The provider response is too large.");
+  }
+}
+// Providers are user-configured, but a broken or hostile endpoint must not be
+// able to exhaust main-process memory with an endless body.
+async function readBounded(response: Response, limit: number) {
+  if (Number(response.headers.get("content-length")) > limit) {
+    await response.body?.cancel();
+    throw new ResponseTooLargeError();
+  }
+  if (!response.body) return new Uint8Array();
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
@@ -80,16 +91,33 @@ async function rejectedTokenLimit(response: Response) {
       const { value, done } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > 16384) return;
+      if (size > limit) {
+        await reader.cancel().catch(() => {});
+        throw new ResponseTooLargeError();
+      }
       chunks.push(value);
     }
-    const bytes = new Uint8Array(size);
-    let at = 0;
-    for (const chunk of chunks) {
-      bytes.set(chunk, at);
-      at += chunk.length;
-    }
-    const error = JSON.parse(new TextDecoder().decode(bytes))?.error;
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(size);
+  let at = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, at);
+    at += chunk.length;
+  }
+  return bytes;
+}
+async function readJson(response: Response, limit = JSON_LIMIT) {
+  return JSON.parse(
+    new TextDecoder().decode(await readBounded(response, limit)),
+  );
+}
+// Inspect only bounded error JSON to identify a known compatibility issue.
+// No raw error body, message, key, URL or prompt is retained in the exception.
+async function rejectedTokenLimit(response: Response) {
+  try {
+    const error = (await readJson(response, 16384))?.error;
     const message = typeof error?.message === "string" ? error.message : "";
     if (
       !/not supported|unsupported|unknown (?:parameter|field)|unrecognized|unexpected (?:argument|keyword|field)|not (?:allowed|permitted)/i.test(
@@ -109,9 +137,6 @@ async function rejectedTokenLimit(response: Response) {
     }
   } catch {
     /* Unknown/oversized errors must not trigger a compatibility retry. */
-  } finally {
-    await reader.cancel().catch(() => {});
-    reader.releaseLock();
   }
 }
 async function checked(response: Response, inspectTokenLimit = false) {
@@ -232,7 +257,7 @@ export class OpenAICompatibleProvider {
         { signal: providerSignal(), redirect: "error" },
       ),
     );
-    const data = await response.json();
+    const data = await readJson(response);
     if (
       !Array.isArray(data?.data?.endpoints) ||
       data.data.endpoints.length > 500
@@ -289,7 +314,7 @@ export class OpenAICompatibleProvider {
         signal: providerSignal(),
       }),
     );
-    const data = await response.json();
+    const data = await readJson(response);
     if (!Array.isArray(data.data))
       throw new Error(
         "This provider does not return an OpenAI-compatible model list. Enter a model ID manually.",
@@ -327,7 +352,7 @@ export class OpenAICompatibleProvider {
         signal: providerSignal(signal),
       }),
     );
-    const data = await response.json();
+    const data = await readJson(response);
     if (!Array.isArray(data.data) || data.data.length !== input.length)
       throw new Error("Embedding provider returned an incomplete batch.");
     const sorted = [...data.data].sort((a, b) => a.index - b.index);
@@ -399,7 +424,7 @@ export class OpenAICompatibleProvider {
         onUsage,
         options.requireComplete,
       );
-    const data = await response.json().catch((error: unknown) => {
+    const data = await readJson(response).catch((error: unknown) => {
       if (error instanceof SyntaxError)
         throw new ProviderChatError(
           "invalid-response",
@@ -483,7 +508,7 @@ export class OpenAICompatibleProvider {
           signal: providerSignal(signal),
         }),
       );
-      const data = await response.json();
+      const data = await readJson(response);
       onUsage(usageOf(data.usage));
       signal.throwIfAborted();
       const message = data.choices?.[0]?.message;
@@ -582,7 +607,7 @@ export class OpenAICompatibleProvider {
     );
     if (response.headers.get("content-type")?.includes("text/event-stream"))
       return consumeTranscription(response, onText ?? (() => {}));
-    const data = await response.json();
+    const data = await readJson(response);
     if (typeof data.text !== "string" || !data.text.trim())
       throw new Error(
         "No speech was recognized. Try speaking a little closer to the microphone.",
@@ -603,7 +628,7 @@ export class OpenAICompatibleProvider {
       speed,
       signal,
     );
-    const bytes = await response.arrayBuffer();
+    const bytes = (await readBounded(response, AUDIO_LIMIT)).buffer;
     if (!bytes.byteLength)
       throw new Error("The speech provider returned empty audio.");
     return bytes;
