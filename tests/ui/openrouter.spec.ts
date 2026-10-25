@@ -66,7 +66,7 @@ test("TTS audio format persists and stays under user control when the model chan
   await expect(format).toHaveValue("pcm");
   const tts = page.locator("section").filter({
     has: page.getByRole("heading", {
-      name: "Speak · Voice synthesis",
+      name: "Speak",
       exact: true,
     }),
   });

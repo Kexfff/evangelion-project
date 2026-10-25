@@ -202,7 +202,7 @@ test("exposes sensitivity, VAD, device and semantic-memory controls", async ({
     page.getByRole("button", { name: "Fetch models", exact: true }),
   ).toHaveCount(4);
   await expect(
-    page.getByRole("heading", { name: "Remember · Embeddings" }),
+    page.getByRole("heading", { name: "Remember", exact: true }),
   ).toBeVisible();
 });
 

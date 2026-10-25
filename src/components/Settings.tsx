@@ -17,6 +17,7 @@ import {
   MessageCircleHeart,
   Plus,
   Puzzle,
+  RefreshCw,
   RotateCcw,
   Save,
   Settings2,
@@ -106,6 +107,54 @@ const navigation = [
   },
 ] as const;
 type Tab = (typeof navigation)[number]["id"];
+const providerInfo: Record<
+  ProviderKind,
+  { title: string; subtitle: string; endpoint: string; icon: typeof Brain }
+> = {
+  llm: {
+    title: "Think",
+    subtitle:
+      "Her language model. OpenRouter by default; any Chat Completions–compatible service works.",
+    endpoint: "…/chat/completions",
+    icon: Brain,
+  },
+  asr: {
+    title: "Listen",
+    subtitle:
+      "Speech recognition: turns your voice into text. Any OpenAI-compatible audio service, local or hosted.",
+    endpoint: "…/audio/transcriptions",
+    icon: AudioLines,
+  },
+  tts: {
+    title: "Speak",
+    subtitle:
+      "Voice synthesis: gives her a voice. Any OpenAI-compatible speech service, local or hosted.",
+    endpoint: "…/audio/speech",
+    icon: Volume2,
+  },
+  embedding: {
+    title: "Remember",
+    subtitle:
+      "Embeddings for recalling memories by meaning. Needs its own API key, even on OpenRouter.",
+    endpoint: "…/embeddings",
+    icon: BookHeart,
+  },
+};
+// Plain http is fine for this computer or a local network service, but keys
+// and conversations sent to a remote host that way travel unencrypted.
+function isUnencryptedRemote(baseUrl: string) {
+  try {
+    const url = new URL(baseUrl);
+    return (
+      url.protocol === "http:" &&
+      !/^(localhost|127\.\d+\.\d+\.\d+|\[::1\]|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|[^.]+\.local)$/.test(
+        url.hostname,
+      )
+    );
+  } catch {
+    return false;
+  }
+}
 function Field({
   label,
   hint,
@@ -184,18 +233,21 @@ function Section({
   title,
   subtitle,
   actions,
+  icon,
   children,
   className = "",
 }: {
   title: string;
   subtitle?: string;
   actions?: ReactNode;
+  icon?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
   return (
     <section className={`card ${className}`}>
       <div className={`section-heading ${actions ? "with-actions" : ""}`}>
+        {icon}
         <div>
           <h2>{title}</h2>
           {subtitle && <p>{subtitle}</p>}
@@ -648,58 +700,55 @@ export function Settings() {
               <div className="info-banner">
                 <ShieldCheck size={18} />
                 <div>
-                  Credentials stay in the desktop process.
+                  Your API keys stay on this computer.
                   <small>
                     {snapshot.secretStorage === "encrypted"
-                      ? "API keys are encrypted using your operating system’s secure storage."
-                      : "Keys persist in a local encrypted file. Its key is stored beside it with owner-only permissions; this is not OS-keyring protection."}{" "}
-                    Audio and conversation context are sent to the providers you
-                    configure.
+                      ? "They’re encrypted with your operating system’s secure storage."
+                      : "They’re kept in a local encrypted file whose key sits beside it with owner-only permissions — not your OS keyring."}{" "}
+                    Your voice and conversations are sent to the services you
+                    set up here.
                   </small>
                 </div>
               </div>
               {providerKinds.map((kind) => {
                 const provider = draft.providers[kind];
+                const info = providerInfo[kind];
+                const Icon = info.icon;
                 return (
                   <Section
                     key={kind}
-                    title={
-                      kind === "llm"
-                        ? "Think · Language model"
-                        : kind === "asr"
-                          ? "Listen · Speech recognition"
-                          : kind === "tts"
-                            ? "Speak · Voice synthesis"
-                            : "Remember · Embeddings"
+                    className="provider-card"
+                    title={info.title}
+                    subtitle={info.subtitle}
+                    actions={
+                      <label className="provider-switch">
+                        {provider.enabled ? "On" : "Off"}
+                        <input
+                          className="toggle"
+                          type="checkbox"
+                          aria-label={`Use the ${info.title} service`}
+                          checked={provider.enabled}
+                          onChange={(e) =>
+                            update((d) => {
+                              d.providers[kind].enabled = e.target.checked;
+                            })
+                          }
+                        />
+                      </label>
                     }
-                    subtitle={
-                      kind === "llm"
-                        ? "OpenRouter by default. Any Chat Completions compatible endpoint is supported."
-                        : kind === "embedding"
-                          ? "OpenAI-compatible embeddings for meaning-based memory. Configure its own API key, even if using OpenRouter for both."
-                          : "Use a separate OpenAI-compatible audio service, local or hosted."
+                    icon={
+                      <span className={`step-icon ${kind}`}>
+                        <Icon size={18} />
+                      </span>
                     }
                   >
-                    <Toggle
-                      label="Enable provider"
-                      checked={provider.enabled}
-                      onChange={(v) =>
-                        update((d) => {
-                          d.providers[kind].enabled = v;
-                        })
-                      }
-                    />
                     <div className="form-grid">
                       <Field
                         label="API base URL"
                         hint={
-                          kind === "llm"
-                            ? "Appends /chat/completions"
-                            : kind === "asr"
-                              ? "Appends /audio/transcriptions"
-                              : kind === "tts"
-                                ? "Appends /audio/speech"
-                                : "Appends /embeddings"
+                          isUnencryptedRemote(provider.baseUrl)
+                            ? undefined
+                            : `Requests go to ${info.endpoint}`
                         }
                       >
                         <input
@@ -719,6 +768,13 @@ export function Settings() {
                           }
                           placeholder="https://provider.example/v1"
                         />
+                        {isUnencryptedRemote(provider.baseUrl) && (
+                          <small className="field-warning">
+                            This address isn’t encrypted. Your API key and
+                            conversations would travel in plain text — use https
+                            unless it’s on your own network.
+                          </small>
+                        )}
                       </Field>
                       <Field label="Model ID">
                         <input
@@ -748,8 +804,8 @@ export function Settings() {
                         label="API key"
                         hint={
                           provider.hasKey
-                            ? "A key is saved. Leave untouched to keep it; use Clear to remove it."
-                            : "Optional for local services without authentication."
+                            ? "A key is saved. Leave this empty to keep it, or Clear to remove it."
+                            : "Optional for local services without a key."
                         }
                       >
                         <div className="input-action">
@@ -759,8 +815,8 @@ export function Settings() {
                             value={keys[kind] ?? ""}
                             placeholder={
                               provider.hasKey
-                                ? "•••••••• (stored)"
-                                : "Enter API key"
+                                ? "•••••••• (saved)"
+                                : "Paste your API key"
                             }
                             onChange={(e) => {
                               setKeys((k) => ({
@@ -782,11 +838,26 @@ export function Settings() {
                       </Field>
                       {kind === "tts" && (
                         <Field
+                          label="Voice ID"
+                          hint="A voice your speech service supports."
+                        >
+                          <input
+                            value={provider.voice}
+                            onChange={(e) =>
+                              update((d) => {
+                                d.providers.tts.voice = e.target.value;
+                              })
+                            }
+                          />
+                        </Field>
+                      )}
+                      {kind === "tts" && (
+                        <Field
                           label="Audio format"
                           hint={
                             provider.responseFormat === "pcm"
-                              ? "PCM uses 16-bit little-endian audio and buffers each speech chunk. Sample rate/channels come from the response header; defaults are 24 kHz mono."
-                              : "MP3 supports streaming playback. Choose PCM if your model requires it."
+                              ? "PCM is 16-bit little-endian and plays once each sentence has arrived. Sample rate and channels come from the response (default 24 kHz mono)."
+                              : "MP3 starts playing while it streams. Choose PCM if your model requires it."
                           }
                         >
                           <select
@@ -801,21 +872,6 @@ export function Settings() {
                             <option value="mp3">MP3</option>
                             <option value="pcm">PCM</option>
                           </select>
-                        </Field>
-                      )}
-                      {kind === "tts" && (
-                        <Field
-                          label="Voice ID"
-                          hint="Use a voice supported by your speech server."
-                        >
-                          <input
-                            value={provider.voice}
-                            onChange={(e) =>
-                              update((d) => {
-                                d.providers.tts.voice = e.target.value;
-                              })
-                            }
-                          />
                         </Field>
                       )}
                     </div>
@@ -843,32 +899,29 @@ export function Settings() {
                         disabled={working || dirty}
                         title={
                           dirty
-                            ? "Save your provider configuration first"
-                            : "Fetch model IDs from this provider"
+                            ? "Save your changes first"
+                            : "Fetch model IDs from this service"
                         }
                         onClick={() =>
                           void perform(async () => {
                             const ids = await bridge.listModels(kind);
                             setModels((old) => ({ ...old, [kind]: ids }));
                             setNotice(
-                              `${ids.length} model IDs fetched. Choose from Model ID suggestions or enter one manually.`,
+                              `${ids.length} model IDs fetched. Pick one from the Model ID suggestions or type your own.`,
                             );
                           })
                         }
                       >
+                        <RefreshCw size={15} />
                         Fetch models
                       </button>
-                      <span>
-                        Test sends a small request and may incur provider
-                        charges.
-                      </span>
                       <button
                         className="button secondary"
                         disabled={working || dirty || !provider.enabled}
                         title={
                           dirty
                             ? "Save your changes first"
-                            : "Test saved configuration"
+                            : "Test the saved settings"
                         }
                         onClick={() =>
                           void perform(async () => {
@@ -879,6 +932,11 @@ export function Settings() {
                         <Activity size={15} />
                         Test connection
                       </button>
+                      <span>
+                        {dirty
+                          ? "Save your changes to fetch models or test."
+                          : "A test sends one small request, which your service may charge for."}
+                      </span>
                     </div>
                   </Section>
                 );

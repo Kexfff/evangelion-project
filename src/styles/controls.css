@@ -409,3 +409,9 @@ details > summary::-webkit-details-marker {
     grid-template-columns: 1fr;
   }
 }
+.section-heading > .step-icon {
+  flex-shrink: 0;
+}
+.section-heading.with-actions > .step-icon + div {
+  margin-right: auto;
+}

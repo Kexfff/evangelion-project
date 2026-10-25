@@ -1,0 +1,125 @@
+/* AI services page: provider cards and OpenRouter routing. */
+.provider-card .section-heading.with-actions {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+.provider-card .section-heading > div:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+.provider-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.field-warning {
+  color: var(--butter);
+}
+.provider-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+.provider-actions > span {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: var(--text-3);
+}
+
+/* OpenRouter routing (model provider choice) */
+.openrouter-routing {
+  margin: 4px 0 20px;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+.openrouter-routing-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.openrouter-routing h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-md);
+}
+.openrouter-routing h3 svg {
+  color: var(--rose);
+}
+.openrouter-routing p {
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+.openrouter-routing-note,
+.openrouter-routing-heading p {
+  color: var(--text-3);
+}
+.openrouter-routing .field {
+  margin-bottom: 10px;
+}
+.openrouter-endpoints {
+  display: grid;
+  gap: 8px;
+  max-height: 320px;
+  margin-top: 12px;
+  overflow-y: auto;
+}
+.openrouter-endpoint {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.openrouter-endpoint:hover {
+  border-color: var(--line-strong);
+}
+.openrouter-endpoint[data-selected] {
+  border-color: color-mix(in srgb, var(--rose) 55%, var(--line));
+  background: color-mix(in srgb, var(--rose) 8%, var(--surface-1));
+}
+.openrouter-endpoint > input {
+  margin-top: 3px;
+}
+.openrouter-endpoint > div {
+  min-width: 0;
+}
+.openrouter-endpoint strong,
+.openrouter-endpoint code,
+.openrouter-endpoint small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.openrouter-endpoint code {
+  margin: 4px 0;
+  padding: 0;
+  background: none;
+  color: var(--rose);
+}
+.openrouter-endpoint small {
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+@media (max-width: 760px) {
+  .provider-actions > span {
+    margin-left: 0;
+  }
+}
