@@ -15,6 +15,7 @@ import { Avatar } from "./Avatar";
 import { bridge } from "../bridge";
 import { useCompanion } from "../useCompanion";
 import { visibleAssistantText } from "../shared/speech-cues";
+import { pttLabel } from "../shared/ptt";
 import { readImage } from "../images";
 import {
   IMAGE_ACCEPT,
@@ -436,7 +437,9 @@ export function Companion() {
               : settings.voice.vadEnabled
                 ? "Hands-free mic on · pause to send · click mic to stop"
                 : "Microphone on · up to 60 seconds"
-            : "A little more present, every conversation."}
+            : settings.voice.ptt.enabled && settings.voice.ptt.key
+              ? `Type, or ${settings.voice.ptt.mode === "hold" ? "hold" : "press"} ${pttLabel(settings.voice.ptt)} to talk`
+              : "Type a message, or click the mic to talk"}
         </div>
       </div>
     </main>

@@ -14,7 +14,7 @@ import "./styles/voice.css";
 import "./styles/memory.css";
 import "./styles/inner-life.css";
 import "./styles/integrations.css";
-import "./styles.css";
+import "./styles/companion.css";
 const companion =
   new URLSearchParams(window.location.search).get("window") === "companion";
 document.documentElement.dataset.window = companion ? "companion" : "settings";
