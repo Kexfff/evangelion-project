@@ -42,6 +42,8 @@ npm run format         # prettier (there is no linter)
 
 The renderer (`src/`) is one Vite/React app serving two windows. `src/main.tsx` picks `Companion` (`?window=companion`, transparent avatar window) or `Settings`.
 
+**Renderer styling.** `src/styles/tokens.css` is the only place raw colors, radii, shadows and font sizes are defined (soft & cozy palette: plum surfaces, cream text, rose accent). Every other stylesheet uses `var(--token)`, with `color-mix()` for tints. `base.css` (element defaults), `controls.css` (buttons, cards, fields, switches, notices) and `shell.css` (sidebar, page heading, floating save bar) are shared. The rest are one file per Settings page (`home`, `character`, `services`, `voice`, `memory`, `inner-life`, `integrations`) plus `companion.css`, all imported in order from `src/main.tsx`. Settings sections and their headings are defined in the `navigation` array at the top of `src/components/Settings.tsx`; tests click nav buttons by those labels. Any checkbox inside a `.toggle-row` renders as a switch. When a hint sits inside a `<label>`, give the control `aria-label` plus `aria-describedby` for the hint, so the hint doesn't become part of its accessible name. `node scripts/screenshots.mjs <dir> [w] [h] [--full]` captures every page from a running `npm run dev:ui` (save into the gitignored `preview-shots/`).
+
 **IPC contract.** Adding a renderer↔main call touches four places that must stay in sync:
 
 1. The `Bridge` type in `src/shared/schema.ts`.

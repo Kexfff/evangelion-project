@@ -6,7 +6,7 @@ Sprint 4's MCP foundation landed in v0.4.0. Telegram remains a bundled chat chan
 
 ## Connect a server
 
-1. Open **Settings → Plugins & MCP → MCP connections → Add MCP connection**.
+1. Open **Settings → Integrations → MCP connections → Add MCP connection**.
 2. Give it a unique ID and a name. The connection is bound to the currently selected character.
 3. Choose **Local program (stdio)** or **Remote endpoint (Streamable HTTP)**.
 4. For a local server, supply its executable and arguments as a JSON array. Prefer an absolute executable path. Arguments are passed directly without shell expansion. For HTTP, supply an HTTPS MCP endpoint; plain HTTP is allowed only on loopback (`localhost`, `127.0.0.1`, or `::1`). Redirects, URL credentials, query strings and fragments are rejected.
@@ -30,7 +30,7 @@ Grants bind to the connection, character, tool name and a fingerprint of the dis
 
 **Bundled Minecraft exception (v0.4.6):** its known app-shipped game tools default to Allow and preserve explicit Blocked/Ask choices by stable tool name across description changes and connection saves for the same character. These are the sole Minecraft action permissions; there is no second block/chat gate. Unknown tool names, other server IDs and non-bundled endpoints do not inherit this exception. This does not loosen permissions for external MCP servers or PC access.
 
-Pending approvals appear in **Plugins & MCP**; banners in other settings tabs and the companion point to them. An approval is not a standing grant. Arguments may contain private information, so inspect them before sending them to an external service.
+Pending approvals appear in **Integrations**; banners in other settings tabs and the companion point to them. An approval is not a standing grant. Arguments may contain private information, so inspect them before sending them to an external service.
 
 Only ordinary user-initiated conversations receive general external tools. Proactive messages and ordinary scheduled reminders still cannot call external tools. The separate game coordinator can continue authorized Minecraft goals, including explicitly enabled schedules/survival reactions; it cannot access arbitrary external MCP servers or PC tools. Its steps pass through the same schema validation, grants, approvals and audit. Tool-capable LLM support is required. While tools are available, the existing bounded, non-streaming chat tool loop speaks only the final answer, not intermediate planning or tool JSON. Normal chat remains streaming when no tools are available.
 

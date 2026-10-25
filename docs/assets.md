@@ -8,7 +8,7 @@ The bundled model is [`AvatarSample_B.vrm`](../AvatarSample_B.vrm), a VRM 0.x mo
 
 The app keeps the stable `builtin:eva` asset identifier for compatibility. New character defaults and existing characters that use the built-in avatar now resolve to this model, in development, browser preview, and packaged Electron builds. The character's name/personality remain unchanged. No settings or memories need to be migrated.
 
-Imported `custom:` avatars are not replaced. To use the default for such a character, open **Character cards → Use bundled avatar**, then **Save changes**. Existing lighting, camera, and animation preferences are preserved; adjust them in Avatar studio if you prefer different framing for the new model.
+Imported `custom:` avatars are not replaced. To use the default for such a character, open **Appearance → Use bundled avatar**, then **Save changes**. Existing lighting, camera, and animation preferences are preserved; adjust them in Appearance if you prefer different framing for the new model.
 
 ## Embedded metadata
 

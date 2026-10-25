@@ -33,7 +33,7 @@ npm install
 npm run dev
 ```
 
-Open **Settings → Providers**, configure your services, and save. No LLM or audio inference server is bundled. [Full setup guide →](docs/getting-started.md)
+Open **Settings → AI services**, configure your services, and save. No LLM or audio inference server is bundled. [Full setup guide →](docs/getting-started.md)
 
 ## Explore
 
