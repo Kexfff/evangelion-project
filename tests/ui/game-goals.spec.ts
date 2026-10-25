@@ -132,7 +132,7 @@ test("game goals queue, pause, reconcile, cancel and save independent budgets", 
   );
   await page.goto("/?window=settings");
   await page
-    .getByRole("button", { name: "Plugins & MCP", exact: true })
+    .getByRole("button", { name: "Integrations", exact: true })
     .click();
   await expect(
     page.getByRole("heading", { name: "Game goals", exact: true }),

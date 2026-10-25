@@ -10,7 +10,7 @@ test("Minecraft preview explains allow-by-default and has no duplicate block/cha
 }) => {
   await page.goto("/?window=settings");
   await page
-    .getByRole("button", { name: "Plugins & MCP", exact: true })
+    .getByRole("button", { name: "Integrations", exact: true })
     .click();
   await expect(
     page.getByRole("heading", { name: "Minecraft companion" }),
@@ -230,7 +230,7 @@ test("Minecraft jobs, stop control and world landmarks stay separate from chat",
   }, defaultSettings);
   await page.goto("/?window=settings");
   await page
-    .getByRole("button", { name: "Plugins & MCP", exact: true })
+    .getByRole("button", { name: "Integrations", exact: true })
     .click();
   await expect(page.getByText("follow · running")).toBeVisible();
   await page

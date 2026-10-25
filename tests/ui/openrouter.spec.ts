@@ -49,7 +49,7 @@ test.beforeEach(async ({ page }) => {
     });
   }, defaultSettings);
   await page.goto("/?window=settings");
-  await page.getByRole("button", { name: "Providers", exact: true }).click();
+  await page.getByRole("button", { name: "AI services", exact: true }).click();
 });
 
 test("TTS audio format persists and stays under user control when the model changes", async ({
@@ -62,7 +62,7 @@ test("TTS audio format persists and stays under user control when the model chan
   await format.selectOption("pcm");
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await page.reload();
-  await page.getByRole("button", { name: "Providers", exact: true }).click();
+  await page.getByRole("button", { name: "AI services", exact: true }).click();
   await expect(format).toHaveValue("pcm");
   const tts = page
     .locator("section")
@@ -77,7 +77,7 @@ test("TTS audio format persists and stays under user control when the model chan
   await format.selectOption("mp3");
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await page.reload();
-  await page.getByRole("button", { name: "Providers", exact: true }).click();
+  await page.getByRole("button", { name: "AI services", exact: true }).click();
   await expect(format).toHaveValue("mp3");
 });
 
@@ -101,7 +101,7 @@ test("fetches for the draft model, selects exact endpoints and retains per-model
   ).toHaveValue("only");
   await page.getByRole("button", { name: "Save changes" }).click();
   await page.reload();
-  await page.getByRole("button", { name: "Providers", exact: true }).click();
+  await page.getByRole("button", { name: "AI services", exact: true }).click();
   await expect(
     page.getByLabel("Use deepinfra/fp4", { exact: true }),
   ).toBeChecked();

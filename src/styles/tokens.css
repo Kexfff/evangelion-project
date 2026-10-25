@@ -43,15 +43,18 @@
   --radius-pill: 999px;
 
   /* Depth */
-  --shadow-soft: 0 1px 0 color-mix(in srgb, var(--text-1) 4%, transparent) inset,
+  --shadow-soft:
+    0 1px 0 color-mix(in srgb, var(--text-1) 4%, transparent) inset,
     0 10px 30px -14px rgb(0 0 0 / 0.55);
-  --shadow-lift: 0 1px 0 color-mix(in srgb, var(--text-1) 6%, transparent) inset,
+  --shadow-lift:
+    0 1px 0 color-mix(in srgb, var(--text-1) 6%, transparent) inset,
     0 18px 44px -16px rgb(0 0 0 / 0.65);
   --focus-ring: 0 0 0 3px color-mix(in srgb, var(--rose) 40%, transparent);
 
   /* Type scale (14px base; nothing smaller than 12px) */
-  --font-body: "Nunito Variable", Nunito, ui-rounded, "SF Pro Rounded",
-    system-ui, sans-serif;
+  --font-body:
+    "Nunito Variable", Nunito, ui-rounded, "SF Pro Rounded", system-ui,
+    sans-serif;
   --font-mono: ui-monospace, "JetBrains Mono", "SFMono-Regular", monospace;
   --text-xs: 12px;
   --text-sm: 13px;

@@ -7,7 +7,7 @@ test("plugin preview explains desktop installation and trust boundaries", async 
 }) => {
   await page.goto("/?window=settings");
   await page
-    .getByRole("button", { name: "Plugins & MCP", exact: true })
+    .getByRole("button", { name: "Integrations", exact: true })
     .click();
   await page.getByRole("button", { name: "Telegram", exact: true }).click();
   await expect(
@@ -75,7 +75,7 @@ test("installed plugin UI defaults off, scopes optional permissions and validate
   }, data);
   await page.goto("/?window=settings");
   await page
-    .getByRole("button", { name: "Plugins & MCP", exact: true })
+    .getByRole("button", { name: "Integrations", exact: true })
     .click();
   await expect(
     page.getByLabel("Enable Telegram", { exact: true }),

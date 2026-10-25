@@ -41,7 +41,7 @@ test("imported cards appear immediately, stay inactive and survive the next sett
   }, structuredClone(defaultSettings));
   await page.goto("/?window=settings");
   await page
-    .getByRole("button", { name: "Character cards", exact: true })
+    .getByRole("button", { name: "Personality", exact: true })
     .click();
   const name = page.getByLabel("Name", { exact: true });
   await expect(name).toHaveValue(defaultSettings.characters[0].name);
@@ -145,7 +145,7 @@ test("memory tools default to encrypted exports and expose deliberate cleanup", 
   page,
 }) => {
   await page.goto("/?window=settings");
-  await page.getByRole("button", { name: "Memory", exact: true }).click();
+  await page.getByRole("button", { name: "Memories", exact: true }).click();
   await expect(
     page.getByText("Inside her memory", { exact: true }),
   ).toBeVisible();

@@ -420,7 +420,7 @@ try {
     historyWindow.locator(".overview-statistics dd strong"),
   ).toHaveText(["1", "2", "1"]);
   await historyWindow
-    .getByRole("button", { name: "Memory", exact: true })
+    .getByRole("button", { name: "Memories", exact: true })
     .click();
   await historyWindow
     .getByRole("button", { name: "Conversation history", exact: true })
@@ -674,7 +674,7 @@ try {
     .windows()
     .find((w) => w.url().includes("window=settings"));
   await pluginWindow
-    .getByRole("button", { name: "Plugins & MCP", exact: true })
+    .getByRole("button", { name: "Integrations", exact: true })
     .click();
   await pluginWindow
     .getByRole("button", { name: "Telegram", exact: true })
@@ -933,7 +933,7 @@ try {
     .windows()
     .find((w) => w.url().includes("window=settings"));
   await mcpSettings
-    .getByRole("button", { name: "Plugins & MCP", exact: true })
+    .getByRole("button", { name: "Integrations", exact: true })
     .click();
   await mcpSettings.getByRole("button", { name: "Approve once" }).click();
   await scheduledWindow.evaluate(() => window.mcpFixtureTurn);

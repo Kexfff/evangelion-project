@@ -4,6 +4,9 @@ import { Companion } from "./components/Companion";
 import { Settings } from "./components/Settings";
 import "@fontsource-variable/nunito";
 import "./styles/tokens.css";
+import "./styles/base.css";
+import "./styles/controls.css";
+import "./styles/shell.css";
 import "./styles.css";
 const companion =
   new URLSearchParams(window.location.search).get("window") === "companion";

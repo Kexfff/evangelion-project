@@ -75,7 +75,7 @@ test("activity loads ten entries, pages on demand, exposes diagnostics and expor
   );
   await page.goto("/?window=settings");
   await page
-    .getByRole("button", { name: "Consciousness", exact: true })
+    .getByRole("button", { name: "Inner life", exact: true })
     .click();
   const log = page.getByRole("region", { name: "Activity log", exact: true });
   await expect(log.getByRole("article")).toHaveCount(10);
@@ -129,7 +129,7 @@ test("exposes opt-in autonomy, quiet hours, state controls and validated setting
 }) => {
   await page.goto("/?window=settings");
   await page
-    .getByRole("button", { name: "Consciousness", exact: true })
+    .getByRole("button", { name: "Inner life", exact: true })
     .click();
   await expect(
     page.getByRole("checkbox", { name: "Enable autonomy", exact: true }),
@@ -150,10 +150,10 @@ test("exposes opt-in autonomy, quiet hours, state controls and validated setting
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.locator(".success-notice")).toContainText("Settings saved");
   await page
-    .getByRole("button", { name: "Voice & audio", exact: true })
+    .getByRole("button", { name: "Her voice", exact: true })
     .click();
   await page
-    .getByRole("button", { name: "Consciousness", exact: true })
+    .getByRole("button", { name: "Inner life", exact: true })
     .click();
   await expect(
     page.getByRole("checkbox", { name: "Enable autonomy", exact: true }),
@@ -171,7 +171,7 @@ test("manual task form is explicit about exact time and desktop requirements", a
 }) => {
   await page.goto("/?window=settings");
   await page
-    .getByRole("button", { name: "Consciousness", exact: true })
+    .getByRole("button", { name: "Inner life", exact: true })
     .click();
   await page.getByLabel("Reminder title", { exact: true }).fill("Tea break");
   await page

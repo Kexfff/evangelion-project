@@ -152,7 +152,7 @@ async function openHistory(
     { snapshot, messages, fail: options.fail ?? false },
   );
   await page.goto("/?window=settings");
-  await page.getByRole("button", { name: "Memory", exact: true }).click();
+  await page.getByRole("button", { name: "Memories", exact: true }).click();
   await page
     .getByRole("button", { name: "Conversation history", exact: true })
     .click();

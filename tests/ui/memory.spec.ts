@@ -113,7 +113,7 @@ async function openMemory(page: Page, count = 8) {
     });
   }, snapshot);
   await page.goto("/?window=settings");
-  await page.getByRole("button", { name: "Memory", exact: true }).click();
+  await page.getByRole("button", { name: "Memories", exact: true }).click();
 }
 
 test("memory constellation explores real facts locally; library filters and searches", async ({

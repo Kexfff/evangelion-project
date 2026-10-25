@@ -7,7 +7,7 @@ test("MCP preview explains trust and cannot start external programs", async ({
 }) => {
   await page.goto("/?window=settings");
   await page
-    .getByRole("button", { name: "Plugins & MCP", exact: true })
+    .getByRole("button", { name: "Integrations", exact: true })
     .click();
   await expect(
     page.getByRole("heading", { name: "MCP connections" }),
@@ -158,7 +158,7 @@ test("MCP grants default blocked, allow needs confirmation, and editing retains 
 }) => {
   await fixture(page);
   await page
-    .getByRole("button", { name: "Plugins & MCP", exact: true })
+    .getByRole("button", { name: "Integrations", exact: true })
     .click();
   const permission = page.getByLabel("Permission for fixture/echo");
   await page
@@ -243,7 +243,7 @@ test("integration views preserve drafts, filter tools and fit narrow windows", a
 }) => {
   await fixture(page);
   await page
-    .getByRole("button", { name: "Plugins & MCP", exact: true })
+    .getByRole("button", { name: "Integrations", exact: true })
     .click();
   await expect(page.locator(".savebar")).toBeHidden();
   await page

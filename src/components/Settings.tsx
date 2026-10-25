@@ -5,21 +5,21 @@ import {
   Activity,
   ArrowUpFromLine,
   AudioLines,
-  Box,
+  BookHeart,
   Brain,
   Check,
   ChevronRight,
   CircleHelp,
   Cpu,
-  ExternalLink,
   Heart,
-  LayoutDashboard,
-  MessageCircle,
+  House,
+  MessageCircleHeart,
   Plus,
   Puzzle,
   RotateCcw,
   Save,
   Settings2,
+  Shirt,
   ShieldCheck,
   Sparkles,
   UserRound,
@@ -44,27 +44,68 @@ import {
 import { Avatar } from "./Avatar";
 import { VoiceSettings } from "./VoiceSettings";
 
+// Sidebar order, labels and the heading each page shows.
 const navigation = [
-  { id: "overview", label: "Overview", icon: LayoutDashboard },
-  { id: "character", label: "Character cards", icon: UserRound },
-  { id: "providers", label: "Providers", icon: Cpu },
-  { id: "voice", label: "Voice & audio", icon: AudioLines },
-  { id: "vrm", label: "Avatar studio", icon: Box },
-  { id: "memory", label: "Memory", icon: Brain },
-  { id: "consciousness", label: "Consciousness", icon: Sparkles },
-  { id: "plugins", label: "Plugins & MCP", icon: Puzzle },
+  {
+    id: "overview",
+    label: "Home",
+    icon: House,
+    title: "Welcome home",
+    description: "Everything about your companion, in one cozy place.",
+  },
+  {
+    id: "character",
+    label: "Personality",
+    icon: UserRound,
+    title: "Who she is",
+    description: "Her name, her personality and the way she talks to you.",
+  },
+  {
+    id: "providers",
+    label: "AI services",
+    icon: Cpu,
+    title: "How she thinks, hears and speaks",
+    description:
+      "Connect the AI services behind her mind and voice. Keys stay on this computer.",
+  },
+  {
+    id: "voice",
+    label: "Her voice",
+    icon: AudioLines,
+    title: "Her voice",
+    description: "Microphone, speech and the rhythm of your conversations.",
+  },
+  {
+    id: "vrm",
+    label: "Appearance",
+    icon: Shirt,
+    title: "How she looks",
+    description: "Her avatar, framing, lighting and little movements.",
+  },
+  {
+    id: "memory",
+    label: "Memories",
+    icon: BookHeart,
+    title: "What she remembers",
+    description: "The facts and conversations she carries with her.",
+  },
+  {
+    id: "consciousness",
+    label: "Inner life",
+    icon: Sparkles,
+    title: "Her inner life",
+    description:
+      "Simulated moods, initiative and reminders — always under your control.",
+  },
+  {
+    id: "plugins",
+    label: "Integrations",
+    icon: Puzzle,
+    title: "Integrations",
+    description: "Play Minecraft together, chat on Telegram and connect tools.",
+  },
 ] as const;
 type Tab = (typeof navigation)[number]["id"];
-const descriptions: Record<Tab, string> = {
-  overview: "A home for your digital companion. Make it feel like her.",
-  character: "Her identity, her perspective, her way of being.",
-  providers: "Connect the services that let her listen, think, and speak.",
-  voice: "Find the rhythm of your conversations.",
-  vrm: "A little light. A little movement. A lot of personality.",
-  memory: "The things that stay with her, long after a conversation.",
-  consciousness: "A rhythm of her own, with you in control.",
-  plugins: "A foundation for a much bigger world.",
-};
 function Field({
   label,
   hint,
@@ -260,23 +301,32 @@ export function Settings() {
     .map((k) => snapshot.settings.providers[k as ProviderKind])
     .filter((p) => p.enabled).length;
   const launch = () => perform(() => bridge.windowAction("companion"));
+  const page = navigation.find((n) => n.id === tab)!;
   return (
     <div className="settings-shell">
       <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-mark">
-            e<span>✳</span>
-          </div>
+        <div className="sidebar-companion">
+          <span className="mini-avatar" aria-hidden>
+            {persistedCharacter.name.slice(0, 1)}
+          </span>
           <div>
-            evangelion<span>PROJECT / 01</span>
+            <strong>{persistedCharacter.name}</strong>
+            <small>
+              <i className="status-dot" />
+              Ready to chat
+            </small>
           </div>
         </div>
-        <div className="workspace-label">YOUR COMPANION</div>
-        <nav>
+        <button className="button primary full" onClick={launch}>
+          <MessageCircleHeart size={16} />
+          Talk to {persistedCharacter.name}
+        </button>
+        <nav aria-label="Settings sections">
           {navigation.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               className={tab === id ? "active" : ""}
+              aria-current={tab === id ? "page" : undefined}
               onClick={() => setTab(id)}
             >
               <Icon size={18} />
@@ -286,55 +336,20 @@ export function Settings() {
         </nav>
         <div className="sidebar-bottom">
           <div className="local-badge">
-            <ShieldCheck size={16} />
-            <div>
-              Local by design<small>Your memories live here.</small>
-            </div>
+            <ShieldCheck size={15} />
+            Memories and keys stay on this computer.
           </div>
-          <button className="profile-button" onClick={launch}>
-            <span className="mini-avatar">{character.name.slice(0, 1)}</span>
-            <span>
-              {persistedCharacter.name}
-              <small>
-                <i className="status-dot" />
-                Companion ready
-              </small>
-            </span>
-            <ExternalLink size={14} />
-          </button>
           <div className="version">
-            evangelion_project <span>v0.4.24</span>
+            Evangelion <span>v0.4.24</span>
           </div>
         </div>
       </aside>
       <div className="settings-body">
-        <header className="topbar">
-          <div>
-            Workspace <ChevronRight size={13} />
-            <span>{navigation.find((n) => n.id === tab)!.label}</span>
-          </div>
-          <span className="foundation-badge">
-            <span className="status-dot" />
-            Sprint 4 · Minecraft
-          </span>
-        </header>
         <main className="settings-content">
-          <div className="page-heading">
-            <div>
-              <div className="eyebrow">MAKE YOURSELF AT HOME</div>
-              <h1>
-                {tab === "overview"
-                  ? "Hello, this is her world."
-                  : navigation.find((n) => n.id === tab)!.label}
-              </h1>
-              <p>{descriptions[tab]}</p>
-            </div>
-            <button className="button secondary" onClick={launch}>
-              <MessageCircle size={16} />
-              Open companion
-              <ExternalLink size={13} />
-            </button>
-          </div>
+          <header className="page-heading">
+            <h1>{page.title}</h1>
+            <p>{page.description}</p>
+          </header>
           {bridge.preview && (
             <div className="preview-banner">
               <CircleHelp size={16} />
@@ -1311,12 +1326,11 @@ export function Settings() {
               <IntegrationSettings snapshot={snapshot} />
             </>
           )}
-          <footer className="page-footer">
-            <span>Built for a connection that feels a little more human.</span>
-            <span>EVANGELION / FOUNDATION</span>
-          </footer>
         </main>
-        <div className="savebar" hidden={tab === "plugins" && !dirty}>
+        <div
+          className={`savebar ${dirty ? "is-dirty" : ""}`}
+          hidden={tab === "plugins" && !dirty}
+        >
           <span>
             {dirty ? (
               "You have unsaved changes"

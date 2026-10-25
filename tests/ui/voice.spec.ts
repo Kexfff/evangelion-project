@@ -167,7 +167,7 @@ test("exposes sensitivity, VAD, device and semantic-memory controls", async ({
 }) => {
   await page.goto("/?window=settings");
   await page
-    .getByRole("button", { name: "Voice & audio", exact: true })
+    .getByRole("button", { name: "Her voice", exact: true })
     .click();
   await expect(
     page.getByRole("combobox", { name: "Microphone", exact: true }),
@@ -184,9 +184,9 @@ test("exposes sensitivity, VAD, device and semantic-memory controls", async ({
   await delivery.selectOption("line");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.locator(".success-notice")).toContainText("Settings saved");
-  await page.getByRole("button", { name: "Memory", exact: true }).click();
+  await page.getByRole("button", { name: "Memories", exact: true }).click();
   await page
-    .getByRole("button", { name: "Voice & audio", exact: true })
+    .getByRole("button", { name: "Her voice", exact: true })
     .click();
   await expect(delivery).toHaveValue("line");
   await delivery.selectOption("response");
@@ -197,11 +197,11 @@ test("exposes sensitivity, VAD, device and semantic-memory controls", async ({
     if ((await bridge.snapshot()).settings.voice.sentenceBuffering)
       throw new Error("Full response must disable incremental speech");
   });
-  await page.getByRole("button", { name: "Memory", exact: true }).click();
+  await page.getByRole("button", { name: "Memories", exact: true }).click();
   await expect(
     page.getByRole("checkbox", { name: "Semantic memory", exact: false }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Providers", exact: true }).click();
+  await page.getByRole("button", { name: "AI services", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Fetch models", exact: true }),
   ).toHaveCount(4);

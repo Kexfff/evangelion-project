@@ -1,0 +1,199 @@
+/* Settings window frame: sidebar, page heading and floating save bar. */
+.settings-shell {
+  --sidebar-width: 244px;
+  min-height: 100vh;
+  background:
+    radial-gradient(
+      900px 500px at 85% -10%,
+      color-mix(in srgb, var(--rose) 7%, transparent),
+      transparent 70%
+    ),
+    var(--surface-0);
+}
+
+/* ---------- Sidebar ---------- */
+.sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: var(--sidebar-width);
+  padding: 22px 16px 18px;
+  border-right: 1px solid var(--line);
+  background: var(--surface-deep);
+  overflow-y: auto;
+}
+.sidebar-companion {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 6px;
+}
+.sidebar-companion strong {
+  display: block;
+  font-size: var(--text-lg);
+  font-weight: 800;
+}
+.sidebar-companion small {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 2px;
+}
+.mini-avatar {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: linear-gradient(140deg, var(--rose), var(--peach));
+  color: var(--on-rose);
+  font-size: var(--text-lg);
+  font-weight: 800;
+}
+.sidebar nav {
+  display: grid;
+  gap: 3px;
+  margin-top: 8px;
+}
+.sidebar nav button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-md);
+  font-weight: 650;
+  color: var(--text-2);
+  text-align: left;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.sidebar nav button svg {
+  color: var(--text-3);
+  transition: color 0.15s;
+}
+.sidebar nav button:hover {
+  background: var(--surface-2);
+  color: var(--text-1);
+}
+.sidebar nav button.active {
+  background: color-mix(in srgb, var(--rose) 14%, var(--surface-1));
+  color: var(--text-1);
+}
+.sidebar nav button.active svg,
+.sidebar nav button:hover svg {
+  color: var(--rose);
+}
+.sidebar-bottom {
+  display: grid;
+  gap: 12px;
+  margin-top: auto;
+  padding: 0 6px;
+}
+.local-badge {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.local-badge svg {
+  margin-top: 1px;
+  color: var(--mint);
+}
+.version {
+  font-size: var(--text-xs);
+  color: var(--text-4);
+}
+
+/* ---------- Page ---------- */
+.settings-body {
+  margin-left: var(--sidebar-width);
+}
+.settings-content {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 40px 40px 120px;
+}
+.page-heading {
+  margin-bottom: 28px;
+}
+.page-heading h1 {
+  font-size: var(--text-3xl);
+  font-weight: 800;
+}
+.page-heading p {
+  margin-top: 6px;
+  font-size: var(--text-lg);
+  color: var(--text-2);
+}
+
+/* ---------- Save bar ---------- */
+.savebar {
+  position: fixed;
+  bottom: 20px;
+  left: calc(var(--sidebar-width) + (100vw - var(--sidebar-width)) / 2);
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 8px 8px 8px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--surface-1) 92%, transparent);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-lift);
+  transform: translateX(-50%);
+  transition:
+    border-color 0.2s,
+    background 0.2s;
+}
+.savebar[hidden] {
+  display: none;
+}
+.savebar > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--text-sm);
+  font-weight: 650;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.savebar.is-dirty {
+  border-color: color-mix(in srgb, var(--rose) 45%, var(--line));
+  background: color-mix(in srgb, var(--rose) 9%, var(--surface-1));
+}
+.savebar.is-dirty > span {
+  color: var(--text-1);
+}
+
+@media (max-width: 900px) {
+  .settings-shell {
+    --sidebar-width: 72px;
+  }
+  .sidebar {
+    align-items: center;
+    padding: 18px 10px;
+  }
+  .sidebar-companion > div,
+  .sidebar > .button,
+  .sidebar nav button > span,
+  .sidebar-bottom {
+    display: none;
+  }
+  .sidebar nav button {
+    justify-content: center;
+    padding: 12px;
+  }
+  .settings-content {
+    padding: 28px 22px 120px;
+  }
+}

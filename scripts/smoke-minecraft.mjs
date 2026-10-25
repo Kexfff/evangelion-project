@@ -255,7 +255,7 @@ try {
     .windows()
     .find((w) => w.url().includes("window=settings"));
   await settings
-    .getByRole("button", { name: "Plugins & MCP", exact: true })
+    .getByRole("button", { name: "Integrations", exact: true })
     .click();
   await expect(
     settings.getByRole("heading", { name: "Minecraft companion" }),

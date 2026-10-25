@@ -11,7 +11,7 @@ test("renders the supplied VRM, edits settings and manages facts", async ({
   });
   await page.goto("/?window=settings");
   await expect(
-    page.getByRole("heading", { name: "Hello, this is her world." }),
+    page.getByRole("heading", { name: "Welcome home" }),
   ).toBeVisible();
   await expect(page.locator(".avatar-renderer canvas")).toBeVisible();
   await expect(page.locator(".avatar-notice")).toHaveCount(0, {
@@ -22,12 +22,12 @@ test("renders the supplied VRM, edits settings and manages facts", async ({
     fullPage: true,
   });
   await page
-    .getByRole("button", { name: "Character cards", exact: true })
+    .getByRole("button", { name: "Personality", exact: true })
     .click();
   await page.getByRole("textbox", { name: "Name", exact: true }).fill("Evie");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByRole("status")).toContainText("Settings saved");
-  await page.getByRole("button", { name: "Memory", exact: true }).click();
+  await page.getByRole("button", { name: "Memories", exact: true }).click();
   await page
     .getByRole("textbox", { name: "What should she remember?" })
     .fill("I love Minecraft.");
@@ -45,7 +45,7 @@ test("renders the supplied VRM, edits settings and manages facts", async ({
   await page.getByRole("button", { name: "Confirm delete memory" }).click();
   await expect(page.locator(".memory-item")).toHaveCount(0);
   await page
-    .getByRole("button", { name: "Avatar studio", exact: true })
+    .getByRole("button", { name: "Appearance", exact: true })
     .click();
   for (const name of [
     "idle_loop",
@@ -71,7 +71,7 @@ test("renders the supplied VRM, edits settings and manages facts", async ({
     timeout: 60000,
   });
   await page.getByRole("button", { name: "Save changes" }).click();
-  await page.getByRole("button", { name: "Consciousness" }).click();
+  await page.getByRole("button", { name: "Inner life" }).click();
   await expect(
     page.getByRole("checkbox", { name: "Enable autonomy" }),
   ).toBeVisible();
