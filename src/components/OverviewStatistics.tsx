@@ -14,21 +14,21 @@ export function OverviewStatistics({
       value: stats?.conversations,
       icon: BookOpen,
       tone: "lilac",
-      detail: "Every chapter, kept.",
+      detail: "Chats you’ve had together",
     },
     {
       label: "Messages",
       value: stats?.messages,
       icon: MessageCircle,
       tone: "mint",
-      detail: "Your words and hers.",
+      detail: "From both of you",
     },
     {
       label: "Shared images",
       value: stats?.images,
       icon: Image,
       tone: "peach",
-      detail: "Little glimpses of your world.",
+      detail: "Pictures you’ve shown her",
     },
   ];
   return (
@@ -37,10 +37,7 @@ export function OverviewStatistics({
       aria-labelledby="overview-statistics-title"
     >
       <header>
-        <div>
-          <span className="eyebrow">A LITTLE HISTORY, TOGETHER</span>
-          <h2 id="overview-statistics-title">Your story so far</h2>
-        </div>
+        <h2 id="overview-statistics-title">Your story so far</h2>
         <span className="overview-stats-scope">
           <Sparkles size={13} />
           {name}’s saved history

@@ -24,7 +24,6 @@ import {
   Sparkles,
   UserRound,
   Volume2,
-  WandSparkles,
   X,
 } from "lucide-react";
 import { bridge } from "../bridge";
@@ -297,9 +296,6 @@ export function Settings() {
   const persistedCharacter = snapshot.settings.characters.find(
     (c) => c.id === snapshot.settings.activeCharacterId,
   )!;
-  const counts = ["llm", "asr", "tts"]
-    .map((k) => snapshot.settings.providers[k as ProviderKind])
-    .filter((p) => p.enabled).length;
   const launch = () => perform(() => bridge.windowAction("companion"));
   const page = navigation.find((n) => n.id === tab)!;
   return (
@@ -389,140 +385,104 @@ export function Settings() {
           {tab === "overview" && (
             <>
               <div className="overview-grid">
-                <section className="hero-card">
+                <section
+                  className="hero-card"
+                  aria-label={`Meet ${character.name}`}
+                >
                   <div className="hero-text">
-                    <span className="pill">
-                      <span className="status-dot" />
-                      YOUR CHARACTER
-                    </span>
-                    <h2>
-                      Meet {character.name}
-                      <span>.</span>
-                    </h2>
-                    <p>{character.tagline}</p>
-                    <div className="character-tags">
-                      <span>Curious by nature</span>
-                      <span>Uniquely yours</span>
-                    </div>
+                    <h2>Meet {persistedCharacter.name}</h2>
+                    {persistedCharacter.tagline && (
+                      <p>{persistedCharacter.tagline}</p>
+                    )}
                     <button
-                      className="button light"
-                      onClick={() => setTab("character")}
+                      className="hero-memories"
+                      onClick={() => setTab("memory")}
                     >
-                      Shape her character
-                      <ChevronRight size={16} />
+                      <Heart size={15} />
+                      {snapshot.facts.length === 0
+                        ? "No memories yet"
+                        : snapshot.facts.length === 1
+                          ? "1 memory"
+                          : `${snapshot.facts.length.toLocaleString()} memories`}
+                      <ChevronRight size={14} />
                     </button>
-                    <div className="hero-caption">
-                      <Heart size={13} />
-                      Every connection starts with a conversation.
+                    <div className="button-row">
+                      <button className="button primary" onClick={launch}>
+                        <MessageCircleHeart size={16} />
+                        Talk to {persistedCharacter.name}
+                      </button>
+                      <button
+                        className="button secondary"
+                        onClick={() => setTab("character")}
+                      >
+                        Edit personality
+                      </button>
                     </div>
                   </div>
                   <div className="hero-avatar">
-                    <div className="orbital orbit-one" />
-                    <div className="orbital orbit-two" />
                     <Avatar avatar={character.avatar} settings={draft.vrm} />
-                    <span className="avatar-tag">
-                      <span className="status-dot" />
-                      VRM · LIVE PREVIEW
-                    </span>
                   </div>
                 </section>
                 <section className="connection-card card">
                   <div className="section-heading">
-                    <span className="eyebrow">THE CONVERSATION LOOP</span>
-                    <h2>Made to connect</h2>
-                    <p>Three small steps. One natural exchange.</p>
+                    <h2>Getting her ready</h2>
+                    <p>
+                      She needs three AI services to listen, think and speak.
+                    </p>
                   </div>
                   {(
                     [
                       {
                         kind: "asr",
                         title: "Listen",
-                        detail: "Speech to text",
+                        detail: "Turns your voice into text",
                         icon: AudioLines,
                       },
                       {
                         kind: "llm",
                         title: "Think",
-                        detail: "Language & personality",
+                        detail: "Her language model",
                         icon: Brain,
                       },
                       {
                         kind: "tts",
                         title: "Speak",
-                        detail: "Text to speech",
+                        detail: "Gives her a voice",
                         icon: Volume2,
                       },
                     ] as const
-                  ).map(({ kind, title, detail, icon: Icon }) => (
-                    <button
-                      className="connection-step"
-                      key={kind}
-                      onClick={() => setTab("providers")}
-                    >
-                      <span className={`step-icon ${kind}`}>
-                        <Icon size={19} />
-                      </span>
-                      <span>
-                        <strong>{title}</strong>
-                        <small>{detail}</small>
-                      </span>
-                      <span
-                        className={`connection-status ${snapshot.settings.providers[kind].enabled ? "configured" : ""}`}
+                  ).map(({ kind, title, detail, icon: Icon }) => {
+                    const ready = snapshot.settings.providers[kind].enabled;
+                    return (
+                      <button
+                        className="connection-step"
+                        key={kind}
+                        onClick={() => setTab("providers")}
                       >
-                        {snapshot.settings.providers[kind].enabled
-                          ? "Enabled"
-                          : "Set up"}
-                        <ChevronRight size={12} />
-                      </span>
-                    </button>
-                  ))}
-                  <div className="card-footnote">
-                    Configure each provider independently.
-                  </div>
+                        <span className={`step-icon ${kind}`}>
+                          <Icon size={18} />
+                        </span>
+                        <span>
+                          <strong>{title}</strong>
+                          <small>{detail}</small>
+                        </span>
+                        <span
+                          className={`connection-status ${ready ? "configured" : ""}`}
+                        >
+                          {ready ? (
+                            <>
+                              <Check size={13} />
+                              Ready
+                            </>
+                          ) : (
+                            "Set up"
+                          )}
+                          <ChevronRight size={13} />
+                        </span>
+                      </button>
+                    );
+                  })}
                 </section>
-              </div>
-              <div className="stats-grid">
-                <button className="stat-card" onClick={() => setTab("memory")}>
-                  <span className="stat-icon">
-                    <Brain size={20} />
-                  </span>
-                  <div>
-                    <strong>
-                      {snapshot.facts.length}
-                      <small>saved memories</small>
-                    </strong>
-                    <p>Small details, lasting connections</p>
-                  </div>
-                  <ChevronRight size={16} />
-                </button>
-                <button
-                  className="stat-card"
-                  onClick={() => setTab("providers")}
-                >
-                  <span className="stat-icon green">
-                    <Activity size={20} />
-                  </span>
-                  <div>
-                    <strong>
-                      {counts}
-                      <small>of 3 providers enabled</small>
-                    </strong>
-                    <p>Run a test to verify connectivity</p>
-                  </div>
-                  <ChevronRight size={16} />
-                </button>
-                <button className="stat-card" onClick={() => setTab("vrm")}>
-                  <span className="stat-icon peach">
-                    <WandSparkles size={20} />
-                  </span>
-                  <div>
-                    <strong>
-                      9<small>bundled animations</small>
-                    </strong>
-                    <p>A little personality in every gesture</p>
-                  </div>
-                  <ChevronRight size={16} />
-                </button>
               </div>
               <OverviewStatistics
                 name={persistedCharacter.name}
@@ -1327,20 +1287,8 @@ export function Settings() {
             </>
           )}
         </main>
-        <div
-          className={`savebar ${dirty ? "is-dirty" : ""}`}
-          hidden={tab === "plugins" && !dirty}
-        >
-          <span>
-            {dirty ? (
-              "You have unsaved changes"
-            ) : (
-              <>
-                <Check size={14} />
-                All changes saved
-              </>
-            )}
-          </span>
+        <div className="savebar" hidden={!dirty}>
+          <span>You have unsaved changes</span>
           <div className="button-row">
             <button
               className="button secondary"

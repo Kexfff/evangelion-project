@@ -145,34 +145,27 @@
   align-items: center;
   gap: 18px;
   padding: 8px 8px 8px 20px;
-  border: 1px solid var(--line);
+  border: 1px solid color-mix(in srgb, var(--rose) 45%, var(--line));
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--surface-1) 92%, transparent);
   backdrop-filter: blur(12px);
   box-shadow: var(--shadow-lift);
   transform: translateX(-50%);
-  transition:
-    border-color 0.2s,
-    background 0.2s;
+  animation: savebar-in 0.2s ease-out;
 }
 .savebar[hidden] {
   display: none;
 }
 .savebar > span {
-  display: flex;
-  align-items: center;
-  gap: 7px;
   font-size: var(--text-sm);
-  font-weight: 650;
-  color: var(--text-3);
+  font-weight: 700;
   white-space: nowrap;
 }
-.savebar.is-dirty {
-  border-color: color-mix(in srgb, var(--rose) 45%, var(--line));
-  background: color-mix(in srgb, var(--rose) 9%, var(--surface-1));
-}
-.savebar.is-dirty > span {
-  color: var(--text-1);
+@keyframes savebar-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px);
+  }
 }
 
 @media (max-width: 900px) {
