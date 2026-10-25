@@ -13,10 +13,8 @@ test("renders the supplied VRM, edits settings and manages facts", async ({
   await expect(
     page.getByRole("heading", { name: "Welcome home" }),
   ).toBeVisible();
-  await expect(page.locator(".avatar-renderer canvas")).toBeVisible();
-  await expect(page.locator(".avatar-notice")).toHaveCount(0, {
-    timeout: 60000,
-  });
+  // Home shows a lightweight portrait; the live VRM renders on Appearance.
+  await expect(page.locator(".avatar-renderer")).toHaveCount(0);
   await page.screenshot({
     path: "test-results/settings-overview.png",
     fullPage: true,
@@ -43,6 +41,10 @@ test("renders the supplied VRM, edits settings and manages facts", async ({
   await page.getByRole("button", { name: "Confirm delete memory" }).click();
   await expect(page.locator(".memory-item")).toHaveCount(0);
   await page.getByRole("button", { name: "Appearance", exact: true }).click();
+  await expect(page.locator(".avatar-renderer canvas")).toBeVisible();
+  await expect(page.locator(".avatar-notice")).toHaveCount(0, {
+    timeout: 60000,
+  });
   for (const name of [
     "idle_loop",
     "modelPose",

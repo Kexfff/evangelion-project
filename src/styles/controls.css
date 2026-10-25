@@ -213,7 +213,7 @@
   margin-top: 3px;
   line-height: 1.6;
 }
-.toggle,
+input.toggle,
 .toggle-row > input[type="checkbox"] {
   appearance: none;
   position: relative;
@@ -228,7 +228,7 @@
   cursor: pointer;
   transition: background 0.2s;
 }
-.toggle::after,
+input.toggle::after,
 .toggle-row > input[type="checkbox"]::after {
   content: "";
   position: absolute;
@@ -243,11 +243,11 @@
     transform 0.2s,
     background 0.2s;
 }
-.toggle:checked,
+input.toggle:checked,
 .toggle-row > input[type="checkbox"]:checked {
   background: var(--rose);
 }
-.toggle:checked::after,
+input.toggle:checked::after,
 .toggle-row > input[type="checkbox"]:checked::after {
   background: var(--text-1);
   transform: translateX(18px);

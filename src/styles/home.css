@@ -68,15 +68,53 @@
 .hero-text .button-row {
   margin-top: auto;
 }
-.hero-avatar {
+.hero-portrait {
   position: absolute;
-  top: 0;
-  right: -10px;
-  bottom: 0;
-  width: 52%;
+  top: 50%;
+  right: 12%;
+  display: grid;
+  place-items: center;
+  width: 200px;
+  height: 200px;
+  transform: translateY(-50%);
 }
-.hero-avatar > .avatar-renderer {
-  z-index: 1;
+.hero-portrait-ring {
+  position: absolute;
+  inset: -18px;
+  border: 1px dashed color-mix(in srgb, var(--rose) 35%, transparent);
+  border-radius: 50%;
+}
+.hero-portrait-initial {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: linear-gradient(140deg, var(--rose), var(--peach));
+  box-shadow:
+    0 0 0 10px color-mix(in srgb, var(--rose) 10%, transparent),
+    0 24px 60px -18px color-mix(in srgb, var(--rose) 70%, transparent);
+  font-size: 88px;
+  font-weight: 800;
+  color: var(--on-rose);
+}
+.hero-spark {
+  position: absolute;
+  color: var(--peach);
+}
+.hero-spark.one {
+  top: -10px;
+  right: -16px;
+}
+.hero-spark.two {
+  bottom: 6px;
+  left: -26px;
+  color: var(--rose);
+}
+.hero-spark.three {
+  top: 30px;
+  left: -34px;
+  color: var(--lilac);
 }
 
 /* ---------- Setup checklist ---------- */
@@ -241,6 +279,14 @@
   .hero-text {
     width: 62%;
     padding: 26px 22px;
+  }
+  .hero-portrait {
+    right: 6%;
+    width: 120px;
+    height: 120px;
+  }
+  .hero-portrait-initial {
+    font-size: 52px;
   }
   .overview-statistics-grid {
     grid-template-columns: 1fr;

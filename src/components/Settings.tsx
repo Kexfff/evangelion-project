@@ -482,8 +482,16 @@ export function Settings() {
                       </button>
                     </div>
                   </div>
-                  <div className="hero-avatar">
-                    <Avatar avatar={character.avatar} settings={draft.vrm} />
+                  {/* A static portrait: a live VRM here cost too much on the
+                      most-visited page. Appearance keeps the 3D preview. */}
+                  <div className="hero-portrait" aria-hidden="true">
+                    <span className="hero-portrait-ring" />
+                    <span className="hero-portrait-initial">
+                      {persistedCharacter.name.slice(0, 1)}
+                    </span>
+                    <Sparkles className="hero-spark one" size={22} />
+                    <Heart className="hero-spark two" size={18} />
+                    <Sparkles className="hero-spark three" size={14} />
                   </div>
                 </section>
                 <section className="connection-card card">
