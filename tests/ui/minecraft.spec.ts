@@ -1,9 +1,16 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { defaultSettings } from "../../src/shared/schema";
 import {
   minecraftConfigSchema,
   minecraftTools,
 } from "../../src/shared/minecraft";
+
+// The Minecraft panel shows one section at a time.
+const openMinecraftTab = (page: Page, name: string) =>
+  page
+    .locator(".minecraft-tabs")
+    .getByRole("button", { name, exact: true })
+    .click();
 
 test("Minecraft preview explains allow-by-default and has no duplicate block/chat gates", async ({
   page,
@@ -54,9 +61,7 @@ test("Minecraft preview explains allow-by-default and has no duplicate block/cha
   await expect(page.getByLabel("Maximum blocks per job")).toHaveValue("1024");
   await expect(page.getByLabel("Allow public Minecraft chat")).toHaveCount(0);
   await expect(
-    page.getByLabel(
-      "Operator coordinate lookup (requires cheats / operator permission)",
-    ),
+    page.getByLabel("Operator coordinate lookup", { exact: true }),
   ).not.toBeChecked();
   await page
     .getByRole("button", { name: "Save Minecraft configuration" })
@@ -228,6 +233,7 @@ test("Minecraft jobs, stop control and world landmarks stay separate from chat",
   }, defaultSettings);
   await page.goto("/?window=settings");
   await page.getByRole("button", { name: "Integrations", exact: true }).click();
+  await openMinecraftTab(page, "Play");
   await expect(page.getByText("follow · running")).toBeVisible();
   await page
     .getByText("Crafting-table approaches · 2", { exact: true })
@@ -249,6 +255,7 @@ test("Minecraft jobs, stop control and world landmarks stay separate from chat",
   await expect(page.locator(".minecraft-jobs pre")).toContainText(
     '"outputGain": 8',
   );
+  await openMinecraftTab(page, "Permissions");
   await page.getByRole("button", { name: "Enable everyday controls" }).click();
   await page.getByText("Individual tool permissions", { exact: true }).click();
   await page.getByRole("button", { name: "Survive", exact: true }).click();
@@ -299,7 +306,9 @@ test("Minecraft jobs, stop control and world landmarks stay separate from chat",
     .getByRole("button", { name: "Reset filters", exact: true })
     .click();
   await page.getByRole("button", { name: "Stop game action" }).click();
+  await openMinecraftTab(page, "Play");
   await expect(page.getByText("follow · cancelled")).toBeVisible();
+  await openMinecraftTab(page, "Play");
   await page.getByText("World landmarks", { exact: true }).click();
   await page.getByLabel("Landmark name").fill("Our base");
   await page.getByRole("button", { name: "Remember current location" }).click();
@@ -323,6 +332,7 @@ test("Minecraft jobs, stop control and world landmarks stay separate from chat",
   await expect(
     page.getByRole("button", { name: "Minecraft", exact: true }),
   ).toContainText("Plugin off");
+  await openMinecraftTab(page, "Goals & projects");
   await page.getByText("New inventory goal", { exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Start game goal", exact: true }),

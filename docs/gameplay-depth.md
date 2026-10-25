@@ -4,7 +4,7 @@
 
 ## World projects
 
-Open **Settings → Integrations → Minecraft → World projects** while joined. Give a project a title, purpose and up to eight resource targets, one `item_id quantity` per line:
+Open **Settings → Integrations → Minecraft → Goals & projects** while joined. Give a project a title, purpose and up to eight resource targets, one `item_id quantity` per line:
 
 ```text
 oak_log 16

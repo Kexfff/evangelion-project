@@ -39,8 +39,9 @@ export function GameGoals({ data }: { data?: MinecraftSnapshot }) {
         <h3>Game goals</h3>
       </div>
       <p>
-        Queue a plan and keep chatting. Each step waits for the previous
-        outcome. Direct game commands pause active plans; Stop cancels them.
+        Give her something to work toward and keep chatting. She takes one step
+        at a time; a direct command pauses the plan, and Stop game action
+        cancels it.
       </p>
       {error && (
         <p className="error-notice" role="alert">

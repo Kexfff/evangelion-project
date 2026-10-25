@@ -37,10 +37,9 @@ export function GameProjects({ data }: { data?: MinecraftSnapshot }) {
         <h3>World projects</h3>
       </div>
       <p>
-        Keep resource targets and a purpose for each project. Active projects
-        guide independent play; saving does not start a goal or enable autonomy.
-        Pausing a project excludes it from new activity selection, but does not
-        stop a goal already running.
+        Longer-term plans for a world: a purpose and resources to gather. Active
+        projects guide what she does on her own. Saving one doesn’t start
+        anything, and pausing it only keeps it from being picked next.
       </p>
       {error && (
         <p className="error-notice" role="alert">

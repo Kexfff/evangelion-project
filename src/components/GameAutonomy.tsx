@@ -48,9 +48,8 @@ export function GameAutonomy({ data }: { data?: MinecraftSnapshot }) {
         <span className="connection-badge">{status}</span>
       </div>
       <p>
-        Her own adventures, in your world. Eva chooses a useful intention,
-        verifies each step, and keeps going. Companion quiet hours and
-        conversation pause do not affect gameplay.
+        Let her pick useful things to do in your world, check each step and keep
+        going. Her quiet hours and conversation pause don’t affect this.
       </p>
       <div className="game-autonomy-intent" role="status">
         <small>Current intention</small>
@@ -243,10 +242,9 @@ export function GameAutonomy({ data }: { data?: MinecraftSnapshot }) {
             </p>
           </details>
           <p className="game-autonomy-note">
-            Uses your configured LLM and OpenRouter provider selection. Existing
-            tool permissions apply; Ask tools wait for an explicit user
-            instruction. Manual goals remain available with activity selection
-            off.
+            Uses your language model (and its OpenRouter routing). Tool
+            permissions still apply, and tools set to Ask wait for you. Goals
+            you give her work even with this off.
           </p>
           <button className="button primary">Save independent gameplay</button>
         </fieldset>

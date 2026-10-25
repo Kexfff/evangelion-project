@@ -1,8 +1,15 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { defaultSettings } from "../../src/shared/schema";
 import { minecraftConfigSchema } from "../../src/shared/minecraft";
 import { gameGoalConfigSchema } from "../../src/shared/game-goals";
 import { gameAutonomyStateSchema } from "../../src/shared/game-autonomy";
+
+// The Minecraft panel shows one section at a time.
+const openMinecraftTab = (page: Page, name: string) =>
+  page
+    .locator(".minecraft-tabs")
+    .getByRole("button", { name, exact: true })
+    .click();
 
 test("game goals queue, pause, reconcile, cancel and save independent budgets", async ({
   page,
@@ -132,9 +139,11 @@ test("game goals queue, pause, reconcile, cancel and save independent budgets", 
   );
   await page.goto("/?window=settings");
   await page.getByRole("button", { name: "Integrations", exact: true }).click();
+  await openMinecraftTab(page, "Goals & projects");
   await expect(
     page.getByRole("heading", { name: "Game goals", exact: true }),
   ).toBeVisible();
+  await openMinecraftTab(page, "On her own");
   await page.getByLabel("Choose activities autonomously").check();
   await page
     .getByRole("combobox", { name: "Play style", exact: true })
@@ -171,6 +180,7 @@ test("game goals queue, pause, reconcile, cancel and save independent budgets", 
     path: "/tmp/eva-independent-gameplay.png",
     fullPage: true,
   });
+  await openMinecraftTab(page, "Goals & projects");
   await page.getByText("New inventory goal", { exact: true }).click();
   await expect(page.getByLabel("Scheduled start (optional)")).toBeDisabled();
   await page.getByLabel("Target item ID").fill("oak_log");
