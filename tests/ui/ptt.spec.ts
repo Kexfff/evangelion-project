@@ -171,9 +171,7 @@ test("PTT settings capture right shift and chords, save, clear, and fit narrow l
   page,
 }) => {
   await page.goto("/?window=settings");
-  await page
-    .getByRole("button", { name: "Her voice", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Her voice", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Set press-to-talk key" }),
   ).toHaveText("Right Shift");
@@ -196,9 +194,7 @@ test("PTT settings capture right shift and chords, save, clear, and fit narrow l
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.locator(".success-notice")).toContainText("Settings saved");
   await page.getByRole("button", { name: "Memories", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Her voice", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Her voice", exact: true }).click();
   await expect(
     page.getByRole("checkbox", { name: "Keyboard voice control", exact: true }),
   ).toBeChecked();

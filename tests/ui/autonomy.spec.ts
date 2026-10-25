@@ -74,9 +74,7 @@ test("activity loads ten entries, pages on demand, exposes diagnostics and expor
     { settings: defaultSettings, state: initialBehavior(Date.now()) },
   );
   await page.goto("/?window=settings");
-  await page
-    .getByRole("button", { name: "Inner life", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Inner life", exact: true }).click();
   const log = page.getByRole("region", { name: "Activity log", exact: true });
   await expect(log.getByRole("article")).toHaveCount(10);
   expect(
@@ -128,9 +126,7 @@ test("exposes opt-in autonomy, quiet hours, state controls and validated setting
   page,
 }) => {
   await page.goto("/?window=settings");
-  await page
-    .getByRole("button", { name: "Inner life", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Inner life", exact: true }).click();
   await expect(
     page.getByRole("checkbox", { name: "Enable autonomy", exact: true }),
   ).not.toBeChecked();
@@ -149,12 +145,8 @@ test("exposes opt-in autonomy, quiet hours, state controls and validated setting
   await page.getByLabel("Time zone (IANA)").fill("Europe/Moscow");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.locator(".success-notice")).toContainText("Settings saved");
-  await page
-    .getByRole("button", { name: "Her voice", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Inner life", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Her voice", exact: true }).click();
+  await page.getByRole("button", { name: "Inner life", exact: true }).click();
   await expect(
     page.getByRole("checkbox", { name: "Enable autonomy", exact: true }),
   ).toBeChecked();
@@ -170,9 +162,7 @@ test("manual task form is explicit about exact time and desktop requirements", a
   page,
 }) => {
   await page.goto("/?window=settings");
-  await page
-    .getByRole("button", { name: "Inner life", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Inner life", exact: true }).click();
   await page.getByLabel("Reminder title", { exact: true }).fill("Tea break");
   await page
     .getByLabel("What should she remind you about?", { exact: true })

@@ -40,9 +40,7 @@ test("imported cards appear immediately, stay inactive and survive the next sett
     });
   }, structuredClone(defaultSettings));
   await page.goto("/?window=settings");
-  await page
-    .getByRole("button", { name: "Personality", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Personality", exact: true }).click();
   const name = page.getByLabel("Name", { exact: true });
   await expect(name).toHaveValue(defaultSettings.characters[0].name);
   await page

@@ -166,9 +166,7 @@ test("exposes sensitivity, VAD, device and semantic-memory controls", async ({
   page,
 }) => {
   await page.goto("/?window=settings");
-  await page
-    .getByRole("button", { name: "Her voice", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Her voice", exact: true }).click();
   await expect(
     page.getByRole("combobox", { name: "Microphone", exact: true }),
   ).toBeVisible();
@@ -185,9 +183,7 @@ test("exposes sensitivity, VAD, device and semantic-memory controls", async ({
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.locator(".success-notice")).toContainText("Settings saved");
   await page.getByRole("button", { name: "Memories", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Her voice", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Her voice", exact: true }).click();
   await expect(delivery).toHaveValue("line");
   await delivery.selectOption("response");
   await page.getByRole("button", { name: "Save changes" }).click();

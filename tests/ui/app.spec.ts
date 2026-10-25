@@ -21,9 +21,7 @@ test("renders the supplied VRM, edits settings and manages facts", async ({
     path: "test-results/settings-overview.png",
     fullPage: true,
   });
-  await page
-    .getByRole("button", { name: "Personality", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Personality", exact: true }).click();
   await page.getByRole("textbox", { name: "Name", exact: true }).fill("Evie");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByRole("status")).toContainText("Settings saved");
@@ -44,9 +42,7 @@ test("renders the supplied VRM, edits settings and manages facts", async ({
     .click();
   await page.getByRole("button", { name: "Confirm delete memory" }).click();
   await expect(page.locator(".memory-item")).toHaveCount(0);
-  await page
-    .getByRole("button", { name: "Appearance", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Appearance", exact: true }).click();
   for (const name of [
     "idle_loop",
     "modelPose",

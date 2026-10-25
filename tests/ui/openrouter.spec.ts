@@ -64,14 +64,12 @@ test("TTS audio format persists and stays under user control when the model chan
   await page.reload();
   await page.getByRole("button", { name: "AI services", exact: true }).click();
   await expect(format).toHaveValue("pcm");
-  const tts = page
-    .locator("section")
-    .filter({
-      has: page.getByRole("heading", {
-        name: "Speak · Voice synthesis",
-        exact: true,
-      }),
-    });
+  const tts = page.locator("section").filter({
+    has: page.getByRole("heading", {
+      name: "Speak · Voice synthesis",
+      exact: true,
+    }),
+  });
   await tts.getByLabel("Model ID", { exact: true }).fill("another/tts-model");
   await expect(format).toHaveValue("pcm");
   await format.selectOption("mp3");
