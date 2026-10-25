@@ -36,7 +36,7 @@ export function MemoryConstellation({
   return (
     <div className="memory-cosmos">
       <div className="cosmos-label">
-        <Sparkles size={13} /> MEMORY CONSTELLATION
+        <Sparkles size={13} /> Memory constellation
       </div>
       <div
         className="constellation-stage"

@@ -243,7 +243,7 @@ export function Companion() {
                   ? last.role === "user"
                     ? "You"
                     : character.name
-                  : "A NEW CONNECTION"}
+                  : character.name}
             </small>
             <p>
               {app.partial

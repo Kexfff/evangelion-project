@@ -1216,11 +1216,11 @@ export function Settings() {
             >
               <Section
                 title="How remembering works"
-                subtitle="These preferences use Save changes below."
+                subtitle="These apply once you save your changes."
               >
                 <Toggle
                   label="Automatically remember facts"
-                  hint="Save explicit details from conversations using an extra LLM request. Invalid output retries once (additional usage)."
+                  hint="She notes clear facts you mention while you chat. Uses one extra request to your language model per reply (two if the first answer is unusable)."
                   checked={draft.memory.autoRemember}
                   onChange={(v) =>
                     update((d) => {
@@ -1230,7 +1230,7 @@ export function Settings() {
                 />
                 <Toggle
                   label="Semantic memory"
-                  hint="Recall related ideas even when the words differ. Enable an embedding provider first; memories and queries are sent to it."
+                  hint="Recall related ideas even when the words differ. Needs the Remember service; memories and questions are sent to it."
                   checked={draft.memory.semanticEnabled}
                   onChange={(v) =>
                     update((d) => {
@@ -1243,7 +1243,7 @@ export function Settings() {
                     className="text-button"
                     onClick={() => setTab("providers")}
                   >
-                    Set up an embedding provider <ChevronRight size={13} />
+                    Set up the Remember service <ChevronRight size={13} />
                   </button>
                 )}
                 <details className="memory-advanced">
@@ -1251,9 +1251,9 @@ export function Settings() {
                     <Settings2 size={14} /> Fine-tune recall
                   </summary>
                   <p className="memory-helper">
-                    Recent messages stay in context. Older conversations can be
-                    recalled by meaning, with keyword fallback if embeddings are
-                    unavailable.
+                    Recent messages are always in context. Older conversations
+                    are recalled by meaning, or by keywords when the Remember
+                    service is off.
                   </p>
                   <Range
                     label="Minimum semantic similarity"
@@ -1290,8 +1290,8 @@ export function Settings() {
                     {dirty
                       ? "Save your changes before updating the index."
                       : !draft.providers.embedding.enabled
-                        ? "Enable an embedding provider in Providers first."
-                        : "Sends saved facts and past message text to your embedding provider. Provider charges may apply."}
+                        ? "Turn on the Remember service in AI services first."
+                        : "Sends saved facts and past messages to the Remember service, which may charge for it."}
                   </p>
                   {working && (
                     <button

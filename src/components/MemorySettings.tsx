@@ -145,17 +145,9 @@ export function MemorySettings({
             aria-label={`${character.name}’s memory garden`}
           >
             <div className="memory-intro">
-              <span className="eyebrow">
-                {character.name.toLocaleUpperCase()}’S MEMORY
-              </span>
-              <h2>
-                Little things.
-                <br />
-                <span>Lasting connections.</span>
-              </h2>
+              <h2>What {character.name} knows about you</h2>
               <p>
-                The details that make your conversations feel like yours. A
-                little more familiar, every time.
+                Little details that make your conversations feel like yours.
               </p>
               <div className="memory-totals">
                 <strong>
@@ -176,7 +168,7 @@ export function MemorySettings({
               >
                 {selected ? (
                   <>
-                    <span className="eyebrow">A THREAD TO REMEMBER</span>
+                    <span className="eyebrow">Selected memory</span>
                     <p>{selected.text}</p>
                     <small>
                       {sourceLabel(selected)} · {dateLabel(selected.updatedAt)}
@@ -184,9 +176,7 @@ export function MemorySettings({
                   </>
                 ) : (
                   <>
-                    <span className="eyebrow">
-                      ROOM FOR SOMETHING MEANINGFUL
-                    </span>
+                    <span className="eyebrow">Ideas to start with</span>
                     <p>
                       A favorite song. Your weekend ritual. The way you take
                       your tea.
@@ -196,207 +186,44 @@ export function MemorySettings({
                 )}
               </div>
             </div>
-            <MemoryConstellation
-              facts={facts}
-              selectedId={selected?.id}
-              onSelect={setSelectedId}
-              projection={map}
-            />
+            <div className="memory-cosmos-column">
+              <MemoryConstellation
+                facts={facts}
+                selectedId={selected?.id}
+                onSelect={setSelectedId}
+                projection={map}
+              />
+              <div
+                className="memory-map-switch"
+                role="group"
+                aria-label="Constellation view"
+              >
+                <button aria-pressed={!map} onClick={() => setMap(undefined)}>
+                  Artistic view
+                </button>
+                <button
+                  aria-pressed={!!map}
+                  disabled={working}
+                  title="Places indexed memories by meaning. No provider calls."
+                  onClick={() =>
+                    void perform(async () => {
+                      const next = await bridge.memoryMap();
+                      if (!next.nodes.length)
+                        notice(
+                          "Index at least two memories with the embedding service first.",
+                        );
+                      else setMap(next);
+                    })
+                  }
+                >
+                  Semantic map
+                </button>
+              </div>
+            </div>
           </section>
 
           <div className="memory-layout">
-            <section
-              className="card memory-library"
-              aria-labelledby="memory-library-title"
-            >
-              <div className="memory-section-title">
-                <div>
-                  <span className="eyebrow">COLLECTED ALONG THE WAY</span>
-                  <h2 id="memory-library-title">
-                    Long-term memories <span>{facts.length}</span>
-                  </h2>
-                </div>
-                <button
-                  className="icon-button"
-                  title="Write a memory"
-                  aria-label="Write a memory"
-                  disabled={working}
-                  onClick={writeMemory}
-                >
-                  <Plus size={19} />
-                </button>
-              </div>
-              <div className="memory-search-wrap">
-                <Search size={16} aria-hidden="true" />
-                <input
-                  type="search"
-                  placeholder="Find a thought, a preference, a detail…"
-                  aria-label="Search memories"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-                {search && (
-                  <button
-                    className="icon-button"
-                    aria-label="Clear memory search"
-                    onClick={() => setSearch("")}
-                  >
-                    <X size={14} />
-                  </button>
-                )}
-              </div>
-              <div
-                className="memory-filters"
-                role="group"
-                aria-label="Filter memories by source"
-              >
-                {(
-                  [
-                    ["all", "All memories", facts.length],
-                    ["manual", "Added by you", manual],
-                    [
-                      "conversation",
-                      "From conversation",
-                      facts.length - manual,
-                    ],
-                  ] as const
-                ).map(([value, label, count]) => (
-                  <button
-                    key={value}
-                    aria-pressed={filter === value}
-                    onClick={() => setFilter(value)}
-                  >
-                    {label}
-                    <span>{count}</span>
-                  </button>
-                ))}
-              </div>
-              <div className="memory-list-heading">
-                <span>
-                  {search || filter !== "all"
-                    ? `${filtered.length} matching ${filtered.length === 1 ? "memory" : "memories"}`
-                    : "Your collection"}
-                </span>
-                <span>Recently updated first</span>
-              </div>
-              {!filtered.length && (
-                <div className="empty-state">
-                  <BookOpen size={30} />
-                  <h3>
-                    {facts.length
-                      ? "No memories here just yet"
-                      : "The beginning of knowing you"}
-                  </h3>
-                  <p>
-                    {facts.length
-                      ? "Try another search or source filter."
-                      : "Add a preference, an interest, or something you’d like her to remember."}
-                  </p>
-                  {facts.length ? (
-                    <button
-                      className="text-button"
-                      onClick={() => {
-                        setSearch("");
-                        setFilter("all");
-                      }}
-                    >
-                      Show all memories
-                    </button>
-                  ) : (
-                    <button className="text-button" onClick={writeMemory}>
-                      Write the first memory <Plus size={13} />
-                    </button>
-                  )}
-                </div>
-              )}
-              <div className="memory-list">
-                {filtered.slice(0, limit).map((f) => (
-                  <article
-                    className={`memory-item ${selected?.id === f.id ? "is-selected" : ""}`}
-                    key={f.id}
-                  >
-                    <span
-                      className={`memory-source-icon ${f.source}`}
-                      aria-hidden="true"
-                    >
-                      {f.source === "manual" ? (
-                        <Pencil size={14} />
-                      ) : (
-                        <MessageCircle size={14} />
-                      )}
-                    </span>
-                    <div className="memory-item-body">
-                      <p>{f.text}</p>
-                      <div className="memory-item-meta">
-                        <span>{sourceLabel(f)}</span>
-                        <time dateTime={f.updatedAt}>
-                          {dateLabel(f.updatedAt)}
-                        </time>
-                      </div>
-                      {deletingId === f.id ? (
-                        <div className="memory-delete-confirm">
-                          <span>Forget this memory?</span>
-                          <button
-                            className="text-button danger"
-                            disabled={working}
-                            onClick={() =>
-                              void perform(async () => {
-                                await bridge.deleteFact(f.id);
-                                setDeletingId(undefined);
-                              }, "Memory deleted.")
-                            }
-                          >
-                            Confirm delete memory
-                          </button>
-                          <button
-                            className="text-button"
-                            disabled={working}
-                            onClick={() => setDeletingId(undefined)}
-                          >
-                            Keep memory
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="memory-item-actions">
-                          <button
-                            className="text-button"
-                            disabled={working}
-                            onClick={() => {
-                              setEditingId(f.id);
-                              setFactText(f.text);
-                              setSelectedId(f.id);
-                              focusEditor();
-                            }}
-                          >
-                            <Pencil size={12} />
-                            Edit
-                          </button>
-                          <button
-                            className="icon-button danger"
-                            aria-label={`Delete memory: ${f.text}`}
-                            title="Delete fact"
-                            disabled={working}
-                            onClick={() => setDeletingId(f.id)}
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </article>
-                ))}
-              </div>
-              {filtered.length > limit && (
-                <button
-                  className="button secondary full"
-                  onClick={() => setLimit((v) => v + 12)}
-                >
-                  Show more memories ({filtered.length - limit} remaining)
-                </button>
-              )}
-            </section>
-
-            <aside className="memory-tools" aria-label="Memory tools">
+            <div className="memory-main">
               <section
                 className={`card memory-composer ${editing ? "is-editing" : ""}`}
               >
@@ -405,11 +232,11 @@ export function MemorySettings({
                     <Pencil size={17} />
                   </span>
                   <div>
-                    <h2>{editing ? "Edit memory" : "Keep a little detail"}</h2>
+                    <h2>{editing ? "Edit memory" : "Tell her something"}</h2>
                     <p>
                       {editing
-                        ? "Make it feel more like you."
-                        : "Some things are worth remembering."}
+                        ? "Update what she remembers."
+                        : "She’ll keep it in mind in every conversation."}
                     </p>
                   </div>
                 </div>
@@ -472,39 +299,196 @@ export function MemorySettings({
                   </div>
                 </form>
               </section>
-              {children}
-              <section className="card">
-                <h2>A map of meaning</h2>
-                <p className="memory-helper">
-                  Keep the artistic constellation, or project already-indexed
-                  facts with PCA. Connections use actual cosine similarity; 2D
-                  distance loses information. No provider calls.
-                </p>
-                <div className="button-row">
+              <section
+                className="card memory-library"
+                aria-labelledby="memory-library-title"
+              >
+                <div className="memory-section-title">
+                  <h2 id="memory-library-title">
+                    Long-term memories <span>{facts.length}</span>
+                  </h2>
                   <button
-                    className="button secondary"
+                    className="icon-button"
+                    title="Write a memory"
+                    aria-label="Write a memory"
                     disabled={working}
-                    onClick={() =>
-                      void perform(async () => {
-                        const next = await bridge.memoryMap();
-                        if (!next.nodes.length)
-                          notice(
-                            "Index at least two facts with the embedding provider first.",
-                          );
-                        else setMap(next);
-                      })
-                    }
+                    onClick={writeMemory}
                   >
-                    Show semantic map
-                  </button>
-                  <button
-                    className="text-button"
-                    onClick={() => setMap(undefined)}
-                  >
-                    Artistic view
+                    <Plus size={19} />
                   </button>
                 </div>
+                <div className="memory-search-wrap">
+                  <Search size={16} aria-hidden="true" />
+                  <input
+                    type="search"
+                    placeholder="Search her memories…"
+                    aria-label="Search memories"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                  {search && (
+                    <button
+                      className="icon-button"
+                      aria-label="Clear memory search"
+                      onClick={() => setSearch("")}
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+                <div
+                  className="memory-filters"
+                  role="group"
+                  aria-label="Filter memories by source"
+                >
+                  {(
+                    [
+                      ["all", "All memories", facts.length],
+                      ["manual", "Added by you", manual],
+                      [
+                        "conversation",
+                        "From conversation",
+                        facts.length - manual,
+                      ],
+                    ] as const
+                  ).map(([value, label, count]) => (
+                    <button
+                      key={value}
+                      aria-pressed={filter === value}
+                      onClick={() => setFilter(value)}
+                    >
+                      {label}
+                      <span>{count}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="memory-list-heading">
+                  <span>
+                    {search || filter !== "all"
+                      ? `${filtered.length} matching ${filtered.length === 1 ? "memory" : "memories"}`
+                      : "Your collection"}
+                  </span>
+                  <span>Recently updated first</span>
+                </div>
+                {!filtered.length && (
+                  <div className="empty-state">
+                    <BookOpen size={30} />
+                    <h3>
+                      {facts.length
+                        ? "No memories here just yet"
+                        : "Nothing here yet"}
+                    </h3>
+                    <p>
+                      {facts.length
+                        ? "Try another search or source filter."
+                        : "Add a preference, an interest, or anything you’d like her to keep in mind."}
+                    </p>
+                    {facts.length ? (
+                      <button
+                        className="text-button"
+                        onClick={() => {
+                          setSearch("");
+                          setFilter("all");
+                        }}
+                      >
+                        Show all memories
+                      </button>
+                    ) : (
+                      <button className="text-button" onClick={writeMemory}>
+                        Write the first memory <Plus size={13} />
+                      </button>
+                    )}
+                  </div>
+                )}
+                <div className="memory-list">
+                  {filtered.slice(0, limit).map((f) => (
+                    <article
+                      className={`memory-item ${selected?.id === f.id ? "is-selected" : ""}`}
+                      key={f.id}
+                    >
+                      <span
+                        className={`memory-source-icon ${f.source}`}
+                        aria-hidden="true"
+                      >
+                        {f.source === "manual" ? (
+                          <Pencil size={14} />
+                        ) : (
+                          <MessageCircle size={14} />
+                        )}
+                      </span>
+                      <div className="memory-item-body">
+                        <p>{f.text}</p>
+                        <div className="memory-item-meta">
+                          <span>{sourceLabel(f)}</span>
+                          <time dateTime={f.updatedAt}>
+                            {dateLabel(f.updatedAt)}
+                          </time>
+                        </div>
+                        {deletingId === f.id ? (
+                          <div className="memory-delete-confirm">
+                            <span>Forget this memory?</span>
+                            <button
+                              className="text-button danger"
+                              disabled={working}
+                              onClick={() =>
+                                void perform(async () => {
+                                  await bridge.deleteFact(f.id);
+                                  setDeletingId(undefined);
+                                }, "Memory deleted.")
+                              }
+                            >
+                              Confirm delete memory
+                            </button>
+                            <button
+                              className="text-button"
+                              disabled={working}
+                              onClick={() => setDeletingId(undefined)}
+                            >
+                              Keep memory
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="memory-item-actions">
+                            <button
+                              className="text-button"
+                              disabled={working}
+                              onClick={() => {
+                                setEditingId(f.id);
+                                setFactText(f.text);
+                                setSelectedId(f.id);
+                                focusEditor();
+                              }}
+                            >
+                              <Pencil size={12} />
+                              Edit
+                            </button>
+                            <button
+                              className="icon-button danger"
+                              aria-label={`Delete memory: ${f.text}`}
+                              title="Delete fact"
+                              disabled={working}
+                              onClick={() => setDeletingId(f.id)}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+                {filtered.length > limit && (
+                  <button
+                    className="button secondary full"
+                    onClick={() => setLimit((v) => v + 12)}
+                  >
+                    Show more memories ({filtered.length - limit} remaining)
+                  </button>
+                )}
               </section>
+            </div>
+            <aside className="memory-tools" aria-label="Memory tools">
+              {children}
               <MemoryLab
                 perform={perform}
                 working={working || snapshot.busy}
@@ -516,17 +500,23 @@ export function MemorySettings({
                     <BookOpen size={17} />
                   </span>
                   <div>
-                    <h2>A keepsake, to take with you</h2>
-                    <p>Import or back up {character.name}’s memories.</p>
+                    <h2>Backups</h2>
+                    <p>
+                      Save {character.name}’s memories to a file, or bring them
+                      back.
+                    </p>
                   </div>
                 </div>
-                <label className="memory-helper">
+                <label className="toggle-row">
+                  <div>
+                    <span>Encrypt archive with a passphrase</span>
+                  </div>
                   <input
+                    className="toggle"
                     type="checkbox"
                     checked={encrypted}
                     onChange={(e) => setEncrypted(e.target.checked)}
-                  />{" "}
-                  Encrypt archive with a passphrase
+                  />
                 </label>
                 {encrypted && (
                   <label className="field">
@@ -594,8 +584,8 @@ export function MemorySettings({
       <div className="memory-footnote">
         <Brain size={14} />
         <span>
-          Memories belong to {character.name}, your saved active character.
-          Desktop and Telegram conversations share the same memory.
+          These memories belong to {character.name}. Desktop and Telegram
+          conversations share them.
         </span>
         <Sparkles size={14} />
       </div>

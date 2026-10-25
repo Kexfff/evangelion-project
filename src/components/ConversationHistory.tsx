@@ -267,7 +267,6 @@ export function ConversationHistory({
     <section className="card history-workspace" aria-labelledby="history-title">
       <div className="history-heading">
         <div>
-          <span className="eyebrow">THE CONVERSATIONS THAT STAY</span>
           <h2 id="history-title">Conversation history</h2>
           <p>
             Revisit your conversations with {character.name}. Browsing here
@@ -451,7 +450,7 @@ export function ConversationHistory({
           <div className="history-reader" aria-label="Conversation messages">
             <div className="history-reader-heading">
               <span className="eyebrow">
-                {summary?.current ? "ACTIVE CONVERSATION" : "PAST CONVERSATION"}{" "}
+                {summary?.current ? "Active conversation" : "Past conversation"}{" "}
                 · READ ONLY
               </span>
               <h3>{summary?.title}</h3>

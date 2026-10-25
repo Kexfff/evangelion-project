@@ -25,28 +25,9 @@ export function MemoryLab({
         </span>
         <div>
           <h2>Inside her memory</h2>
-          <p>Try a question. See the threads she would recall.</p>
+          <p>Try a question and see what she would recall.</p>
         </div>
       </div>
-      <p className="memory-helper">
-        Local digests keep attributed conversation excerpts. For a more compact
-        summary of decisions and open plans, consolidate an older conversation.
-        Originals stay intact; generated summaries are not treated as verified
-        facts.
-      </p>
-      <button
-        className="button secondary"
-        disabled={working}
-        onClick={() =>
-          void perform(async () => notice(await bridge.consolidateMemory()))
-        }
-      >
-        Consolidate next conversation
-      </button>
-      <p className="memory-helper">
-        One request to your saved LLM per group (up to 40 messages); provider
-        charges may apply. Nothing runs automatically.
-      </p>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -56,7 +37,7 @@ export function MemoryLab({
         }}
       >
         <label className="field">
-          <span>Recall playground</span>
+          <span>Ask her memory</span>
           <input
             value={query}
             maxLength={4000}
@@ -64,13 +45,17 @@ export function MemoryLab({
             placeholder="What did we plan for our house?"
           />
         </label>
-        <label className="memory-helper">
+        <label className="toggle-row">
+          <div>
+            <span>Search by meaning too</span>
+            <small>Sends your question to the Remember service.</small>
+          </div>
           <input
+            className="toggle"
             type="checkbox"
             checked={semantic}
             onChange={(e) => setSemantic(e.target.checked)}
-          />{" "}
-          Include semantic search (embedding provider requests)
+          />
         </label>
         <button
           className="button secondary"
@@ -92,18 +77,38 @@ export function MemoryLab({
               </article>
             ))
           ) : (
-            <p>No relevant memories found. The active context is excluded.</p>
+            <p>
+              No relevant memories found. The current conversation is left out.
+            </p>
           )}
         </div>
       )}
+      <div className="memory-lab-block">
+        <h3>Summarize an older conversation</h3>
+        <p className="memory-helper">
+          Conversations are kept as excerpts. A summary condenses decisions and
+          open plans from the oldest one not yet summarized; the original stays,
+          and summaries aren’t treated as verified facts. Uses one request to
+          your language model per 40 messages. Nothing runs on its own.
+        </p>
+        <button
+          className="button secondary"
+          disabled={working}
+          onClick={() =>
+            void perform(async () => notice(await bridge.consolidateMemory()))
+          }
+        >
+          Consolidate next conversation
+        </button>
+      </div>
       <details className="memory-maintenance">
         <summary>
           <ShieldCheck size={15} /> Privacy & housekeeping
         </summary>
         <p className="memory-helper">
-          Nothing expires automatically. Keep all (0), or remove old
-          conversations and finished reminders. Saved facts, pending reminders
-          and the active conversation are kept.
+          Nothing expires on its own. Remove old conversations and finished
+          reminders here; saved facts, upcoming reminders and the current
+          conversation always stay. Use 0 to keep everything.
         </p>
         <label className="field">
           <span>History age in days (0 = keep all)</span>
@@ -139,9 +144,9 @@ export function MemoryLab({
           Review cleanup…
         </button>
         <p className="memory-helper">
-          Also refreshes the rolling backup and removes unused attachments.
-          Cannot erase external exports, OS snapshots or copies already sent to
-          providers. Not forensic secure erasure.
+          Cleanup also refreshes the rolling backup and removes unused
+          attachments. It can’t reach exported files, system backups or copies
+          already sent to AI services, and isn’t a forensic secure erase.
         </p>
       </details>
     </section>

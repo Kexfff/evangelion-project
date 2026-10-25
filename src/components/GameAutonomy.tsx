@@ -53,7 +53,7 @@ export function GameAutonomy({ data }: { data?: MinecraftSnapshot }) {
         conversation pause do not affect gameplay.
       </p>
       <div className="game-autonomy-intent" role="status">
-        <small>CURRENT INTENTION</small>
+        <small>Current intention</small>
         <strong>
           {current?.objective ??
             (state.config.paused
